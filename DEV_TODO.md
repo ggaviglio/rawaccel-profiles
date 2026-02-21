@@ -1,0 +1,8 @@
+# TODO LIST / SCRATCHPAD FOR BRAINSTORMING
+
+## 🟢 ACTIVE / NEXT STEPS
+
+## 🟡 BRAINSTORMING / BACKLOG
+- Command line wrapper /src/MouseApp.CLI
+
+## ✅ COMPLETED / DELETE

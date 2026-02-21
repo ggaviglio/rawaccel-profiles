@@ -1,0 +1,10 @@
+name: Playwright mcpServer
+version: 0.0.1
+schema: v1
+# mcpServers:
+#   - name: "Web Search"
+#     # This is the command installed by the package above
+#     command: "duckduckgo-mcp-server"
+#     args: []
+#     env: {}
+
