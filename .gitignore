@@ -1,0 +1,52 @@
+## C# / .NET / Avalonia Artifacts
+
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Bb]uild/
+
+# NuGet
+*.lock.json
+*.nupkg
+.nuget/
+packages/
+!**/[Pp]ackages/build/
+
+# Visual Studio user-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+
+# VS Code (keep settings.json, ignore generated/local)
+.vscode/launch.json
+.vscode/tasks.json
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# Publish / deployment
+**/publish/
+**/PublishProfiles/
+
+# OS artifacts
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+# Log & temp
+*.log
+*.tmp
+*.temp
+*.bak
+
+# Test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.trx
+
+# Roslyn analyzers
+*.AnalyzerReference
