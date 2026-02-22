@@ -5,6 +5,7 @@ using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
 using System.Linq;
 using Avalonia.Markup.Xaml;
+using MouseApp.Services;
 using MouseApp.ViewModels;
 using MouseApp.Views;
 
@@ -12,6 +13,9 @@ namespace MouseApp;
 
 public partial class App : Application
 {
+    // Held for app lifetime — prevents the hook delegate from being garbage-collected.
+    private IProcessWatcher? _processWatcher;
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -42,6 +46,11 @@ public partial class App : Application
 
             // Main VM wired to navigation
             var mainVm = new ViewModels.MainWindowViewModel(navigationService, profileEditorVm, settingsVm, profileService);
+
+            // Start the foreground-window watcher.  The same profileService instance is used
+            // (singleton by construction) so profile collections are always in sync.
+            // The callback marshals to the UI thread inside OnExternalProfileActivated.
+            _processWatcher = new ProcessWatcher(profileService, profile => mainVm.OnExternalProfileActivated(profile));
 
             if (settingsService.Settings?.StartMinimized == true)
             {

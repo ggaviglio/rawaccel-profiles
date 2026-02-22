@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using MouseApp.Models;
 using MouseApp.Services;
@@ -82,6 +83,16 @@ public partial class MainWindowViewModel : ViewModelBase
         // LoadAsync has already run before this ctor is called (see App.axaml.cs);
         // select the first profile (Global Default) so the editor is never blank.
         SelectedProfile = Profiles.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Called by <see cref="ProcessWatcher"/> (background thread) when a process match
+    /// auto-activates a profile.  Marshals back to the UI thread before updating the
+    /// sidebar selection so Avalonia bindings fire correctly.
+    /// </summary>
+    public void OnExternalProfileActivated(MouseProfile profile)
+    {
+        Dispatcher.UIThread.Post(() => SelectedProfile = profile);
     }
 
     private bool CanDeleteProfile() =>

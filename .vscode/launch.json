@@ -10,7 +10,7 @@
       "args": [],
       "cwd": "${workspaceFolder}/src/MouseApp",
       "stopAtEntry": false,
-      "console": "integratedTerminal"
+      "console": "internalConsole"
     }
   ]
 }

@@ -114,6 +114,8 @@ public sealed class ProcessWatcher : IProcessWatcher
             GetWindowText(hwnd, titleSb, titleSb.Capacity);
             var windowTitle = titleSb.ToString();
 
+            Debug.WriteLine($"[ProcessWatcher] Foreground: Title=\"{windowTitle}\" Class=\"{windowClass}\" Exe=\"{exeName}\"");
+
             // Polymorphic match across all TargetAssociation types
             var matched = _profileService.Profiles.FirstOrDefault(pr =>
                 pr.TargetAssociations != null &&
@@ -128,6 +130,7 @@ public sealed class ProcessWatcher : IProcessWatcher
 
             if (matched != null)
             {
+                Debug.WriteLine($"[ProcessWatcher] Match FOUND: Profile=\"{matched.ProfileName}\"");
                 if (!ReferenceEquals(matched, _currentProfile))
                 {
                     _currentProfile = matched;
@@ -137,7 +140,7 @@ public sealed class ProcessWatcher : IProcessWatcher
             }
             else
             {
-                // No mapped profile for this window: do nothing (sticky rule)
+                Debug.WriteLine("[ProcessWatcher] No match — sticky rule; keeping current profile.");
             }
         }
         catch
@@ -179,8 +182,13 @@ public sealed class ProcessWatcher : IProcessWatcher
             var global = _profileService.Profiles.FirstOrDefault(p => p.IsGlobalDefault);
             if (global != null)
             {
+                Debug.WriteLine($"[ProcessWatcher] Tracked process exited — reverting to Global Default \"{global.ProfileName}\".");
                 _currentProfile = global;
                 _applyProfile(global);
+            }
+            else
+            {
+                Debug.WriteLine("[ProcessWatcher] Tracked process exited — no Global Default found, cannot revert.");
             }
 
             if (_trackedProcess != null)
