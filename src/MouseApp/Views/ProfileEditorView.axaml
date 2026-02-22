@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:MouseApp.ViewModels;assembly=MouseApp"
+             xmlns:system="clr-namespace:System;assembly=System.Runtime"
+             x:DataType="vm:ProfileEditorViewModel"
+             mc:Ignorable="d"
+             x:Class="MouseApp.Views.ProfileEditorView">
+
+  <StackPanel Margin="12" Spacing="12">
+    <TextBlock Text="Profile Editor" FontSize="20" FontWeight="SemiBold" />
+
+    <TextBlock Text="Templates" FontSize="14" Opacity="0.7" />
+    <ListBox ItemsSource="{Binding Templates}" MaxHeight="300">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="system:String">
+          <TextBlock Text="{Binding}" Padding="4,2" />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </StackPanel>
+
+</UserControl>
