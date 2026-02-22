@@ -3,6 +3,29 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace MouseApp.Models;
 
+public enum TargetMatchType
+{
+    ExeName,
+    FullPath,
+    WindowClass,
+    WindowTitle
+}
+
+public sealed class TargetAssociation
+{
+    public TargetMatchType MatchType { get; set; }
+    public string Value { get; set; } = string.Empty;
+
+    public string TypeLabel => MatchType switch
+    {
+        TargetMatchType.ExeName     => "EXE",
+        TargetMatchType.FullPath    => "PATH",
+        TargetMatchType.WindowClass => "CLASS",
+        TargetMatchType.WindowTitle => "TITLE",
+        _                           => "?"
+    };
+}
+
 public partial class MouseProfile : ObservableObject
 {
     [ObservableProperty]
@@ -30,5 +53,5 @@ public partial class MouseProfile : ObservableObject
     public partial bool IsGlobalDefault { get; set; }
 
     [ObservableProperty]
-    public partial List<string> TargetExecutables { get; set; } = new();
+    public partial List<TargetAssociation> TargetAssociations { get; set; } = new();
 }

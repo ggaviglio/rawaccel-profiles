@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:MouseApp.ViewModels;assembly=MouseApp"
+             xmlns:models="clr-namespace:MouseApp.Models;assembly=MouseApp"
              xmlns:system="clr-namespace:System;assembly=System.Runtime"
              x:DataType="vm:ProfileEditorViewModel"
              mc:Ignorable="d"
@@ -58,6 +59,40 @@
         <TextBlock Text="Proof of Match:" FontWeight="SemiBold" VerticalAlignment="Center" />
         <TextBlock Text="{Binding MatchAccuracy}" VerticalAlignment="Center" />
       </StackPanel>
+
+      <!-- ═══ Target Manager (hidden for Global Default) ═══ -->
+      <StackPanel Spacing="6" IsVisible="{Binding IsTargetManagerEnabled}">
+        <Separator />
+
+        <!-- Header + launcher button -->
+        <StackPanel Orientation="Horizontal" Spacing="10">
+          <TextBlock Text="Target Associations"
+                     FontSize="14" FontWeight="SemiBold" Opacity="0.8"
+                     VerticalAlignment="Center" />
+          <Button Content="Manage Targets…"
+                  Command="{Binding OpenTargetManagerCommand}"
+                  Padding="10,4" />
+        </StackPanel>
+
+        <!-- Read-only summary list -->
+        <ItemsControl ItemsSource="{Binding TargetAssociationsSummary}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="models:TargetAssociation">
+              <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2">
+                <Border Background="#3C3C3C" CornerRadius="3" Padding="5,1">
+                  <TextBlock Text="{Binding TypeLabel}" FontSize="10" FontWeight="Bold" />
+                </Border>
+                <TextBlock Text="{Binding Value}" VerticalAlignment="Center" Opacity="0.8" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Text="(no targets — activates on any window)"
+                   FontStyle="Italic" Opacity="0.45" FontSize="12"
+                   IsVisible="{Binding IsTargetAssociationsEmpty}" />
+      </StackPanel>
+
     </StackPanel>
   </ScrollViewer>
 

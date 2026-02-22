@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using MouseApp.Models;
 
@@ -12,7 +13,11 @@ namespace MouseApp.Services;
 public class ProfileService
 {
     private readonly string _dataFile;
-    private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
+    private readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        WriteIndented = true,
+        Converters    = { new JsonStringEnumConverter() }
+    };
 
     // Lookup table mapping Windows Pointer Speed (1..20) to their effective multipliers
     private static readonly double[] WinMultipliers =
@@ -39,8 +44,8 @@ public class ProfileService
                 SensMultiplier = 1.0,
                 UseAutoOSSync = true,
                 UseAutoRegSync = true,
-                IsGlobalDefault = true,
-                TargetExecutables = new()
+                IsGlobalDefault    = true,
+                TargetAssociations = new()
             };
 
             Profiles.Clear();
@@ -60,8 +65,8 @@ public class ProfileService
                 SensMultiplier = 1.0,
                 UseAutoOSSync = true,
                 UseAutoRegSync = true,
-                IsGlobalDefault = true,
-                TargetExecutables = new()
+                IsGlobalDefault    = true,
+                TargetAssociations = new()
             });
         }
 

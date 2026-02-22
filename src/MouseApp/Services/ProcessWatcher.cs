@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using MouseApp.Models;
 
 namespace MouseApp.Services;
@@ -32,6 +33,12 @@ public sealed class ProcessWatcher : IProcessWatcher
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
     private readonly ProfileService _profileService;
     private readonly Action<MouseProfile> _applyProfile;
@@ -67,13 +74,18 @@ public sealed class ProcessWatcher : IProcessWatcher
             var pid = (int)pidUint;
 
             string? exeName = null;
+            string  fullPath = string.Empty;
             try
             {
                 using var p = Process.GetProcessById(pid);
                 try
                 {
                     var full = p.MainModule?.FileName;
-                    if (!string.IsNullOrEmpty(full)) exeName = Path.GetFileName(full).ToLowerInvariant();
+                    if (!string.IsNullOrEmpty(full))
+                    {
+                        fullPath = full;
+                        exeName  = Path.GetFileName(full).ToLowerInvariant();
+                    }
                 }
                 catch
                 {
@@ -93,8 +105,26 @@ public sealed class ProcessWatcher : IProcessWatcher
                 return;
             }
 
-            // Find a matching profile by TargetExecutables
-            var matched = _profileService.Profiles.FirstOrDefault(pr => pr.TargetExecutables != null && pr.TargetExecutables.Any(te => string.Equals(te, exeName, StringComparison.OrdinalIgnoreCase)));
+            // Gather window class and title for WindowClass / WindowTitle match types
+            var classSb = new StringBuilder(256);
+            GetClassName(hwnd, classSb, classSb.Capacity);
+            var windowClass = classSb.ToString();
+
+            var titleSb = new StringBuilder(512);
+            GetWindowText(hwnd, titleSb, titleSb.Capacity);
+            var windowTitle = titleSb.ToString();
+
+            // Polymorphic match across all TargetAssociation types
+            var matched = _profileService.Profiles.FirstOrDefault(pr =>
+                pr.TargetAssociations != null &&
+                pr.TargetAssociations.Any(ta => ta.MatchType switch
+                {
+                    TargetMatchType.ExeName     => string.Equals(ta.Value, exeName,     StringComparison.OrdinalIgnoreCase),
+                    TargetMatchType.FullPath    => string.Equals(ta.Value, fullPath,    StringComparison.OrdinalIgnoreCase),
+                    TargetMatchType.WindowClass => string.Equals(ta.Value, windowClass, StringComparison.OrdinalIgnoreCase),
+                    TargetMatchType.WindowTitle => windowTitle.Contains(ta.Value,       StringComparison.OrdinalIgnoreCase),
+                    _ => false
+                }));
 
             if (matched != null)
             {

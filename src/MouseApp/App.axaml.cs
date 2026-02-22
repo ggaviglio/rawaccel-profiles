@@ -26,18 +26,19 @@ public partial class App : Application
             DisableAvaloniaDataAnnotationValidation();
 
             // Initialize core services
-            var settingsService = new Services.SettingsService();
-            var storageService = new Services.AvaloniaStorageService();
-            var templateService = new Services.TemplateService(settingsService);
+            var settingsService   = new Services.SettingsService();
+            var storageService    = new Services.AvaloniaStorageService();
+            var templateService   = new Services.TemplateService(settingsService);
             var navigationService = new Services.NavigationService();
-            var profileService = new Services.ProfileService();
+            var profileService    = new Services.ProfileService();
+            var windowService     = new Services.AvaloniaWindowService();
 
             // Populate profiles from disk before any ViewModel touches the collection.
             profileService.LoadAsync().GetAwaiter().GetResult();
 
             // Create feature view-models
-            var settingsVm = new ViewModels.SettingsViewModel(settingsService, storageService);
-            var profileEditorVm = new ViewModels.ProfileEditorViewModel(templateService, profileService);
+            var settingsVm      = new ViewModels.SettingsViewModel(settingsService, storageService);
+            var profileEditorVm = new ViewModels.ProfileEditorViewModel(templateService, profileService, windowService);
 
             // Main VM wired to navigation
             var mainVm = new ViewModels.MainWindowViewModel(navigationService, profileEditorVm, settingsVm, profileService);

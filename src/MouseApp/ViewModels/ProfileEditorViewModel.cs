@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Globalization;
@@ -20,8 +21,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
         1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25, 3.5
     };
 
-    private readonly TemplateService _templateService;
-    private readonly ProfileService _profileService;
+    private readonly TemplateService  _templateService;
+    private readonly ProfileService   _profileService;
+    private readonly IWindowService   _windowService;
 
     /// <summary>The profile currently loaded into the editor. Null when no profile is selected.</summary>
     private MouseProfile? _editingProfile;
@@ -67,6 +69,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
     private string registryCurveString = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTargetManagerEnabled))]
+    [NotifyCanExecuteChangedFor(nameof(OpenTargetManagerCommand))]
     private bool isGlobalDefault;
 
     // ── Derived display ─────────────────────────────────────────────────────
@@ -77,14 +81,25 @@ public partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     private string matchAccuracy = "N/A";
 
+    // ── Target Manager (read-only summary shown in the editor) ──────────────
+    public ObservableCollection<TargetAssociation> TargetAssociationsSummary { get; } = new();
+
+    /// <summary>True when the Target Manager section should be interactive (not Global Default).</summary>
+    public bool IsTargetManagerEnabled => !IsGlobalDefault;
+
+    /// <summary>True when the current profile has no target associations.</summary>
+    public bool IsTargetAssociationsEmpty => TargetAssociationsSummary.Count == 0;
+
     // ── Commands ────────────────────────────────────────────────────────────
-    public IAsyncRelayCommand SaveCommand { get; }
+    public IAsyncRelayCommand SaveCommand              { get; }
+    public IAsyncRelayCommand OpenTargetManagerCommand { get; }
 
     // ── Constructor ─────────────────────────────────────────────────────────
-    public ProfileEditorViewModel(TemplateService templateService, ProfileService profileService)
+    public ProfileEditorViewModel(TemplateService templateService, ProfileService profileService, IWindowService windowService)
     {
         _templateService = templateService ?? throw new ArgumentNullException(nameof(templateService));
         _profileService  = profileService  ?? throw new ArgumentNullException(nameof(profileService));
+        _windowService   = windowService   ?? throw new ArgumentNullException(nameof(windowService));
 
         RefreshTemplates();
         _templateService.TemplatesChanged += (_, _) => RefreshTemplates();
@@ -94,7 +109,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         _profileService.Profiles.CollectionChanged += OnProfilesCollectionChanged;
 
-        SaveCommand = new AsyncRelayCommand(ExecuteSaveAsync);
+        SaveCommand              = new AsyncRelayCommand(ExecuteSaveAsync);
+        OpenTargetManagerCommand = new AsyncRelayCommand(ExecuteOpenTargetManagerAsync,
+                                       () => _editingProfile != null && !IsGlobalDefault);
     }
 
     // ── Profile loading ─────────────────────────────────────────────────────
@@ -123,6 +140,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
             _isSyncing = false;
         }
 
+        RefreshAssociationsSummary();
+        OpenTargetManagerCommand.NotifyCanExecuteChanged();
         RecalculateMatchAccuracy();
     }
 
@@ -372,6 +391,26 @@ public partial class ProfileEditorViewModel : ViewModelBase
         _ = _profileService.SaveAsync();
     }
 
+    // ── Target Manager ──────────────────────────────────────────────────────
+
+    private async Task ExecuteOpenTargetManagerAsync()
+    {
+        if (_editingProfile is null) return;
+        // Do NOT ConfigureAwait(false) — the summary refresh mutates an ObservableCollection
+        // and must run on the Avalonia UI thread.
+        await _windowService.ShowTargetManagerAsync(_editingProfile, _profileService);
+        // Single, safe refresh after the window is fully closed.
+        RefreshAssociationsSummary();
+    }
+
+    private void RefreshAssociationsSummary()
+    {
+        TargetAssociationsSummary.Clear();
+        foreach (var ta in _editingProfile?.TargetAssociations ?? new List<TargetAssociation>())
+            TargetAssociationsSummary.Add(ta);
+        OnPropertyChanged(nameof(IsTargetAssociationsEmpty));
+    }
+
     // ── Save Command ────────────────────────────────────────────────────────
 
     private async Task ExecuteSaveAsync()
@@ -389,7 +428,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
                 UseAutoRegSync        = UseAutoRegSync,
                 RegistryCurveOverride = RegistryCurveOverride,
                 IsGlobalDefault       = IsGlobalDefault,
-                TargetExecutables     = new()
+                TargetAssociations    = new()
             };
             _profileService.Profiles.Add(draft);
             _editingProfile = draft;

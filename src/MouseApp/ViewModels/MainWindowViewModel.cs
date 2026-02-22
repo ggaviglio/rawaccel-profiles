@@ -91,9 +91,9 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         var newProfile = new MouseProfile
         {
-            ProfileName = $"New Profile {Profiles.Count}",
-            SensMultiplier = 1.0,
-            TargetExecutables = new()
+            ProfileName        = $"New Profile {Profiles.Count}",
+            SensMultiplier     = 1.0,
+            TargetAssociations = new()
         };
 
         Profiles.Add(newProfile);
