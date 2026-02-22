@@ -1,13 +1,14 @@
 ## C# / .NET / Avalonia Artifacts
 
-# Build outputs
+# Build outputs & Caches
 [Bb]in/
 [Oo]bj/
 [Oo]ut/
 [Bb]uild/
+.dotnet/
+.hotreload/
 
-# NuGet
-*.lock.json
+# NuGet (Commit packages.lock.json for stable builds)
 *.nupkg
 .nuget/
 packages/
@@ -20,33 +21,28 @@ packages/
 *.sln.docstates
 .vs/
 
-# VS Code (keep settings.json, ignore generated/local)
-.vscode/launch.json
-.vscode/tasks.json
+# VS Code (Ignore the folder, but whitelist project-wide configs)
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 
 # Rider / JetBrains
 .idea/
 *.sln.iml
-
-# Publish / deployment
-**/publish/
-**/PublishProfiles/
 
 # OS artifacts
 Thumbs.db
 .DS_Store
 Desktop.ini
 
-# Log & temp
+# Log, Temp, & Analyzers
 *.log
 *.tmp
 *.temp
 *.bak
+*.AnalyzerReference
 
 # Test results
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
 *.trx
-
-# Roslyn analyzers
-*.AnalyzerReference

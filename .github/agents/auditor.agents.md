@@ -1,6 +1,6 @@
 ---
 name: 'AUDITOR'
-description: 'Logic verification and conflict detection (Gemini Pro)'
+description: 'Logic verification and conflict detection'
 ---
 
 # AUDITOR ROLE

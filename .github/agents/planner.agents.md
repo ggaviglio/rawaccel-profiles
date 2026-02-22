@@ -1,6 +1,6 @@
 ---
 name: 'PLANNER'
-description: 'High-level brainstorming and UI/UX drafting (Gemini)'
+description: 'High-level brainstorming and UI/UX drafting'
 ---
 
 # PLANNER ROLE

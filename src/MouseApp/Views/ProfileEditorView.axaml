@@ -9,17 +9,49 @@
              mc:Ignorable="d"
              x:Class="MouseApp.Views.ProfileEditorView">
 
-  <StackPanel Margin="12" Spacing="12">
-    <TextBlock Text="Profile Editor" FontSize="20" FontWeight="SemiBold" />
+  <ScrollViewer Margin="12" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="12">
+      <TextBlock Text="Profile Editor" FontSize="20" FontWeight="SemiBold" />
 
-    <TextBlock Text="Templates" FontSize="14" Opacity="0.7" />
-    <ListBox ItemsSource="{Binding Templates}" MaxHeight="300">
-      <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="system:String">
-          <TextBlock Text="{Binding}" Padding="4,2" />
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
-  </StackPanel>
+      <!-- Raw Accel Section -->
+      <StackPanel>
+        <TextBlock Text="Raw Accel" FontSize="14" Opacity="0.8" />
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Text="Template:" VerticalAlignment="Center" />
+          <ComboBox ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate, Mode=TwoWay}" Width="220" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Text="Sensitivity:" VerticalAlignment="Center" />
+          <TextBox Text="{Binding SensitivityString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120" Watermark="leave empty to skip" />
+        </StackPanel>
+      </StackPanel>
+
+      <!-- Windows OS Section -->
+      <StackPanel>
+        <TextBlock Text="Windows OS" FontSize="14" Opacity="0.8" />
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Text="Win Pointer Speed:" VerticalAlignment="Center" />
+          <ComboBox ItemsSource="{Binding WinPointerOptions}" SelectedItem="{Binding WinPointerSpeed, Mode=TwoWay}" Width="120" />
+        </StackPanel>
+      </StackPanel>
+
+      <!-- High-Precision Bridge Section -->
+      <StackPanel>
+        <TextBlock Text="High-Precision Bridge" FontSize="14" Opacity="0.8" />
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <CheckBox IsChecked="{Binding UseAutoRegSync, Mode=TwoWay}" Content="Registry Bridge" />
+          <TextBlock Text="Curve Override:" VerticalAlignment="Center" />
+          <TextBox Text="{Binding RegistryCurveString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120" Watermark="leave empty to skip" />
+        </StackPanel>
+      </StackPanel>
+
+      <!-- Proof of Match -->
+      <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <TextBlock Text="Proof of Match:" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding MatchAccuracy}" VerticalAlignment="Center" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
 
 </UserControl>

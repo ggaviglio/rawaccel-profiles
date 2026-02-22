@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": ".NET Launch (MouseApp)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/MouseApp/bin/Debug/net10.0/MouseApp.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/src/MouseApp",
+      "stopAtEntry": false,
+      "console": "integratedTerminal"
+    }
+  ]
+}

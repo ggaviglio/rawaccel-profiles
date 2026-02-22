@@ -30,10 +30,11 @@ public partial class App : Application
             var storageService = new Services.AvaloniaStorageService();
             var templateService = new Services.TemplateService(settingsService);
             var navigationService = new Services.NavigationService();
+            var profileService = new Services.ProfileService();
 
             // Create feature view-models
             var settingsVm = new ViewModels.SettingsViewModel(settingsService, storageService);
-            var profileEditorVm = new ViewModels.ProfileEditorViewModel(templateService);
+            var profileEditorVm = new ViewModels.ProfileEditorViewModel(templateService, profileService);
 
             // Main VM wired to navigation
             var mainVm = new ViewModels.MainWindowViewModel(navigationService, profileEditorVm, settingsVm);

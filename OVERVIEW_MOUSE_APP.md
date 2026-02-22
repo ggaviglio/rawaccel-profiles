@@ -18,10 +18,13 @@ The app uses a clean, integrated Sidebar + Pane layout:
         * **Discovery (Left):** Real-time list of active processes for one-click mapping.
         * **Management (Right):** The current profile's assigned list (Process Name/Path, Class, or Title).
         * **Manual Entry:** A dedicated input field to manually add associations to the list.
-    * **Global Settings:** A separate view for system-wide paths (Raw Accel folder), high-precision registry toggles, startup preferences, etc.
+    * **Global Settings:** A separate view for system-wide configuration:
+            * **Path Configuration:** Define the Raw Accel installation directory and executable paths.
+            * **High-Precision Logic:** Opt-in toggle for the **Registry Bridge**. (When enabled, Profile Editor fields for Registry overrides become visible).
+            * **Startup & Behavior:** Preferences for "Run at Startup," "Start Minimized," and Global Hotkey assignments.
 
 ## 3. CORE LOGIC STACK
 **Raw Accel:** Manages the template library. Swaps the selected template into the Raw Accel directory as `settings.json` before overwriting sensitivity value. Applies changes with `writer.exe settings.json`.
 **OS Pointer Speed:** Discrete logic (1–20) with a sync-toggle for Auto/Manual modes.
-**High-Precision Fine-Tune:** Overrides the "Enhance Pointer Precision" curve via Registry to bridge the gap left by the OS integer.
+**High-Precision Fine-Tune:** A global opt-in feature. When enabled, it silently overrides the "Enhance Pointer Precision" Registry curve to bridge the gap left by OS integer steps. Registry updated on profile swap, changes only initialize upon Windows login/relog.
 **Active Context Monitor:** Track process activity and window states, ensuring the correct profile is applied via Win32 event hooks. Logic prioritizes active focus for profile-to-profile switching, but requires a process-exit event to revert to the Global Default.

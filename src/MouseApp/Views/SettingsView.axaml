@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:MouseApp.ViewModels;assembly=MouseApp"
+             x:DataType="vm:SettingsViewModel"
+             mc:Ignorable="d"
+             x:Class="MouseApp.Views.SettingsView">
+
+  <StackPanel Margin="12" Spacing="8">
+    <TextBlock Text="Settings" FontSize="18" />
+
+    <StackPanel Orientation="Horizontal" Spacing="6">
+      <TextBox Width="420" Text="{Binding RawAccelDirectory, Mode=TwoWay}" />
+      <Button Content="Browse" Command="{Binding BrowseRawAccelDirCommand}" />
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" Spacing="6">
+      <TextBox Width="420" Text="{Binding WriterExePath, Mode=TwoWay}" />
+      <Button Content="Browse" Command="{Binding BrowseWriterExeCommand}" />
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+      <ToggleSwitch IsChecked="{Binding EnableRegistryBridge, Mode=TwoWay}" />
+      <TextBlock Text="Enable Registry Bridge" VerticalAlignment="Center" />
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+      <ToggleSwitch IsChecked="{Binding RunAtStartup, Mode=TwoWay}" />
+      <TextBlock Text="Run At Startup" VerticalAlignment="Center" />
+    </StackPanel>
+
+    <TextBlock Text="{Binding AdminStatus}" />
+
+    <StackPanel Orientation="Horizontal" Spacing="8">
+      <Button Content="Save" Command="{Binding SaveCommand}" />
+      <Button Content="Refresh Admin Status" Command="{Binding RefreshAdminStatusCommand}" />
+    </StackPanel>
+  </StackPanel>
+
+</UserControl>
