@@ -128,6 +128,12 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     // ── Partial property callbacks ──────────────────────────────────────────
 
+    partial void OnProfileNameChanged(string? oldValue, string newValue)
+    {
+        if (_isSyncing) return;
+        AutoPersist();
+    }
+
     partial void OnSensitivityChanged(double? oldValue, double? newValue)
     {
         if (_isSyncing) return;
@@ -137,6 +143,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         ApplyAutoOSSync();
         RecalculateMatchAccuracy();
+        AutoPersist();
     }
 
     partial void OnSensitivityStringChanged(string? oldValue, string newValue)
@@ -158,12 +165,14 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         ApplyAutoOSSync();
         RecalculateMatchAccuracy();
+        AutoPersist();
     }
 
     partial void OnUseAutoOSSyncChanged(bool oldValue, bool newValue)
     {
         ApplyAutoOSSync();
         RecalculateMatchAccuracy();
+        AutoPersist();
     }
 
     partial void OnWinPointerSpeedChanged(int? oldValue, int? newValue)
@@ -179,12 +188,14 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         ApplyAutoRegSync();
         RecalculateMatchAccuracy();
+        AutoPersist();
     }
 
     partial void OnUseAutoRegSyncChanged(bool oldValue, bool newValue)
     {
         ApplyAutoRegSync();
         RecalculateMatchAccuracy();
+        AutoPersist();
     }
 
     partial void OnRegistryCurveOverrideChanged(double? oldValue, double? newValue)
@@ -194,6 +205,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         RegistryCurveString = newValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
         _isSyncing = false;
         RecalculateMatchAccuracy();
+        AutoPersist();
     }
 
     partial void OnRegistryCurveStringChanged(string? oldValue, string newValue)
@@ -214,11 +226,12 @@ public partial class ProfileEditorViewModel : ViewModelBase
         }
 
         RecalculateMatchAccuracy();
+        AutoPersist();
     }
 
     partial void OnSelectedTemplateChanged(string? oldValue, string? newValue)
     {
-        // Reserved for future template-based defaults propagation.
+        AutoPersist();
     }
 
     // ── Math Engine ─────────────────────────────────────────────────────────
@@ -336,68 +349,58 @@ public partial class ProfileEditorViewModel : ViewModelBase
         MatchAccuracy = accuracy.ToString("0.00", CultureInfo.InvariantCulture) + "%";
     }
 
+    // ── Auto-Persist ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Commits all current editor values into _editingProfile and fires a background save.
+    /// Called at the end of every On[Property]Changed chain, after auto-sync math is done.
+    /// Skipped while _isSyncing is true to prevent cascaded saves during bulk loads.
+    /// </summary>
+    private void AutoPersist()
+    {
+        if (_editingProfile == null || _isSyncing) return;
+
+        _editingProfile.ProfileName           = ProfileName;
+        _editingProfile.RawAccelTemplate      = SelectedTemplate;
+        _editingProfile.SensMultiplier        = Sensitivity;
+        _editingProfile.UseAutoOSSync         = UseAutoOSSync;
+        _editingProfile.WinPointerSpeed       = WinPointerSpeed;
+        _editingProfile.UseAutoRegSync        = UseAutoRegSync;
+        _editingProfile.RegistryCurveOverride = RegistryCurveOverride;
+        _editingProfile.IsGlobalDefault       = IsGlobalDefault;
+
+        _ = _profileService.SaveAsync();
+    }
+
     // ── Save Command ────────────────────────────────────────────────────────
 
     private async Task ExecuteSaveAsync()
     {
-        // 1. Build a transient profile from the ViewModel's current state
-        var draft = BuildDraftProfile();
-
-        // 2. Ask the service to calculate coarse + fine compensations
-        var (winSpeed, regCurve) = _profileService.CalculateCompensations(draft);
-
-        if (draft.UseAutoOSSync)  draft.WinPointerSpeed       = winSpeed;
-        if (draft.UseAutoRegSync) draft.RegistryCurveOverride = regCurve;
-
-        // 3. Write back to the source profile (or add as new)
-        if (_editingProfile != null)
+        // Commit all current VM values to the profile object.
+        if (_editingProfile == null)
         {
-            _editingProfile.ProfileName          = draft.ProfileName;
-            _editingProfile.RawAccelTemplate     = draft.RawAccelTemplate;
-            _editingProfile.SensMultiplier        = draft.SensMultiplier;
-            _editingProfile.UseAutoOSSync         = draft.UseAutoOSSync;
-            _editingProfile.WinPointerSpeed       = draft.WinPointerSpeed;
-            _editingProfile.UseAutoRegSync        = draft.UseAutoRegSync;
-            _editingProfile.RegistryCurveOverride = draft.RegistryCurveOverride;
-            _editingProfile.IsGlobalDefault       = draft.IsGlobalDefault;
-            // TargetExecutables are edited elsewhere; preserve them
-        }
-        else
-        {
+            var draft = new MouseProfile
+            {
+                ProfileName           = ProfileName,
+                RawAccelTemplate      = SelectedTemplate,
+                SensMultiplier        = Sensitivity,
+                UseAutoOSSync         = UseAutoOSSync,
+                WinPointerSpeed       = WinPointerSpeed,
+                UseAutoRegSync        = UseAutoRegSync,
+                RegistryCurveOverride = RegistryCurveOverride,
+                IsGlobalDefault       = IsGlobalDefault,
+                TargetExecutables     = new()
+            };
             _profileService.Profiles.Add(draft);
             _editingProfile = draft;
         }
 
-        // 4. Persist (SetGlobalDefaultAsync handles the exclusive-default logic + save)
-        if (draft.IsGlobalDefault)
-            await _profileService.SetGlobalDefaultAsync(_editingProfile!).ConfigureAwait(false);
+        // Use SetGlobalDefaultAsync for the exclusive-default logic; otherwise plain save.
+        if (IsGlobalDefault)
+            await _profileService.SetGlobalDefaultAsync(_editingProfile).ConfigureAwait(false);
         else
-            await _profileService.SaveAsync().ConfigureAwait(false);
-
-        // 5. Reflect the service-calculated values back into the editor fields
-        _isSyncing = true;
-        WinPointerSpeed       = _editingProfile!.WinPointerSpeed;
-        RegistryCurveOverride = _editingProfile.RegistryCurveOverride;
-        RegistryCurveString   = _editingProfile.RegistryCurveOverride?
-                                    .ToString(CultureInfo.InvariantCulture) ?? string.Empty;
-        _isSyncing = false;
-
-        RecalculateMatchAccuracy();
+            AutoPersist();
     }
-
-    /// <summary>Materialises the current editor state as a new MouseProfile.</summary>
-    private MouseProfile BuildDraftProfile() => new()
-    {
-        ProfileName          = ProfileName,
-        RawAccelTemplate     = SelectedTemplate,
-        SensMultiplier        = Sensitivity,
-        UseAutoOSSync         = UseAutoOSSync,
-        WinPointerSpeed       = WinPointerSpeed,
-        UseAutoRegSync        = UseAutoRegSync,
-        RegistryCurveOverride = RegistryCurveOverride,
-        IsGlobalDefault       = IsGlobalDefault,
-        TargetExecutables     = _editingProfile?.TargetExecutables ?? new()
-    };
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 

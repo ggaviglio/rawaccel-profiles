@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MouseApp.ViewModels"
         xmlns:views="using:MouseApp.Views"
-        xmlns:system="clr-namespace:System;assembly=System.Runtime"
+        xmlns:models="using:MouseApp.Models"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="600"
@@ -26,20 +26,43 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="48" />
                 </Grid.RowDefinitions>
 
                 <!-- Top: Profiles list -->
-                <ListBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}">
+                <ListBox Grid.Row="0" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}">
                     <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="system:String">
-                            <TextBlock Text="{Binding}" Foreground="White" Padding="6" />
+                        <DataTemplate x:DataType="models:MouseProfile">
+                            <TextBlock Text="{Binding ProfileName}" Foreground="White" Padding="6" />
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
 
+                <!-- Middle: Add / Delete action bar -->
+                <Border Grid.Row="1" Background="#2A2A2A" Padding="4,2">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Button Content="+"
+                                Width="32" Height="28"
+                                FontSize="16" FontWeight="Bold"
+                                Padding="0"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                ToolTip.Tip="Add profile"
+                                Command="{Binding AddProfileCommand}" />
+                        <Button Content="−"
+                                Width="32" Height="28"
+                                FontSize="16" FontWeight="Bold"
+                                Padding="0"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                ToolTip.Tip="Delete selected profile"
+                                Command="{Binding DeleteProfileCommand}" />
+                    </StackPanel>
+                </Border>
+
                 <!-- Bottom: Global Settings button -->
-                <Button Grid.Row="1" HorizontalAlignment="Stretch" VerticalAlignment="Center" Content="Global Settings" Margin="0,4,0,0"
+                <Button Grid.Row="2" HorizontalAlignment="Stretch" VerticalAlignment="Center" Content="Global Settings" Margin="0,4,0,0"
                     Command="{Binding OpenSettingsCommand}" />
             </Grid>
         </Border>

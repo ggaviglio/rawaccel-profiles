@@ -32,12 +32,15 @@ public partial class App : Application
             var navigationService = new Services.NavigationService();
             var profileService = new Services.ProfileService();
 
+            // Populate profiles from disk before any ViewModel touches the collection.
+            profileService.LoadAsync().GetAwaiter().GetResult();
+
             // Create feature view-models
             var settingsVm = new ViewModels.SettingsViewModel(settingsService, storageService);
             var profileEditorVm = new ViewModels.ProfileEditorViewModel(templateService, profileService);
 
             // Main VM wired to navigation
-            var mainVm = new ViewModels.MainWindowViewModel(navigationService, profileEditorVm, settingsVm);
+            var mainVm = new ViewModels.MainWindowViewModel(navigationService, profileEditorVm, settingsVm, profileService);
 
             if (settingsService.Settings?.StartMinimized == true)
             {
