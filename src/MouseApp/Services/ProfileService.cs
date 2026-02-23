@@ -19,6 +19,12 @@ public class ProfileService
         Converters    = { new JsonStringEnumConverter() }
     };
 
+    /// <summary>
+    /// Serializes all file writes so concurrent AutoPersist + SetGlobalDefaultAsync calls
+    /// never race on File.Create() and truncate each other's output.
+    /// </summary>
+    private readonly System.Threading.SemaphoreSlim _saveLock = new(1, 1);
+
     // Lookup table mapping Windows Pointer Speed (1..20) to their effective multipliers
     private static readonly double[] WinMultipliers =
     {
@@ -79,16 +85,24 @@ public class ProfileService
 
     public async Task SaveAsync()
     {
-        var list = Profiles.ToList();
-        NormalizeGlobalDefault(list);
+        await _saveLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var list = Profiles.ToList();
+            NormalizeGlobalDefault(list);
 
-        var dir = Path.GetDirectoryName(_dataFile);
-        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-            Directory.CreateDirectory(dir);
+            var dir = Path.GetDirectoryName(_dataFile);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
 
-        using var fs = File.Create(_dataFile);
-        await JsonSerializer.SerializeAsync(fs, list, _jsonOptions).ConfigureAwait(false);
-        await fs.FlushAsync().ConfigureAwait(false);
+            using var fs = File.Create(_dataFile);
+            await JsonSerializer.SerializeAsync(fs, list, _jsonOptions).ConfigureAwait(false);
+            await fs.FlushAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _saveLock.Release();
+        }
     }
 
     public async Task SetGlobalDefaultAsync(MouseProfile p)

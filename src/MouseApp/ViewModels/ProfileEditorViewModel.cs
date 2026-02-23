@@ -263,10 +263,27 @@ public partial class ProfileEditorViewModel : ViewModelBase
         if (_isSyncing || _editingProfile == null) return;
 
         if (newValue)
-            // SetGlobalDefaultAsync clears the flag on every other profile and saves.
+        {
+            // SetGlobalDefaultAsync atomically clears all others and saves.
             _ = _profileService.SetGlobalDefaultAsync(_editingProfile);
+        }
         else
-            AutoPersist();
+        {
+            // Prevent unchecking when this is the only global default — we must always
+            // have exactly one. Revert the checkbox silently and bail.
+            bool isOnlyDefault = _profileService.Profiles.Count(p => p.IsGlobalDefault) <= 1
+                                 && _editingProfile.IsGlobalDefault;
+            if (isOnlyDefault)
+            {
+                _isSyncing = true;
+                IsGlobalDefault = true;  // revert the VM back to true
+                _isSyncing = false;
+                return;
+            }
+            // Profile was previously default but another is now: just persist the false.
+            _editingProfile.IsGlobalDefault = false;
+            _ = _profileService.SaveAsync();
+        }
 
         OpenTargetManagerCommand.NotifyCanExecuteChanged();
     }
@@ -404,7 +421,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
         _editingProfile.WinPointerSpeed       = WinPointerSpeed;
         _editingProfile.UseAutoRegSync        = UseAutoRegSync;
         _editingProfile.RegistryCurveOverride = RegistryCurveOverride;
-        _editingProfile.IsGlobalDefault       = IsGlobalDefault;
+        // IsGlobalDefault is intentionally NOT written here.
+        // It is exclusively managed by OnIsGlobalDefaultChanged → SetGlobalDefaultAsync,
+        // which performs the atomic exclusive-flag update and file write in one shot.
 
         _ = _profileService.SaveAsync();
     }
@@ -455,7 +474,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     private async Task ExecuteSaveAsync()
     {
-        // Commit all current VM values to the profile object.
+        // This path is only hit if _editingProfile is null (e.g. edge-case on first load).
+        // In normal operation AutoPersist handles all saves; IsGlobalDefault is managed
+        // exclusively by OnIsGlobalDefaultChanged \u2192 SetGlobalDefaultAsync, never here.
         if (_editingProfile == null)
         {
             var draft = new MouseProfile
@@ -467,18 +488,15 @@ public partial class ProfileEditorViewModel : ViewModelBase
                 WinPointerSpeed       = WinPointerSpeed,
                 UseAutoRegSync        = UseAutoRegSync,
                 RegistryCurveOverride = RegistryCurveOverride,
-                IsGlobalDefault       = IsGlobalDefault,
+                IsGlobalDefault       = false, // new profiles are never the default on creation
                 TargetAssociations    = new()
             };
             _profileService.Profiles.Add(draft);
             _editingProfile = draft;
         }
 
-        // Use SetGlobalDefaultAsync for the exclusive-default logic; otherwise plain save.
-        if (IsGlobalDefault)
-            await _profileService.SetGlobalDefaultAsync(_editingProfile).ConfigureAwait(false);
-        else
-            AutoPersist();
+        AutoPersist();
+        await Task.CompletedTask;
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
