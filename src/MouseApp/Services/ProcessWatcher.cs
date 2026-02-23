@@ -200,13 +200,24 @@ public sealed class ProcessWatcher : IProcessWatcher
         var attr = GetWindowAttributes(hwnd);
         Debug.WriteLine($"[ProcessWatcher] DESTROY — active-profile HWND destroyed (HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"); scanning desktop…");
 
-        // Scan all remaining visible windows for any match with the active profile
+        // Scan all remaining visible windows for any match with the active profile.
+        // Apply the same noise-class filter as HandleForeground so system windows
+        // (taskbar, tray, etc.) don't count as survivors — keeps logic consistent.
         var activeProfile = _currentProfile;
         bool anyMatch = false;
+        var scanClassSb = new StringBuilder(256);
 
         EnumWindows((w, _) =>
         {
-            if (w != hwnd && IsWindowVisible(w) && GetWindowMatchesProfile(GetWindowAttributes(w), activeProfile))
+            if (w == hwnd || !IsWindowVisible(w))
+                return true;
+
+            scanClassSb.Clear();
+            GetClassName(w, scanClassSb, scanClassSb.Capacity);
+            if (_systemNoiseClasses.Contains(scanClassSb.ToString()))
+                return true;
+
+            if (GetWindowMatchesProfile(GetWindowAttributes(w), activeProfile))
             {
                 anyMatch = true;
                 return false; // stop enumeration early
