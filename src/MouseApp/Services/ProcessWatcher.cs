@@ -82,6 +82,7 @@ public sealed class ProcessWatcher : IProcessWatcher
         "DummyDWMListenerWindow",        // DWM internal
         "IME",                           // input method editor
         "MSCTFIME UI",                   // text-framework IME
+        "ThumbnailDeviceHelperWnd",      // Explorer thumbnail cache helper (IsWindowVisible=true but no UI)
     };
 
     private MouseProfile? _currentProfile;
@@ -202,10 +203,10 @@ public sealed class ProcessWatcher : IProcessWatcher
 
         // Scan all remaining visible windows for any match with the active profile.
         // Apply the same noise-class filter as HandleForeground so system windows
-        // (taskbar, tray, etc.) don't count as survivors — keeps logic consistent.
         var activeProfile = _currentProfile;
         bool anyMatch = false;
         var scanClassSb = new StringBuilder(256);
+        WindowAttributes survivorAttr = default;
 
         EnumWindows((w, _) =>
         {
@@ -217,9 +218,11 @@ public sealed class ProcessWatcher : IProcessWatcher
             if (_systemNoiseClasses.Contains(scanClassSb.ToString()))
                 return true;
 
-            if (GetWindowMatchesProfile(GetWindowAttributes(w), activeProfile))
+            var wAttr = GetWindowAttributes(w);
+            if (GetWindowMatchesProfile(wAttr, activeProfile))
             {
                 anyMatch = true;
+                survivorAttr = wAttr;
                 return false; // stop enumeration early
             }
             return true;
@@ -227,7 +230,7 @@ public sealed class ProcessWatcher : IProcessWatcher
 
         if (anyMatch)
         {
-            Debug.WriteLine($"[ProcessWatcher] DESTROY — other matching window still alive; destroyed HWND was HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"; no revert.");
+            Debug.WriteLine($"[ProcessWatcher] DESTROY — survivor found; no revert. Survivor: HWND=? Exe={survivorAttr.ExeName} Path={survivorAttr.FullPath} Class=\"{survivorAttr.Class}\" Title=\"{survivorAttr.Title}\". Closed window: HWND={hwnd} Exe={attr.ExeName} Class=\"{attr.Class}\" Title=\"{attr.Title}\"");
             return;
         }
 
