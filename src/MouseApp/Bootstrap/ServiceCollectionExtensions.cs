@@ -40,10 +40,20 @@ public static class ServiceCollectionExtensions
             var profileService = sp.GetRequiredService<ProfileService>();
             var mouseService   = sp.GetRequiredService<IMouseService>();
             return new ProcessWatcher(profileService, profile =>
-                mouseService.ApplyProfileAsync(profile)
-                    .ContinueWith(
-                        t => Debug.WriteLine($"[MouseApp] ApplyProfileAsync faulted: {t.Exception?.Flatten().Message}"),
-                        System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted));
+            {
+                Debug.WriteLine($"[MouseApp] applyProfile lambda invoked for '{profile?.ProfileName}'.");
+                try
+                {
+                    mouseService.ApplyProfileAsync(profile)
+                        .ContinueWith(
+                            t => Debug.WriteLine($"[MouseApp] ApplyProfileAsync faulted: {t.Exception?.Flatten().Message}"),
+                            System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[MouseApp] ApplyProfileAsync threw synchronously: {ex}");
+                }
+            });
         });
 
         return services;

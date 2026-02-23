@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using Avalonia.Threading;
 using MouseApp.Models;
 
 namespace MouseApp.Services;
@@ -29,6 +28,15 @@ public sealed class ProcessWatcher : IProcessWatcher
 
     private delegate void WinEventDelegate(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    /// <summary>Snapshot of attributes resolved for a single HWND.</summary>
+    private readonly struct WindowAttributes
+    {
+        public string Title     { get; init; }
+        public string Class     { get; init; }
+        public string ExeName   { get; init; }
+        public string FullPath  { get; init; }
+    }
 
     [DllImport("user32.dll")]
     private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr hmodWinEventProc, WinEventDelegate lpfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
@@ -57,13 +65,27 @@ public sealed class ProcessWatcher : IProcessWatcher
     private IntPtr _hook = IntPtr.Zero;
 
     private MouseProfile? _currentProfile;
-    /// <summary>The HWND that triggered the most recent profile switch.</summary>
-    private IntPtr _currentHwnd = IntPtr.Zero;
+    /// <summary>
+    /// HWNDs that have fired a foreground-match event for the current profile.
+    /// Only destroy events for HWNDs in this set trigger the Last-Man-Standing scan,
+    /// filtering out spurious IME / child-window destroy noise.
+    /// </summary>
+    private readonly HashSet<IntPtr> _knownForegroundHwnds = new();
 
     public ProcessWatcher(ProfileService profileService, Action<MouseProfile> applyProfile)
     {
         _profileService = profileService ?? throw new ArgumentNullException(nameof(profileService));
         _applyProfile   = applyProfile   ?? throw new ArgumentNullException(nameof(applyProfile));
+
+        // When ProfileService rebuilds its collection (e.g. after a save/reload),
+        // all MouseProfile object references are replaced. Reset watcher state so
+        // _currentProfile doesn't silently hold a stale reference.
+        _profileService.Profiles.CollectionChanged += (_, _) =>
+        {
+            _currentProfile = null;
+            _knownForegroundHwnds.Clear();
+            Debug.WriteLine("[ProcessWatcher] Profiles collection changed — watcher state reset.");
+        };
 
         _winEventDelegate = new WinEventDelegate(WinEventProc);
         if (OperatingSystem.IsWindows())
@@ -86,14 +108,21 @@ public sealed class ProcessWatcher : IProcessWatcher
             if (hwnd == IntPtr.Zero)
                 return;
 
+            // Pre-filter: only react to events on real window objects.
+            // idObject == 0 (OBJID_WINDOW) + idChild == 0 (CHILDID_SELF) excludes
+            // caret, scroll-bar, menu-item, and other sub-object noise from EVENT_OBJECT_DESTROY.
+            if (eventType == EVENT_OBJECT_DESTROY && (idObject != 0 || idChild != 0))
+                return;
+
             if (eventType == EVENT_SYSTEM_FOREGROUND)
                 HandleForeground(hwnd);
             else if (eventType == EVENT_OBJECT_DESTROY)
                 HandleDestroy(hwnd);
         }
-        catch
+        catch (Exception ex)
         {
             // swallow — must never crash the hook thread
+            Debug.WriteLine($"[ProcessWatcher] Unhandled exception in WinEventProc: {ex}");
         }
     }
 
@@ -103,24 +132,30 @@ public sealed class ProcessWatcher : IProcessWatcher
 
     private void HandleForeground(IntPtr hwnd)
     {
-        var matched = _profileService.Profiles.FirstOrDefault(pr => GetWindowMatchesProfile(hwnd, pr));
+        var attr    = GetWindowAttributes(hwnd);
+        var matched = _profileService.Profiles.FirstOrDefault(pr => GetWindowMatchesProfile(attr, pr));
 
         if (matched == null)
         {
             // Sticky rule: no match → maintain current active context
-            Debug.WriteLine("[ProcessWatcher] FOREGROUND — no match; retaining current profile.");
+            Debug.WriteLine($"[ProcessWatcher] FOREGROUND — no match; HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"; retaining current profile.");
             return;
         }
 
-        Debug.WriteLine($"[ProcessWatcher] FOREGROUND — match found: \"{matched.ProfileName}\"");
+        Debug.WriteLine($"[ProcessWatcher] FOREGROUND — match found: \"{matched.ProfileName}\" (HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\")");
 
+        // Track every HWND that foregrounds into a matching profile.
+        // A set supports multiple instances of the same app (e.g. two Vivaldi windows).
         if (!ReferenceEquals(matched, _currentProfile))
         {
             _currentProfile = matched;
-            _currentHwnd    = hwnd;
-            var profile = matched;
-            Dispatcher.UIThread.Post(() => _applyProfile(profile));
+            _knownForegroundHwnds.Clear(); // new profile context — reset HWND set
         }
+        _knownForegroundHwnds.Add(hwnd);
+
+        var profile = matched;
+        Debug.WriteLine($"[ProcessWatcher] Dispatching apply for '{profile.ProfileName}'.");
+        _applyProfile(profile);
     }
 
     // -------------------------------------------------------------------------
@@ -129,10 +164,14 @@ public sealed class ProcessWatcher : IProcessWatcher
 
     private void HandleDestroy(IntPtr hwnd)
     {
-        if (_currentProfile == null || hwnd != _currentHwnd)
+        // Only process destroy for HWNDs we actually saw as a foreground window.
+        // This filters IME windows, MSCTFIME UI, CicMarshalWnd, and other auxiliary
+        // child HWNDs that share the process exe but are never the foreground window.
+        if (_currentProfile == null || !_knownForegroundHwnds.Remove(hwnd))
             return;
 
-        Debug.WriteLine($"[ProcessWatcher] DESTROY — active-profile HWND destroyed; scanning desktop…");
+        var attr = GetWindowAttributes(hwnd);
+        Debug.WriteLine($"[ProcessWatcher] DESTROY — active-profile HWND destroyed (HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"); scanning desktop…");
 
         // Scan all remaining visible windows for any match with the active profile
         var activeProfile = _currentProfile;
@@ -140,7 +179,7 @@ public sealed class ProcessWatcher : IProcessWatcher
 
         EnumWindows((w, _) =>
         {
-            if (w != hwnd && IsWindowVisible(w) && GetWindowMatchesProfile(w, activeProfile))
+            if (w != hwnd && IsWindowVisible(w) && GetWindowMatchesProfile(GetWindowAttributes(w), activeProfile))
             {
                 anyMatch = true;
                 return false; // stop enumeration early
@@ -150,22 +189,22 @@ public sealed class ProcessWatcher : IProcessWatcher
 
         if (anyMatch)
         {
-            Debug.WriteLine("[ProcessWatcher] DESTROY — other matching window still alive; no revert.");
+            Debug.WriteLine($"[ProcessWatcher] DESTROY — other matching window still alive; destroyed HWND was HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"; no revert.");
             return;
         }
 
-        // No windows remain for the active profile → revert to Global Default
+        // Last Man Standing — no windows remain for the active profile → revert to Global Default
         var global = _profileService.Profiles.FirstOrDefault(p => p.IsGlobalDefault);
         if (global != null)
         {
-            Debug.WriteLine($"[ProcessWatcher] DESTROY — last window closed; reverting to Global Default \"{global.ProfileName}\".");
+            Debug.WriteLine($"[ProcessWatcher] DESTROY — last window closed; reverting to Global Default \"{global.ProfileName}\". Triggering window: HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"");
             _currentProfile = global;
-            _currentHwnd    = IntPtr.Zero;
-            Dispatcher.UIThread.Post(() => _applyProfile(global));
+            _knownForegroundHwnds.Clear();
+            _applyProfile(global);
         }
         else
         {
-            Debug.WriteLine("[ProcessWatcher] DESTROY — no Global Default found; cannot revert.");
+            Debug.WriteLine($"[ProcessWatcher] DESTROY — no Global Default found; cannot revert. Triggering window: HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"");
         }
     }
 
@@ -174,27 +213,60 @@ public sealed class ProcessWatcher : IProcessWatcher
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Returns true if <paramref name="hwnd"/> satisfies at least one
+    /// Returns true if <paramref name="attr"/> satisfies at least one
     /// <see cref="TargetAssociation"/> in <paramref name="profile"/>.
-    /// Checks ExeName, FullPath, WindowClass, and WindowTitle.
+    /// Priority order: FullPath → ExeName → WindowClass → WindowTitle.
     /// </summary>
-    private static bool GetWindowMatchesProfile(IntPtr hwnd, MouseProfile profile)
+    private static bool GetWindowMatchesProfile(in WindowAttributes attr, MouseProfile profile)
     {
         if (profile.TargetAssociations == null || profile.TargetAssociations.Count == 0)
             return false;
 
-        // --- resolve process-based attributes ---
-        string exeName   = string.Empty;
-        string fullPath  = string.Empty;
+        foreach (var ta in profile.TargetAssociations)
+        {
+            bool hit = ta.MatchType switch
+            {
+                // 1. Full path — highest accuracy
+                TargetMatchType.FullPath    => string.Equals(ta.Value, attr.FullPath, StringComparison.OrdinalIgnoreCase),
+                // 2. Exe name
+                TargetMatchType.ExeName     => string.Equals(ta.Value, attr.ExeName,  StringComparison.OrdinalIgnoreCase),
+                // 3. Window class
+                TargetMatchType.WindowClass => string.Equals(ta.Value, attr.Class,    StringComparison.OrdinalIgnoreCase),
+                // 4. Window title (substring)
+                TargetMatchType.WindowTitle => attr.Title.Contains(ta.Value,          StringComparison.OrdinalIgnoreCase),
+                _ => false
+            };
+
+            if (hit)
+            {
+                if (ta.MatchType == TargetMatchType.FullPath)
+                    Debug.WriteLine($"[MATCH] Path Found: {attr.FullPath}");
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Resolves all window/process attributes for a given HWND into a <see cref="WindowAttributes"/> struct.
+    /// Uses <c>GetWindowThreadProcessId</c> + <c>Process.GetProcessById</c> to obtain the full executable
+    /// path; falls back gracefully on Access Denied or process-exited errors.
+    /// </summary>
+    private static WindowAttributes GetWindowAttributes(IntPtr hwnd)
+    {
+        string exeName  = string.Empty;
+        string fullPath = string.Empty;
 
         GetWindowThreadProcessId(hwnd, out var pidUint);
-        if (pidUint != 0)
+        if (pidUint != 0 && pidUint <= (uint)int.MaxValue)
         {
             try
             {
                 using var p = Process.GetProcessById((int)pidUint);
                 try
                 {
+                    // Use MainModule.FileName to obtain the full executable path
                     var full = p.MainModule?.FileName;
                     if (!string.IsNullOrEmpty(full))
                     {
@@ -202,32 +274,32 @@ public sealed class ProcessWatcher : IProcessWatcher
                         exeName  = Path.GetFileName(full).ToLowerInvariant();
                     }
                 }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    // Access Denied for system/elevated processes — fall back to ProcessName
+                    exeName = (p.ProcessName + ".exe").ToLowerInvariant();
+                }
                 catch
                 {
                     exeName = (p.ProcessName + ".exe").ToLowerInvariant();
                 }
             }
-            catch { /* process exited or inaccessible */ }
+            catch { /* process exited or otherwise inaccessible */ }
         }
 
-        // --- resolve window-based attributes ---
         var classSb = new StringBuilder(256);
         GetClassName(hwnd, classSb, classSb.Capacity);
-        var windowClass = classSb.ToString();
 
         var titleSb = new StringBuilder(512);
         GetWindowText(hwnd, titleSb, titleSb.Capacity);
-        var windowTitle = titleSb.ToString();
 
-        // --- polymorphic match ---
-        return profile.TargetAssociations.Any(ta => ta.MatchType switch
+        return new WindowAttributes
         {
-            TargetMatchType.ExeName     => string.Equals(ta.Value, exeName,     StringComparison.OrdinalIgnoreCase),
-            TargetMatchType.FullPath    => string.Equals(ta.Value, fullPath,    StringComparison.OrdinalIgnoreCase),
-            TargetMatchType.WindowClass => string.Equals(ta.Value, windowClass, StringComparison.OrdinalIgnoreCase),
-            TargetMatchType.WindowTitle => windowTitle.Contains(ta.Value,       StringComparison.OrdinalIgnoreCase),
-            _ => false
-        });
+            FullPath = fullPath,
+            ExeName  = exeName,
+            Class    = classSb.ToString(),
+            Title    = titleSb.ToString()
+        };
     }
 
     // -------------------------------------------------------------------------

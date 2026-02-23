@@ -15,6 +15,7 @@ public partial class App : Application
 {
     // Held for app lifetime — prevents the hook delegate from being garbage-collected.
     private IProcessWatcher? _processWatcher;
+    private Services.IMouseService? _mouseService;
 
     public override void Initialize()
     {
@@ -47,10 +48,24 @@ public partial class App : Application
             // Main VM wired to navigation
             var mainVm = new ViewModels.MainWindowViewModel(navigationService, profileEditorVm, settingsVm, profileService);
 
+            // Hardware apply service
+            var rawAccelProvider = new Services.RawAccelDriverProvider(settingsService);
+            _mouseService = new Services.MouseService(profileService, rawAccelProvider);
+            var mouseService = _mouseService;
+
             // Start the foreground-window watcher.  The same profileService instance is used
             // (singleton by construction) so profile collections are always in sync.
-            // The callback marshals to the UI thread inside OnExternalProfileActivated.
-            _processWatcher = new ProcessWatcher(profileService, profile => mainVm.OnExternalProfileActivated(profile));
+            _processWatcher = new ProcessWatcher(profileService, profile =>
+            {
+                // Apply hardware settings (registry, SPI, RawAccel) — deduped inside MouseService.
+                mouseService.ApplyProfileAsync(profile)
+                    .ContinueWith(
+                        t => System.Diagnostics.Debug.WriteLine($"[MouseApp] ApplyProfileAsync faulted: {t.Exception?.Flatten().Message}"),
+                        System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
+
+                // Sync sidebar selection on the UI thread.
+                mainVm.OnExternalProfileActivated(profile);
+            });
 
             if (settingsService.Settings?.StartMinimized == true)
             {

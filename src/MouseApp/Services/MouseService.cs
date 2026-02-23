@@ -17,6 +17,8 @@ public class MouseService : IMouseService
 {
     private readonly ProfileService _profileService;
     private readonly RawAccelDriverProvider _rawAccelProvider;
+    /// <summary>Last profile sent to hardware — prevents redundant registry/SPI writes on repeated focus events.</summary>
+    private MouseProfile? _lastAppliedProfile;
 
     public MouseService(ProfileService profileService, RawAccelDriverProvider rawAccelProvider)
     {
@@ -79,7 +81,17 @@ public class MouseService : IMouseService
 
     public async Task ApplyProfileAsync(MouseProfile profile)
     {
+        Debug.WriteLine($"[MouseService] ApplyProfileAsync entered for '{profile?.ProfileName}'.");
         if (profile == null) throw new ArgumentNullException(nameof(profile));
+
+        // Dedup: skip hardware writes if the same profile is already applied
+        if (ReferenceEquals(profile, _lastAppliedProfile))
+        {
+            Debug.WriteLine($"[MouseService] ApplyProfileAsync — skipping, '{profile.ProfileName}' already active.");
+            return;
+        }
+        _lastAppliedProfile = profile;
+        Debug.WriteLine($"[MouseService] Applying profile '{profile.ProfileName}' to hardware.");
 
         var (winSpeed, regResult) = _profileService.CalculateCompensations(profile);
 
