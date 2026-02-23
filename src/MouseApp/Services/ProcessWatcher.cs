@@ -64,6 +64,26 @@ public sealed class ProcessWatcher : IProcessWatcher
     private readonly WinEventDelegate _winEventDelegate;
     private IntPtr _hook = IntPtr.Zero;
 
+    /// <summary>
+    /// Window classes that are Windows shell / compositor internals and will never
+    /// match a user profile. Checked with a cheap GetClassName call before the
+    /// expensive Process.GetProcessById lookup in GetWindowAttributes.
+    /// </summary>
+    private static readonly HashSet<string> _systemNoiseClasses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ForegroundStaging",            // focus-transition staging window
+        "XamlExplorerHostIslandWindow",  // alt-tab / Task View XAML island
+        "Shell_TrayWnd",                 // taskbar
+        "Shell_SecondaryTrayWnd",        // taskbar on secondary monitor
+        "TopLevelWindowForOverflowXamlIsland", // system-tray overflow
+        "NotifyIconOverflowWindow",      // legacy system-tray overflow
+        "WorkerW",                       // desktop worker window
+        "Progman",                       // program manager / desktop
+        "DummyDWMListenerWindow",        // DWM internal
+        "IME",                           // input method editor
+        "MSCTFIME UI",                   // text-framework IME
+    };
+
     private MouseProfile? _currentProfile;
     /// <summary>
     /// HWNDs that have fired a foreground-match event for the current profile.
@@ -132,6 +152,13 @@ public sealed class ProcessWatcher : IProcessWatcher
 
     private void HandleForeground(IntPtr hwnd)
     {
+        // Fast pre-check: skip known system/shell window classes before the
+        // expensive Process.GetProcessById lookup inside GetWindowAttributes.
+        var classSb = new StringBuilder(256);
+        GetClassName(hwnd, classSb, classSb.Capacity);
+        if (_systemNoiseClasses.Contains(classSb.ToString()))
+            return;
+
         var attr    = GetWindowAttributes(hwnd);
         var matched = _profileService.Profiles.FirstOrDefault(pr => GetWindowMatchesProfile(attr, pr));
 
