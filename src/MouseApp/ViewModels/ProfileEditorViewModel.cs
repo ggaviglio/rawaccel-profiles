@@ -25,6 +25,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
     private readonly ProfileService   _profileService;
     private readonly IWindowService   _windowService;
 
+    /// <summary>Injected after construction via <see cref="WireMouseService"/>. Null until wired.</summary>
+    private IMouseService? _mouseService;
+
     /// <summary>The profile currently loaded into the editor. Null when no profile is selected.</summary>
     private MouseProfile? _editingProfile;
 
@@ -92,6 +95,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     // ── Commands ────────────────────────────────────────────────────────────
     public IAsyncRelayCommand SaveCommand              { get; }
+    public IAsyncRelayCommand ApplyCommand             { get; }
     public IAsyncRelayCommand OpenTargetManagerCommand { get; }
 
     // ── Constructor ─────────────────────────────────────────────────────────
@@ -110,6 +114,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         _profileService.Profiles.CollectionChanged += OnProfilesCollectionChanged;
 
         SaveCommand              = new AsyncRelayCommand(ExecuteSaveAsync);
+        ApplyCommand             = new AsyncRelayCommand(ExecuteApplyAsync, () => _editingProfile != null);
         OpenTargetManagerCommand = new AsyncRelayCommand(ExecuteOpenTargetManagerAsync,
                                        () => _editingProfile != null && !IsGlobalDefault);
     }
@@ -251,6 +256,19 @@ public partial class ProfileEditorViewModel : ViewModelBase
     partial void OnSelectedTemplateChanged(string? oldValue, string? newValue)
     {
         AutoPersist();
+    }
+
+    partial void OnIsGlobalDefaultChanged(bool oldValue, bool newValue)
+    {
+        if (_isSyncing || _editingProfile == null) return;
+
+        if (newValue)
+            // SetGlobalDefaultAsync clears the flag on every other profile and saves.
+            _ = _profileService.SetGlobalDefaultAsync(_editingProfile);
+        else
+            AutoPersist();
+
+        OpenTargetManagerCommand.NotifyCanExecuteChanged();
     }
 
     // ── Math Engine ─────────────────────────────────────────────────────────
@@ -411,7 +429,29 @@ public partial class ProfileEditorViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsTargetAssociationsEmpty));
     }
 
-    // ── Save Command ────────────────────────────────────────────────────────
+    // ── Save / Apply Commands ────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Pushes the currently loaded profile to hardware immediately,
+    /// bypassing the foreground-window watcher.
+    /// </summary>
+    private async Task ExecuteApplyAsync()
+    {
+        if (_editingProfile == null || _mouseService == null) return;
+
+        System.Diagnostics.Debug.WriteLine($"[ProfileEditor] Manual apply: '{_editingProfile.ProfileName}'");
+        await _mouseService.ApplyProfileAsync(_editingProfile).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Provides the <see cref="IMouseService"/> dependency after construction.
+    /// Called from <c>App.axaml.cs</c> once both the editor VM and the service are available.
+    /// </summary>
+    public void WireMouseService(IMouseService mouseService)
+    {
+        _mouseService = mouseService ?? throw new ArgumentNullException(nameof(mouseService));
+        ApplyCommand.NotifyCanExecuteChanged();
+    }
 
     private async Task ExecuteSaveAsync()
     {

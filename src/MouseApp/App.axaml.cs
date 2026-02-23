@@ -55,6 +55,9 @@ public partial class App : Application
             _mouseService = new Services.MouseService(profileService, rawAccelProvider);
             var mouseService = _mouseService;
 
+            // Give the ProfileEditor direct access to the hardware service for manual Apply.
+            profileEditorVm.WireMouseService(mouseService);
+
             // Start the foreground-window watcher.  The same profileService instance is used
             // (singleton by construction) so profile collections are always in sync.
             _processWatcher = new ProcessWatcher(profileService, profile =>

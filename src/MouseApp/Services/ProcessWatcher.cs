@@ -12,7 +12,16 @@ namespace MouseApp.Services;
 /// <summary>
 /// Foreground-window hook that maps running processes to mouse profiles.
 /// </summary>
-public interface IProcessWatcher : IDisposable { }
+public interface IProcessWatcher : IDisposable
+{
+    /// <summary>
+    /// Rebuilds the internal profile-matching index from the current
+    /// <see cref="ProfileService.Profiles"/> collection.
+    /// Call after any property on a <see cref="MouseProfile"/> changes that
+    /// affects matching (e.g. <see cref="MouseProfile.AutoSwitchEnabled"/>).
+    /// </summary>
+    void RebuildIndex();
+}
 
 /// <summary>
 /// Unified Win32 hook that monitors foreground changes and window destruction.
@@ -111,13 +120,25 @@ public sealed class ProcessWatcher : IProcessWatcher
         // When ProfileService rebuilds its collection (e.g. after a save/reload),
         // all MouseProfile object references are replaced. Reset watcher state so
         // _currentProfile doesn't silently hold a stale reference.
-        _profileService.Profiles.CollectionChanged += (_, _) =>
+        _profileService.Profiles.CollectionChanged += (_, e) =>
         {
+            // Maintain per-profile PropertyChanged subscriptions.
+            if (e.OldItems != null)
+                foreach (MouseProfile p in e.OldItems)
+                    p.PropertyChanged -= OnProfilePropertyChanged;
+            if (e.NewItems != null)
+                foreach (MouseProfile p in e.NewItems)
+                    p.PropertyChanged += OnProfilePropertyChanged;
+
             _currentProfile = null;
             _knownForegroundHwnds.Clear();
             RebuildIndex();
             Debug.WriteLine("[ProcessWatcher] Profiles collection changed — watcher state reset.");
         };
+
+        // Subscribe to all profiles already in the collection at construction time.
+        foreach (var p in _profileService.Profiles)
+            p.PropertyChanged += OnProfilePropertyChanged;
 
         _winEventDelegate = new WinEventDelegate(WinEventProc);
         if (OperatingSystem.IsWindows())
@@ -330,7 +351,8 @@ public sealed class ProcessWatcher : IProcessWatcher
     // Index management
     // -------------------------------------------------------------------------
 
-    private void RebuildIndex()
+    /// <summary>Rebuilds the profile-matching index. Also satisfies <see cref="IProcessWatcher.RebuildIndex"/>.</summary>
+    public void RebuildIndex()
     {
         _exeIndex.Clear();
         _pathIndex.Clear();
@@ -355,6 +377,20 @@ public sealed class ProcessWatcher : IProcessWatcher
         }
 
         Debug.WriteLine($"[ProcessWatcher] Index rebuilt — exe:{_exeIndex.Count} path:{_pathIndex.Count} class:{_classIndex.Count} title:{_titleRules.Count}");
+    }
+
+    /// <summary>
+    /// Reacts to individual profile property changes.
+    /// <see cref="MouseProfile.AutoSwitchEnabled"/> is the only property that changes
+    /// index membership without a collection-level add/remove, so we rebuild on that alone.
+    /// </summary>
+    private void OnProfilePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MouseProfile.AutoSwitchEnabled))
+        {
+            Debug.WriteLine($"[ProcessWatcher] AutoSwitchEnabled changed on '{(sender as MouseProfile)?.ProfileName}' \u2014 rebuilding index.");
+            RebuildIndex();
+        }
     }
 
     private static void AddToIndex(Dictionary<string, List<MouseProfile>> dict, string key, MouseProfile profile)
@@ -523,6 +559,9 @@ public sealed class ProcessWatcher : IProcessWatcher
     {
         try
         {
+            foreach (var p in _profileService.Profiles)
+                p.PropertyChanged -= OnProfilePropertyChanged;
+
             if (_hook != IntPtr.Zero)
             {
                 UnhookWinEvent(_hook);

@@ -14,6 +14,23 @@
     <StackPanel Spacing="12">
       <TextBlock Text="Profile Editor" FontSize="20" FontWeight="SemiBold" />
 
+      <!-- ═══ Action bar: Apply Now + Default revert toggle ═══ -->
+      <Border Background="#2A2A2A" CornerRadius="4" Padding="10,8">
+        <Grid ColumnDefinitions="*,Auto">
+          <CheckBox Grid.Column="0"
+                    IsChecked="{Binding IsGlobalDefault, Mode=TwoWay}"
+                    Content="Default revert profile"
+                    VerticalAlignment="Center"
+                    ToolTip.Tip="When a matched app closes, the system reverts to this profile" />
+          <Button Grid.Column="1"
+                  Content="▶  Apply Now"
+                  Command="{Binding ApplyCommand}"
+                  Padding="14,6"
+                  FontWeight="SemiBold"
+                  ToolTip.Tip="Push this profile to hardware immediately, bypassing auto-switch" />
+        </Grid>
+      </Border>
+
       <!-- Profile Name -->
       <StackPanel Spacing="4">
         <TextBlock Text="Profile Name" FontSize="14" Opacity="0.8" />
