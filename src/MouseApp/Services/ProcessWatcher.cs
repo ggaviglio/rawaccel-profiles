@@ -339,6 +339,7 @@ public sealed class ProcessWatcher : IProcessWatcher
 
         foreach (var profile in _profileService.Profiles)
         {
+            if (!profile.AutoSwitchEnabled) continue;
             if (profile.TargetAssociations is not { Count: > 0 }) continue;
             foreach (var ta in profile.TargetAssociations)
             {

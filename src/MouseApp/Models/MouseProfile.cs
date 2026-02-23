@@ -52,6 +52,14 @@ public partial class MouseProfile : ObservableObject
     [ObservableProperty]
     public partial bool IsGlobalDefault { get; set; }
 
+    /// <summary>
+    /// When false, this profile is excluded from automatic foreground-window switching.
+    /// The profile can still be applied manually from the GUI.
+    /// Defaults to true so existing profiles are unaffected.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool AutoSwitchEnabled { get; set; } = true;
+
     [ObservableProperty]
     public partial List<TargetAssociation> TargetAssociations { get; set; } = new();
 }
