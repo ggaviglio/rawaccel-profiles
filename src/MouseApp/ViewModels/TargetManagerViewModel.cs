@@ -25,6 +25,17 @@ public sealed record WindowEntry(IntPtr Hwnd, string Title, string ExeName, stri
             return $"{t}  ({ExeName})";
         }
     }
+
+    /// <summary>Multi-line tooltip shown in the Active Windows picker.</summary>
+    public string DetailTooltip
+    {
+        get
+        {
+            var path  = string.IsNullOrEmpty(FullPath) ? "(path unavailable)" : FullPath;
+            var cls   = string.IsNullOrEmpty(ClassName) ? "(unknown)" : ClassName;
+            return $"Path:  {path}\nClass: {cls}";
+        }
+    }
 }
 
 // ── TargetManagerViewModel ───────────────────────────────────────────────────
@@ -49,6 +60,26 @@ public partial class TargetManagerViewModel : ViewModelBase
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
+    // ── Noise filter — kept in sync with ProcessWatcher._systemNoiseClasses ──
+    // These classes are shell/compositor internals that will never be meaningful
+    // profile targets. Filtering them keeps the Active Windows list clean.
+    private static readonly HashSet<string> _systemNoiseClasses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ForegroundStaging",
+        "XamlExplorerHostIslandWindow",
+        "Shell_TrayWnd",
+        "Shell_SecondaryTrayWnd",
+        "TopLevelWindowForOverflowXamlIsland",
+        "NotifyIconOverflowWindow",
+        "WorkerW",
+        "Progman",
+        "DummyDWMListenerWindow",
+        "IME",
+        "MSCTFIME UI",
+        "ThumbnailDeviceHelperWnd",
+        "EdgeUiInputTopWndClass",
+    };
+
     // ── State ────────────────────────────────────────────────────────────────
     private readonly MouseProfile   _profile;
     private readonly ProfileService _profileService;
@@ -64,6 +95,7 @@ public partial class TargetManagerViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(AddAsExeCommand))]
     [NotifyCanExecuteChangedFor(nameof(AddAsPathCommand))]
     [NotifyCanExecuteChangedFor(nameof(AddAsTitleCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AddAsClassCommand))]
     private WindowEntry? selectedWindow;
 
     [ObservableProperty]
@@ -78,6 +110,7 @@ public partial class TargetManagerViewModel : ViewModelBase
     public IRelayCommand                    AddAsExeCommand       { get; }
     public IRelayCommand                    AddAsPathCommand      { get; }
     public IRelayCommand                    AddAsTitleCommand     { get; }
+    public IRelayCommand                    AddAsClassCommand     { get; }
     public IRelayCommand                    AddManualCommand      { get; }
     public IRelayCommand<TargetAssociation> RemoveCommand         { get; }
 
@@ -95,6 +128,7 @@ public partial class TargetManagerViewModel : ViewModelBase
         AddAsExeCommand       = new RelayCommand(ExecuteAddAsExe,   () => SelectedWindow is not null);
         AddAsPathCommand      = new RelayCommand(ExecuteAddAsPath,  () => SelectedWindow is not null && !string.IsNullOrEmpty(SelectedWindow.FullPath));
         AddAsTitleCommand     = new RelayCommand(ExecuteAddAsTitle, () => SelectedWindow is not null && !string.IsNullOrEmpty(SelectedWindow.Title));
+        AddAsClassCommand     = new RelayCommand(ExecuteAddAsClass, () => SelectedWindow is not null && !string.IsNullOrEmpty(SelectedWindow.ClassName));
         AddManualCommand      = new RelayCommand(ExecuteAddManual,  () => !string.IsNullOrWhiteSpace(ManualValue));
         RemoveCommand         = new RelayCommand<TargetAssociation>(ExecuteRemove);
 
@@ -115,21 +149,22 @@ public partial class TargetManagerViewModel : ViewModelBase
         {
             if (!IsWindowVisible(hWnd)) return true;
 
-            // Title (empty → "[No Title]" is handled in DisplayText)
-            var titleSb = new StringBuilder(256);
-            GetWindowText(hWnd, titleSb, titleSb.Capacity);
-            var title = titleSb.ToString();
-
-            // Class
+            // Class — checked first (cheap) against noise filter
             var classSb = new StringBuilder(256);
             GetClassName(hWnd, classSb, classSb.Capacity);
             var className = classSb.ToString();
+            if (_systemNoiseClasses.Contains(className)) return true;
+
+            // Title
+            var titleSb = new StringBuilder(256);
+            GetWindowText(hWnd, titleSb, titleSb.Capacity);
+            var title = titleSb.ToString();
 
             // Process info
             GetWindowThreadProcessId(hWnd, out var pidUint);
             string exeName  = string.Empty;
             string fullPath = string.Empty;
-            if (pidUint != 0)
+            if (pidUint != 0 && pidUint <= (uint)int.MaxValue)
             {
                 try
                 {
@@ -140,13 +175,13 @@ public partial class TargetManagerViewModel : ViewModelBase
                         if (!string.IsNullOrEmpty(fp))
                         {
                             fullPath = fp;
-                            exeName  = Path.GetFileName(fp);
+                            exeName  = Path.GetFileName(fp).ToLowerInvariant();
                         }
                     }
                     catch { /* access denied – use ProcessName fallback */ }
 
                     if (string.IsNullOrEmpty(exeName))
-                        exeName = p.ProcessName + ".exe";
+                        exeName = (p.ProcessName + ".exe").ToLowerInvariant();
                 }
                 catch { exeName = "[inaccessible]"; }
             }
@@ -155,7 +190,7 @@ public partial class TargetManagerViewModel : ViewModelBase
             if (string.IsNullOrEmpty(exeName)) return true;
 
             entries.Add(new WindowEntry(hWnd, title, exeName, fullPath, className));
-            return true; // continue enumeration
+            return true;
         }, IntPtr.Zero);
 
         foreach (var e in entries)
@@ -192,6 +227,16 @@ public partial class TargetManagerViewModel : ViewModelBase
         });
     }
 
+    private void ExecuteAddAsClass()
+    {
+        if (SelectedWindow is null || string.IsNullOrEmpty(SelectedWindow.ClassName)) return;
+        AddAndPersist(new TargetAssociation
+        {
+            MatchType = TargetMatchType.WindowClass,
+            Value     = SelectedWindow.ClassName
+        });
+    }
+
     private void ExecuteAddManual()
     {
         if (string.IsNullOrWhiteSpace(ManualValue)) return;
@@ -214,6 +259,13 @@ public partial class TargetManagerViewModel : ViewModelBase
 
     private void AddAndPersist(TargetAssociation assoc)
     {
+        // Duplicate guard — same MatchType + Value (case-insensitive) already present
+        bool duplicate = Associations.Any(a =>
+            a.MatchType == assoc.MatchType &&
+            string.Equals(a.Value, assoc.Value, StringComparison.OrdinalIgnoreCase));
+
+        if (duplicate) return;
+
         Associations.Add(assoc);
         SyncAndSave();
     }

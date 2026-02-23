@@ -35,7 +35,7 @@
             <DataTemplate x:DataType="vm:WindowEntry">
               <TextBlock Text="{Binding DisplayText}"
                          TextTrimming="CharacterEllipsis"
-                         ToolTip.Tip="{Binding FullPath}" />
+                         ToolTip.Tip="{Binding DetailTooltip}" />
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
@@ -52,6 +52,10 @@
                 Padding="10,6" />
         <Button Content="→ Add as Path"
                 Command="{Binding AddAsPathCommand}"
+                HorizontalAlignment="Stretch"
+                Padding="10,6" />
+        <Button Content="→ Add as Class"
+                Command="{Binding AddAsClassCommand}"
                 HorizontalAlignment="Stretch"
                 Padding="10,6" />
         <Button Content="→ Add as Title"
