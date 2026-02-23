@@ -94,6 +94,15 @@ public sealed class ProcessWatcher : IProcessWatcher
     /// </summary>
     private readonly HashSet<IntPtr> _knownForegroundHwnds = new();
 
+    // --- Profile-matching index (rebuilt whenever Profiles collection changes) ---
+    // Exact-match types (ExeName, FullPath, WindowClass) use O(1) dictionary lookup.
+    // WindowTitle uses substring matching so it remains a flat list that is only
+    // scanned when the window title is actually retrieved (Stage 5).
+    private Dictionary<string, List<MouseProfile>> _exeIndex   = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, List<MouseProfile>> _pathIndex  = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, List<MouseProfile>> _classIndex = new(StringComparer.OrdinalIgnoreCase);
+    private List<(string Value, MouseProfile Profile)> _titleRules = new();
+
     public ProcessWatcher(ProfileService profileService, Action<MouseProfile> applyProfile)
     {
         _profileService = profileService ?? throw new ArgumentNullException(nameof(profileService));
@@ -106,6 +115,7 @@ public sealed class ProcessWatcher : IProcessWatcher
         {
             _currentProfile = null;
             _knownForegroundHwnds.Clear();
+            RebuildIndex();
             Debug.WriteLine("[ProcessWatcher] Profiles collection changed — watcher state reset.");
         };
 
@@ -117,6 +127,7 @@ public sealed class ProcessWatcher : IProcessWatcher
                 IntPtr.Zero, _winEventDelegate,
                 0, 0, WINEVENT_OUTOFCONTEXT);
         }
+        RebuildIndex();
     }
 
     // -------------------------------------------------------------------------
@@ -154,24 +165,85 @@ public sealed class ProcessWatcher : IProcessWatcher
 
     private void HandleForeground(IntPtr hwnd)
     {
-        // Fast pre-check: skip known system/shell window classes before the
-        // expensive Process.GetProcessById lookup inside GetWindowAttributes.
+        // Stage 1 — class name (cheap; already needed for noise filter).
         var classSb = new StringBuilder(256);
         GetClassName(hwnd, classSb, classSb.Capacity);
-        if (_systemNoiseClasses.Contains(classSb.ToString()))
+        var className = classSb.ToString();
+        if (_systemNoiseClasses.Contains(className))
             return;
 
-        var attr    = GetWindowAttributes(hwnd);
-        var matched = _profileService.Profiles.FirstOrDefault(pr => GetWindowMatchesProfile(attr, pr));
+        // Stage 2 — class index look-up: zero process-open cost.
+        MouseProfile? matched = FirstMatch(_classIndex.GetValueOrDefault(className));
+
+        string exeName  = string.Empty;
+        string fullPath = string.Empty;
+        uint   pid      = 0;
 
         if (matched == null)
         {
-            // Sticky rule: no match → maintain current active context
-            Debug.WriteLine($"[ProcessWatcher] FOREGROUND — no match; HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"; retaining current profile.");
+            // Stage 3 — cheap ProcessName (no MainModule, no disk I/O).
+            GetWindowThreadProcessId(hwnd, out pid);
+            if (pid != 0 && pid <= (uint)int.MaxValue)
+            {
+                try
+                {
+                    using var p = Process.GetProcessById((int)pid);
+                    exeName = (p.ProcessName + ".exe").ToLowerInvariant();
+                }
+                catch { /* process exited */ }
+            }
+
+            if (!string.IsNullOrEmpty(exeName))
+                matched = FirstMatch(_exeIndex.GetValueOrDefault(exeName));
+
+            // Stage 4 — expensive MainModule.FileName; only when FullPath rules exist.
+            if (matched == null && _pathIndex.Count > 0 && pid != 0 && pid <= (uint)int.MaxValue)
+            {
+                try
+                {
+                    using var p = Process.GetProcessById((int)pid);
+                    try
+                    {
+                        var full = p.MainModule?.FileName;
+                        if (!string.IsNullOrEmpty(full))
+                        {
+                            fullPath = full;
+                            exeName  = Path.GetFileName(full).ToLowerInvariant();
+                            matched  = FirstMatch(_pathIndex.GetValueOrDefault(full));
+                        }
+                    }
+                    catch (System.ComponentModel.Win32Exception) { }
+                    catch { }
+                }
+                catch { }
+            }
+        }
+
+        // Stage 5 — window title (cheap GetWindowText; only when title rules exist).
+        string title = string.Empty;
+        if (matched == null && _titleRules.Count > 0)
+        {
+            var titleSb = new StringBuilder(512);
+            GetWindowText(hwnd, titleSb, titleSb.Capacity);
+            title = titleSb.ToString();
+            foreach (var (value, profile) in _titleRules)
+            {
+                if (title.Contains(value, StringComparison.OrdinalIgnoreCase))
+                {
+                    matched = profile;
+                    break;
+                }
+            }
+        }
+
+        if (matched == null)
+        {
+            // Sticky rule: no match → maintain current active context.
+            Debug.WriteLine($"[ProcessWatcher] FOREGROUND — no match; HWND={hwnd} Exe={exeName} Class=\"{className}\"; retaining current profile.");
             return;
         }
 
-        Debug.WriteLine($"[ProcessWatcher] FOREGROUND — match found: \"{matched.ProfileName}\" (HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\")");
+        Debug.WriteLine($"[ProcessWatcher] FOREGROUND — match found: \"{matched.ProfileName}\" (HWND={hwnd} Exe={exeName} Path={fullPath} Class=\"{className}\" Title=\"{title}\")");
 
         // Track every HWND that foregrounds into a matching profile.
         // A set supports multiple instances of the same app (e.g. two Vivaldi windows).
@@ -182,9 +254,8 @@ public sealed class ProcessWatcher : IProcessWatcher
         }
         _knownForegroundHwnds.Add(hwnd);
 
-        var profile = matched;
-        Debug.WriteLine($"[ProcessWatcher] Dispatching apply for '{profile.ProfileName}'.");
-        _applyProfile(profile);
+        Debug.WriteLine($"[ProcessWatcher] Dispatching apply for '{matched.ProfileName}'.");
+        _applyProfile(matched);
     }
 
     // -------------------------------------------------------------------------
@@ -209,6 +280,11 @@ public sealed class ProcessWatcher : IProcessWatcher
         var scanClassSb = new StringBuilder(256);
         WindowAttributes survivorAttr = default;
 
+        // Pre-compute which attribute categories the active profile actually uses so
+        // the EnumWindows scan can skip expensive MainModule.FileName when not needed.
+        bool profileNeedsFullPath = activeProfile.TargetAssociations?.Any(
+            ta => ta.MatchType == TargetMatchType.FullPath) == true;
+
         EnumWindows((w, _) =>
         {
             if (w == hwnd || !IsWindowVisible(w))
@@ -219,7 +295,7 @@ public sealed class ProcessWatcher : IProcessWatcher
             if (_systemNoiseClasses.Contains(scanClassSb.ToString()))
                 return true;
 
-            var wAttr = GetWindowAttributes(w);
+            var wAttr = GetWindowAttributesStaged(w, resolveFullPath: profileNeedsFullPath);
             if (GetWindowMatchesProfile(wAttr, activeProfile))
             {
                 anyMatch = true;
@@ -249,6 +325,48 @@ public sealed class ProcessWatcher : IProcessWatcher
             Debug.WriteLine($"[ProcessWatcher] DESTROY — no Global Default found; cannot revert. Triggering window: HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"");
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Index management
+    // -------------------------------------------------------------------------
+
+    private void RebuildIndex()
+    {
+        _exeIndex.Clear();
+        _pathIndex.Clear();
+        _classIndex.Clear();
+        _titleRules.Clear();
+
+        foreach (var profile in _profileService.Profiles)
+        {
+            if (profile.TargetAssociations is not { Count: > 0 }) continue;
+            foreach (var ta in profile.TargetAssociations)
+            {
+                if (string.IsNullOrEmpty(ta.Value)) continue;
+                switch (ta.MatchType)
+                {
+                    case TargetMatchType.ExeName:     AddToIndex(_exeIndex,   ta.Value, profile); break;
+                    case TargetMatchType.FullPath:    AddToIndex(_pathIndex,  ta.Value, profile); break;
+                    case TargetMatchType.WindowClass: AddToIndex(_classIndex, ta.Value, profile); break;
+                    case TargetMatchType.WindowTitle: _titleRules.Add((ta.Value, profile));       break;
+                }
+            }
+        }
+
+        Debug.WriteLine($"[ProcessWatcher] Index rebuilt — exe:{_exeIndex.Count} path:{_pathIndex.Count} class:{_classIndex.Count} title:{_titleRules.Count}");
+    }
+
+    private static void AddToIndex(Dictionary<string, List<MouseProfile>> dict, string key, MouseProfile profile)
+    {
+        if (!dict.TryGetValue(key, out var list))
+            dict[key] = list = new List<MouseProfile>();
+        if (!list.Contains(profile))
+            list.Add(profile);
+    }
+
+    /// <summary>Returns the first profile in <paramref name="list"/>, or <c>null</c>.</summary>
+    private static MouseProfile? FirstMatch(List<MouseProfile>? list) =>
+        list is { Count: > 0 } ? list[0] : null;
 
     // -------------------------------------------------------------------------
     // Central Matching Engine (Polymorphic)
@@ -288,6 +406,58 @@ public sealed class ProcessWatcher : IProcessWatcher
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Resolves window attributes with optional FullPath resolution.
+    /// When <paramref name="resolveFullPath"/> is <c>false</c>, skips the expensive
+    /// <c>MainModule.FileName</c> call and uses <c>ProcessName</c> only — suitable
+    /// for the EnumWindows survivor scan when the active profile has no FullPath rules.
+    /// </summary>
+    private static WindowAttributes GetWindowAttributesStaged(IntPtr hwnd, bool resolveFullPath)
+    {
+        string exeName  = string.Empty;
+        string fullPath = string.Empty;
+
+        GetWindowThreadProcessId(hwnd, out var pidUint);
+        if (pidUint != 0 && pidUint <= (uint)int.MaxValue)
+        {
+            try
+            {
+                using var p = Process.GetProcessById((int)pidUint);
+                if (resolveFullPath)
+                {
+                    try
+                    {
+                        var full = p.MainModule?.FileName;
+                        if (!string.IsNullOrEmpty(full))
+                        {
+                            fullPath = full;
+                            exeName  = Path.GetFileName(full).ToLowerInvariant();
+                        }
+                    }
+                    catch (System.ComponentModel.Win32Exception) { }
+                    catch { }
+                }
+                if (string.IsNullOrEmpty(exeName))
+                    exeName = (p.ProcessName + ".exe").ToLowerInvariant();
+            }
+            catch { /* process exited */ }
+        }
+
+        var classSb = new StringBuilder(256);
+        GetClassName(hwnd, classSb, classSb.Capacity);
+
+        var titleSb = new StringBuilder(512);
+        GetWindowText(hwnd, titleSb, titleSb.Capacity);
+
+        return new WindowAttributes
+        {
+            FullPath = fullPath,
+            ExeName  = exeName,
+            Class    = classSb.ToString(),
+            Title    = titleSb.ToString()
+        };
     }
 
     /// <summary>
