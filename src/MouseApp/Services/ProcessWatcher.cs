@@ -83,6 +83,7 @@ public sealed class ProcessWatcher : IProcessWatcher
         "IME",                           // input method editor
         "MSCTFIME UI",                   // text-framework IME
         "ThumbnailDeviceHelperWnd",      // Explorer thumbnail cache helper (IsWindowVisible=true but no UI)
+        "EdgeUiInputTopWndClass",        // Explorer edge-swipe / input host helper
     };
 
     private MouseProfile? _currentProfile;
