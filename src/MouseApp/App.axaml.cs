@@ -1,3 +1,4 @@
+using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -5,6 +6,7 @@ using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
 using System.Linq;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using MouseApp.Services;
 using MouseApp.ViewModels;
 using MouseApp.Views;
@@ -57,14 +59,22 @@ public partial class App : Application
             // (singleton by construction) so profile collections are always in sync.
             _processWatcher = new ProcessWatcher(profileService, profile =>
             {
-                // Apply hardware settings (registry, SPI, RawAccel) — deduped inside MouseService.
-                mouseService.ApplyProfileAsync(profile)
-                    .ContinueWith(
-                        t => System.Diagnostics.Debug.WriteLine($"[MouseApp] ApplyProfileAsync faulted: {t.Exception?.Flatten().Message}"),
-                        System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
+                // Run entirely on the UI thread so ProfileService.Profiles access in
+                // CalculateCompensations is thread-safe (ObservableCollection is UI-thread-owned).
+                Dispatcher.UIThread.InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        await mouseService.ApplyProfileAsync(profile).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[MouseApp] ApplyProfileAsync faulted: {ex}");
+                    }
 
-                // Sync sidebar selection on the UI thread.
-                mainVm.OnExternalProfileActivated(profile);
+                    // Sync sidebar selection — OnExternalProfileActivated already handles UI-thread posting.
+                    mainVm.OnExternalProfileActivated(profile);
+                });
             });
 
             if (settingsService.Settings?.StartMinimized == true)
