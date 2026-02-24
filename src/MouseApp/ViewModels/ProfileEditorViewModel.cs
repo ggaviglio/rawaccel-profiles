@@ -402,12 +402,14 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var curWinMult  = ProfileService.WinMultipliers[curWinIndex];
         var curRegCurve = RegistryCurveOverride ?? 1.0;
 
-        var winOnlyEffective = curSens * curWinMult;
-        var fullEffective    = winOnlyEffective * curRegCurve;
+        // Waterfall — each row explicitly builds on the previous layer.
+        var rawEff  = curSens;               // Raw Accel only  (no OS compensation)
+        var winEff  = rawEff * curWinMult;   // + Win Pointer Speed coarse snap
+        var fullEff = winEff * curRegCurve;  // + Registry Bridge fine remainder
 
-        RawAccelMatchAccuracy = ((curSens          / baseEffective) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
-        WinSpeedMatchAccuracy = ((winOnlyEffective / baseEffective) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
-        MatchAccuracy         = ((fullEffective    / baseEffective) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
+        RawAccelMatchAccuracy = ((rawEff  / baseEffective) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
+        WinSpeedMatchAccuracy = ((winEff  / baseEffective) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
+        MatchAccuracy         = ((fullEff / baseEffective) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
     }
 
     // ── Auto-Persist ────────────────────────────────────────────────────────
