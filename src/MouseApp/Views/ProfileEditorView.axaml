@@ -54,7 +54,10 @@
       <!-- Windows OS Section -->
       <StackPanel>
         <TextBlock Text="Windows OS" FontSize="14" Opacity="0.8" />
-        <CheckBox IsChecked="{Binding UseAutoOSSync, Mode=TwoWay}" Content="Auto Win Pointer Speed" />
+        <CheckBox IsChecked="{Binding UseAutoOSSync, Mode=TwoWay}"
+                  IsEnabled="{Binding IsAutoSyncAvailable}"
+                  Content="Auto Win Pointer Speed"
+                  ToolTip.Tip="Not available on the Global Default — its Win Pointer Speed is a user-controlled baseline setting" />
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <TextBlock Text="Win Pointer Speed:" VerticalAlignment="Center" />
           <ComboBox ItemsSource="{Binding WinPointerOptions}" SelectedItem="{Binding WinPointerSpeed, Mode=TwoWay}" Width="120" />
@@ -65,7 +68,10 @@
       <StackPanel>
         <TextBlock Text="High-Precision Bridge" FontSize="14" Opacity="0.8" />
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <CheckBox IsChecked="{Binding UseAutoRegSync, Mode=TwoWay}" Content="Auto Registry Bridge" />
+          <CheckBox IsChecked="{Binding UseAutoRegSync, Mode=TwoWay}"
+                    IsEnabled="{Binding IsAutoSyncAvailable}"
+                    Content="Auto Registry Bridge"
+                    ToolTip.Tip="Not available on the Global Default" />
           <TextBlock Text="Curve Override:" VerticalAlignment="Center" />
           <TextBox Text="{Binding RegistryCurveString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120" Watermark="leave empty to skip" />
         </StackPanel>

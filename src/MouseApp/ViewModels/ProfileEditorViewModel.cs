@@ -66,6 +66,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTargetManagerEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsAutoSyncAvailable))]
     [NotifyCanExecuteChangedFor(nameof(OpenTargetManagerCommand))]
     private bool isGlobalDefault;
 
@@ -94,8 +95,14 @@ public partial class ProfileEditorViewModel : ViewModelBase
     // ── Target Manager (read-only summary shown in the editor) ──────────────
     public ObservableCollection<TargetAssociation> TargetAssociationsSummary { get; } = new();
 
-    /// <summary>True when the Target Manager section should be interactive (not Global Default).</summary>
+    /// <summary>True when Target Manager is interactive (not Global Default).</summary>
     public bool IsTargetManagerEnabled => !IsGlobalDefault;
+
+    /// <summary>
+    /// Auto-sync only makes sense on non-Global-Default profiles.
+    /// The Global Default IS the reference — there is nothing to compensate relative to itself.
+    /// </summary>
+    public bool IsAutoSyncAvailable => !IsGlobalDefault;
 
     /// <summary>True when the current profile has no target associations.</summary>
     public bool IsTargetAssociationsEmpty => TargetAssociationsSummary.Count == 0;
@@ -318,6 +325,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// </summary>
     private void ApplyAutoOSSync()
     {
+        // The Global Default is the reference point — auto-sync has no target to compute against.
+        // Its WinPointerSpeed is a user-controlled baseline setting, not a compensation value.
+        if (IsGlobalDefault) { ApplyAutoRegSync(); return; }
+
         if (UseAutoOSSync)
         {
             // Target for WinMult: Effective(base) / S_target
@@ -350,6 +361,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// </summary>
     private void ApplyAutoRegSync()
     {
+        // Same guard: Global Default's RegCurve is a user setting, not auto-computed.
+        if (IsGlobalDefault) return;
+
         if (UseAutoRegSync)
         {
             // Same target: Effective(base) / S_target

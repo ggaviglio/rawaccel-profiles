@@ -50,10 +50,10 @@ public class ProfileService
             // Create a sensible Global Default starting point
             var global = new MouseProfile
             {
-                ProfileName = "Global Default",
-                SensMultiplier = 1.0,
-                UseAutoOSSync = true,
-                UseAutoRegSync = true,
+                ProfileName        = "Global Default",
+                SensMultiplier     = 1.0,
+                UseAutoOSSync      = false, // Global Default is the reference — auto-sync has no meaning here
+                UseAutoRegSync     = false,
                 IsGlobalDefault    = true,
                 TargetAssociations = new()
             };
@@ -71,10 +71,10 @@ public class ProfileService
         {
             list.Add(new MouseProfile
             {
-                ProfileName = "Global Default",
-                SensMultiplier = 1.0,
-                UseAutoOSSync = true,
-                UseAutoRegSync = true,
+                ProfileName        = "Global Default",
+                SensMultiplier     = 1.0,
+                UseAutoOSSync      = false,
+                UseAutoRegSync     = false,
                 IsGlobalDefault    = true,
                 TargetAssociations = new()
             });
@@ -132,6 +132,22 @@ public class ProfileService
 
         foreach (var g in globals.Skip(1))
             g.IsGlobalDefault = false;
+
+        // The Global Default must never have auto-computed OS compensation values.
+        // If UseAutoOSSync/UseAutoRegSync were previously true, they may have written
+        // a non-neutral WinPointerSpeed or RegistryCurveOverride into the stored profile,
+        // poisoning Effective(base) for all proof-of-match calculations on other profiles.
+        var gd = globals[0];
+        if (gd.UseAutoOSSync)
+        {
+            gd.UseAutoOSSync   = false;
+            gd.WinPointerSpeed = null; // reset to neutral (10 = 1.0×)
+        }
+        if (gd.UseAutoRegSync)
+        {
+            gd.UseAutoRegSync        = false;
+            gd.RegistryCurveOverride = null; // reset to neutral (1.0×)
+        }
     }
 
     /// <summary>
