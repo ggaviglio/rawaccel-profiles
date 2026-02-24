@@ -463,12 +463,12 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var sBase  = GetBaseSens();
         var bp     = GetBaseProfile();
 
-        var useEpp     = _editingProfile?.UseEnhancePointerPrecision ?? bp?.UseEnhancePointerPrecision;
-        var logicalDpi = _editingProfile?.TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
+        var useEpp     = EppOverride ?? bp?.UseEnhancePointerPrecision;
+        var logicalDpi = TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
 
         double envScreenRatio = 1.0;
-        var baseW  = GetBaseScreenWidth();
-        var activeW = _editingProfile?.TargetScreenWidth ?? baseW;
+        var baseW   = GetBaseScreenWidth();
+        var activeW = TargetScreenWidth ?? baseW;
         if (baseW.HasValue && activeW.HasValue && baseW.Value > 0)
             envScreenRatio = (double)baseW.Value / activeW.Value;
 
@@ -509,10 +509,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
             // Env correction: DPI and screen width change the feel, so Win Speed should absorb
             // as much of the cross-environment delta as the 20 discrete steps allow.
             // envCorr = dpi/96 × activeW/baseW — the inverse of what GetEffectiveSensitivity divides by.
-            var activeEppRaw = _editingProfile?.UseEnhancePointerPrecision ?? bp?.UseEnhancePointerPrecision;
-            var activeDpiRaw = _editingProfile?.TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
+            var activeEppRaw = EppOverride ?? bp?.UseEnhancePointerPrecision;
+            var activeDpiRaw = TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
             var baseWRaw     = GetBaseScreenWidth();
-            var activeWRaw   = _editingProfile?.TargetScreenWidth ?? baseWRaw;
+            var activeWRaw   = TargetScreenWidth ?? baseWRaw;
             double envCorrWin = 1.0;
             if (activeEppRaw != false) envCorrWin *= (double)activeDpiRaw / 96.0;
             if (baseWRaw.HasValue && activeWRaw.HasValue && baseWRaw.Value > 0)
@@ -608,9 +608,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var curWinMult  = ProfileService.WinMultipliers[curWinIndex];
 
         // EPP/DPI normalization — mirrors GetEffectiveSensitivity but for the currently displayed values.
-        var useEpp     = _editingProfile?.UseEnhancePointerPrecision
-                       ?? bp?.UseEnhancePointerPrecision;
-        var logicalDpi = _editingProfile?.TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
+        var useEpp     = EppOverride ?? bp?.UseEnhancePointerPrecision;
+        var logicalDpi = TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
 
         // Use the 16.16-encoded reg curve — this is what Windows will actually apply.
         // Fallback is 1.0 (neutral); DPI correction is applied separately via envDpiRatio below,
@@ -623,7 +622,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         // Screen width env ratio for Win Speed and Full Match rows.
         double envScreenRatio = 1.0;
         var baseW    = GetBaseScreenWidth();
-        var profileW = _editingProfile?.TargetScreenWidth ?? baseW;
+        var profileW = TargetScreenWidth ?? baseW;
         if (baseW.HasValue && profileW.HasValue && profileW.Value > 0)
             envScreenRatio = (double)baseW.Value / profileW.Value;
 
