@@ -315,17 +315,11 @@ public partial class ProfileEditorViewModel : ViewModelBase
         return s == 0 ? 1.0 : s;
     }
 
-    /// <summary>WinMultipliers entry for the Global Default's WinPointerSpeed (fallback index 9 = 1.0×).</summary>
-    private double GetBaseWinMult()
-    {
-        var bp  = GetBaseProfile();
-        var idx = Math.Clamp((bp?.WinPointerSpeed ?? 10) - 1, 0, ProfileService.WinMultipliers.Length - 1);
-        return ProfileService.WinMultipliers[idx];
-    }
 
     /// <summary>
-    /// Auto Win Pointer Speed: choose the WinMult closest to (S_base × WinMult_base) / S_target,
-    /// so that S_target × WinMult ≈ S_base × WinMult_base (matching the global default’s win-level effective).
+    /// Auto Win Pointer Speed: choose the WinMult closest to Effective(base) / S_target,
+    /// so that S_target × WinMult ≈ Effective(base) — compensating the raw DPI change as
+    /// closely as possible using only the integer Win Pointer Speed steps.
     /// </summary>
     private void ApplyAutoOSSync()
     {
@@ -333,9 +327,13 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         if (UseAutoOSSync)
         {
+            var bp      = GetBaseProfile();
+            var baseEff = bp != null ? _profileService.GetEffectiveSensitivity(bp) : GetBaseSens();
+            if (baseEff == 0) baseEff = 1.0;
+
             var sTarget = Sensitivity ?? 1.0;
             if (sTarget == 0) sTarget = 1.0;
-            var target = (GetBaseSens() * GetBaseWinMult()) / sTarget;
+            var target = baseEff / sTarget;
 
             int bestIndex  = 0;
             double minDiff = double.MaxValue;
@@ -380,21 +378,24 @@ public partial class ProfileEditorViewModel : ViewModelBase
             _isSyncing = false;
         }
     }
-
     /// <summary>
-    /// Three-row waterfall proof — each row’s denominator matches its numerator’s scope:
-    ///   Raw Accel Only  : curSens                     / S_base
-    ///   Win Speed Only  : curSens × WinMult           / (S_base × WinMult_base)
-    ///   Full Match      : curSens × WinMult × RegCurve / Effective(base)
-    /// 100% on Full Match = profile’s effective feel exactly equals the Global Default.
-    /// On the Global Default itself all three rows always show 100%.
+    /// Three-row waterfall proof — all three rows measure against Effective(base).
+    ///
+    ///   Raw Accel Only  : curSens / S_base
+    ///       How much the raw DPI shifted.  S_base denominator keeps this
+    ///       independent of Win/Reg settings on Global Default.
+    ///
+    ///   Win Speed Only  : (curSens x WinMult) / Effective(base)
+    ///       How close integer Win Pointer Speed steps get the pointer back to the
+    ///       original effective feel.  Auto-Win targets Effective(base) / S_target.
+    ///
     /// </summary>
     private void RecalculateMatchAccuracy()
     {
         var bp       = GetBaseProfile();
         var sBase    = GetBaseSens();
-        var wmBase   = GetBaseWinMult();
-        var winBase  = sBase * wmBase;   // S_base × WinMult_base
+
+
         var fullBase = bp != null ? _profileService.GetEffectiveSensitivity(bp) : sBase;
         if (fullBase == 0) fullBase = 1.0;
 
@@ -408,7 +409,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var fullEff = winEff  * curRegCurve;
 
         RawAccelMatchAccuracy = ((rawEff  / sBase)    * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
-        WinSpeedMatchAccuracy = ((winEff  / winBase)  * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
+        WinSpeedMatchAccuracy = ((winEff  / fullBase) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
         MatchAccuracy         = ((fullEff / fullBase) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
     }
 
