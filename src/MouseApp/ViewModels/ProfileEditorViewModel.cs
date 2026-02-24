@@ -208,7 +208,6 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     partial void OnUseAutoOSSyncChanged(bool oldValue, bool newValue)
     {
-        if (_isSyncing) return;
         ApplyAutoOSSync();
         RecalculateMatchAccuracy();
         AutoPersist();
@@ -232,7 +231,6 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     partial void OnUseAutoRegSyncChanged(bool oldValue, bool newValue)
     {
-        if (_isSyncing) return;
         ApplyAutoRegSync();
         RecalculateMatchAccuracy();
         AutoPersist();
@@ -345,10 +343,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
                 if (diff < minDiff) { minDiff = diff; bestIndex = i; }
             }
 
-            var wasSyncing = _isSyncing;
             _isSyncing = true;
             WinPointerSpeed = bestIndex + 1;
-            _isSyncing = wasSyncing;
+            _isSyncing = false;
         }
 
         ApplyAutoRegSync();
@@ -375,11 +372,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
             var winMult   = ProfileService.WinMultipliers[winIndex];
             var remainder = (sTarget * winMult) == 0 ? 1.0 : baseEff / (sTarget * winMult);
 
-            var wasSyncing = _isSyncing;
             _isSyncing = true;
             RegistryCurveOverride = remainder;
             RegistryCurveString   = remainder.ToString("G6", CultureInfo.InvariantCulture);
-            _isSyncing = wasSyncing;
+            _isSyncing = false;
         }
     }
     /// <summary>
