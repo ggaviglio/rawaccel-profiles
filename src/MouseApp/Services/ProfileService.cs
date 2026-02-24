@@ -221,7 +221,19 @@ public class ProfileService
         var sTarget = activeProfile.SensMultiplier ?? 1.0;
         if (sTarget == 0) sTarget = 1.0;
 
-        var targetWinMult = baseEffectiveSens / sTarget; // goal for WinMult — matches ApplyAutoOSSync in ViewModel
+        // Env correction for STEP 1: DPI and screen width change the feel, so Win Speed should absorb
+        // as much of the cross-environment delta as the 20 discrete steps allow.
+        // envCorrWin = dpi/96 × activeW/baseW — the inverse of what GetEffectiveSensitivity divides by.
+        var useEppWin  = activeProfile.UseEnhancePointerPrecision ?? baseProfile?.UseEnhancePointerPrecision;
+        var activeDpiWin = activeProfile.TargetLogicalDpi ?? baseProfile?.TargetLogicalDpi ?? 96;
+        var baseWWin   = baseProfile?.TargetScreenWidth;
+        var activeWWin = activeProfile.TargetScreenWidth ?? baseWWin;
+        double envCorrWin = 1.0;
+        if (useEppWin != false) envCorrWin *= (double)activeDpiWin / 96.0;
+        if (baseWWin.HasValue && activeWWin.HasValue && baseWWin.Value > 0)
+            envCorrWin *= (double)activeWWin.Value / baseWWin.Value;
+
+        var targetWinMult = (baseEffectiveSens * envCorrWin) / sTarget; // goal for WinMult — matches ApplyAutoOSSync in ViewModel
 
         int? winSpeedResult = activeProfile.WinPointerSpeed;
         double? regResult = activeProfile.RegistryCurveOverride;

@@ -456,7 +456,20 @@ public partial class ProfileEditorViewModel : ViewModelBase
             // Null Sensitivity = inherit base raw sens — target is still Effective(base) / baseSens = baseWinMult*baseReg
             var sTarget = Sensitivity ?? GetBaseSens();
             if (sTarget == 0) sTarget = 1.0;
-            var target = baseEff / sTarget;
+
+            // Env correction: DPI and screen width change the feel, so Win Speed should absorb
+            // as much of the cross-environment delta as the 20 discrete steps allow.
+            // envCorr = dpi/96 × activeW/baseW — the inverse of what GetEffectiveSensitivity divides by.
+            var activeEppRaw = _editingProfile?.UseEnhancePointerPrecision ?? bp?.UseEnhancePointerPrecision;
+            var activeDpiRaw = _editingProfile?.TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
+            var baseWRaw     = GetBaseScreenWidth();
+            var activeWRaw   = _editingProfile?.TargetScreenWidth ?? baseWRaw;
+            double envCorrWin = 1.0;
+            if (activeEppRaw != false) envCorrWin *= (double)activeDpiRaw / 96.0;
+            if (baseWRaw.HasValue && activeWRaw.HasValue && baseWRaw.Value > 0)
+                envCorrWin *= (double)activeWRaw.Value / baseWRaw.Value;
+
+            var target = (baseEff * envCorrWin) / sTarget;
 
             int bestIndex  = 0;
             double minDiff = double.MaxValue;
