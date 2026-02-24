@@ -152,8 +152,9 @@ public class ProfileService
 
     /// <summary>
     /// Returns the total effective sensitivity for a profile:
-    ///   (SensMultiplier ?? 1.0) × WinMult[WinPointerSpeed] × (RegistryCurveOverride ?? 1.0).
-    /// This is the single source-of-truth for MatchAccuracy comparisons.
+    ///   (SensMultiplier ?? 1.0) × WinMult[WinPointerSpeed] × EncodeRegCurve(RegistryCurveOverride ?? 1.0).
+    /// RegCurve is round-tripped through 16.16 fixed-point encoding so this matches what
+    /// Windows will actually apply — the single source-of-truth for MatchAccuracy comparisons.
     /// </summary>
     public double GetEffectiveSensitivity(MouseProfile profile)
     {
@@ -162,7 +163,7 @@ public class ProfileService
         var sens     = profile.SensMultiplier ?? 1.0;
         var winIndex = Math.Clamp((profile.WinPointerSpeed ?? 10) - 1, 0, WinMultipliers.Length - 1);
         var winMult  = WinMultipliers[winIndex];
-        var regCurve = profile.RegistryCurveOverride ?? 1.0;
+        var regCurve = MouseRegistryBridge.EncodeRegCurve(profile.RegistryCurveOverride ?? 1.0);
 
         return sens * winMult * regCurve;
     }
