@@ -560,11 +560,12 @@ public partial class ProfileEditorViewModel : ViewModelBase
             var raw       = (sTarget * winMult) == 0 ? 1.0 : baseEff / (sTarget * winMult);
 
             // Env correction: scale regResult so that GetEffectiveSensitivity(active) == GetEffectiveSensitivity(base).
-            var activeDpi = _editingProfile?.TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
+            var activeDpi = TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
             var baseW     = GetBaseScreenWidth();
-            var activeW   = _editingProfile?.TargetScreenWidth ?? baseW;
+            var activeW   = TargetScreenWidth ?? baseW;
 
-            double envCorrection = (double)activeDpi / 96.0;
+            var useEppReg = EppOverride ?? bp?.UseEnhancePointerPrecision;
+            double envCorrection = (useEppReg != false) ? (double)activeDpi / 96.0 : 1.0;
             if (baseW.HasValue && activeW.HasValue && baseW.Value > 0)
                 envCorrection *= (double)activeW.Value / baseW.Value;
 

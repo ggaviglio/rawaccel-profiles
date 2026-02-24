@@ -268,8 +268,9 @@ public class ProfileService
             var activeDpi   = activeProfile.TargetLogicalDpi ?? baseProfile2?.TargetLogicalDpi ?? 96;
             var baseW2      = baseProfile2?.TargetScreenWidth;
             var activeW     = activeProfile.TargetScreenWidth ?? baseW2;
+            var useEppReg   = activeProfile.UseEnhancePointerPrecision ?? baseProfile2?.UseEnhancePointerPrecision;
 
-            double envCorrection = (double)activeDpi / 96.0;
+            double envCorrection = (useEppReg != false) ? (double)activeDpi / 96.0 : 1.0;
             if (baseW2.HasValue && activeW.HasValue && baseW2.Value > 0)
                 envCorrection *= (double)activeW.Value / baseW2.Value;
 
