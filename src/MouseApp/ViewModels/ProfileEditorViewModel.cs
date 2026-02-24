@@ -332,6 +332,12 @@ public partial class ProfileEditorViewModel : ViewModelBase
         return r == 0 ? 1.0 : r;
     }
 
+    /// <summary>TargetScreenWidth of the Global Default. Null if not declared.</summary>
+    private int? GetBaseScreenWidth() => GetBaseProfile()?.TargetScreenWidth;
+
+    /// <summary>TargetLogicalDpi of the Global Default. Null if not declared (no DPI normalization).</summary>
+    private int? GetBaseLogicalDpi() => GetBaseProfile()?.TargetLogicalDpi;
+
 
     /// <summary>
     /// Auto Win Pointer Speed: choose the WinMult closest to Effective(base) / S_target,
@@ -390,7 +396,18 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
             var winIndex  = Math.Clamp((WinPointerSpeed ?? GetBaseWinPointerSpeed()) - 1, 0, ProfileService.WinMultipliers.Length - 1);
             var winMult   = ProfileService.WinMultipliers[winIndex];
-            var remainder = (sTarget * winMult) == 0 ? 1.0 : baseEff / (sTarget * winMult);
+            var raw       = (sTarget * winMult) == 0 ? 1.0 : baseEff / (sTarget * winMult);
+
+            // Env correction: scale regResult so that GetEffectiveSensitivity(active) == GetEffectiveSensitivity(base).
+            var activeDpi = _editingProfile?.TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
+            var baseW     = GetBaseScreenWidth();
+            var activeW   = _editingProfile?.TargetScreenWidth ?? baseW;
+
+            double envCorrection = (double)activeDpi / 96.0;
+            if (baseW.HasValue && activeW.HasValue && baseW.Value > 0)
+                envCorrection *= (double)activeW.Value / baseW.Value;
+
+            var remainder = raw * envCorrection;
 
             var wasSyncing = _isSyncing;
             _isSyncing = true;
@@ -419,26 +436,45 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// </summary>
     private void RecalculateMatchAccuracy()
     {
-        var bp       = GetBaseProfile();
-        var sBase    = GetBaseSens();
-
+        var bp      = GetBaseProfile();
+        var sBase   = GetBaseSens();
 
         var fullBase = bp != null ? _profileService.GetEffectiveSensitivity(bp) : sBase;
         if (fullBase == 0) fullBase = 1.0;
 
-        // Null fields inherit from Global Default — null profile is a perfect 100% match by definition
-        var curSens     = Sensitivity          ?? GetBaseSens();
+        // Null fields inherit from Global Default — a fully-null profile is a perfect 100% match.
+        var curSens     = Sensitivity ?? GetBaseSens();
         var curWinIndex = Math.Clamp((WinPointerSpeed ?? GetBaseWinPointerSpeed()) - 1, 0, ProfileService.WinMultipliers.Length - 1);
         var curWinMult  = ProfileService.WinMultipliers[curWinIndex];
-        // Use the round-tripped (16.16 encoded) regCurve — this is what Windows will actually apply,
-        // and reveals the ~0.0003% precision limit when the value straddles a representable step.
-        var rawRegCurve = RegistryCurveOverride ?? GetBaseRegCurve();
+
+        // EPP/DPI normalization — mirrors GetEffectiveSensitivity but for the currently displayed values.
+        var useEpp     = _editingProfile?.UseEnhancePointerPrecision
+                       ?? bp?.UseEnhancePointerPrecision;
+        var logicalDpi = _editingProfile?.TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
+
+        // Use the 16.16-encoded reg curve — this is what Windows will actually apply.
+        // Fallback is 1.0 (neutral); DPI correction is applied separately via envDpiRatio below,
+        // matching the single-factor approach in GetEffectiveSensitivity.
+        var rawRegCurve = RegistryCurveOverride ?? 1.0;
         var curRegCurve = MouseRegistryBridge.EncodeRegCurve(rawRegCurve);
 
+        if (useEpp == false) curRegCurve = 1.0;
+
+        // Screen width env ratio for Win Speed and Full Match rows.
+        double envScreenRatio = 1.0;
+        var baseW    = GetBaseScreenWidth();
+        var profileW = _editingProfile?.TargetScreenWidth ?? baseW;
+        if (baseW.HasValue && profileW.HasValue && profileW.Value > 0)
+            envScreenRatio = (double)baseW.Value / profileW.Value;
+
+        // DPI ratio — reverses Windows' logicalDpi/96 amplification.
+        double envDpiRatio = (useEpp != false) ? (96.0 / logicalDpi) : 1.0;
+
         var rawEff  = curSens;
-        var winEff  = rawEff  * curWinMult;
+        var winEff  = rawEff  * curWinMult * envScreenRatio * envDpiRatio;
         var fullEff = winEff  * curRegCurve;
 
+        // Row 1: Raw Accel Only — DPI/resolution independent, denominator is always sBase.
         RawAccelMatchAccuracy = ((rawEff  / sBase)    * 100.0).ToString("G10", CultureInfo.InvariantCulture) + "%";
         WinSpeedMatchAccuracy = ((winEff  / fullBase) * 100.0).ToString("G10", CultureInfo.InvariantCulture) + "%";
         MatchAccuracy         = ((fullEff / fullBase) * 100.0).ToString("G10", CultureInfo.InvariantCulture) + "%";

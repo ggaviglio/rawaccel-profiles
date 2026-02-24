@@ -83,4 +83,69 @@ public static class MouseRegistryBridge
         long fixedVal = (long)Math.Round(tightestAnchor * regResult * 65536.0);
         return fixedVal / (tightestAnchor * 65536.0);
     }
+
+    // ── Environment Awareness helpers ────────────────────────────────────────
+
+    private const int LOGPIXELSX = 88;
+
+    [DllImport("gdi32.dll")]
+    private static extern int GetDeviceCaps(IntPtr hdc, int nIndex);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetDC(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+    /// <summary>
+    /// Returns the current system logical DPI (LOGPIXELSX) via GDI GetDeviceCaps.
+    /// Falls back to 96 on non-Windows platforms.
+    /// </summary>
+    public static int GetCurrentLogicalDpi()
+    {
+        if (!OperatingSystem.IsWindows()) return 96;
+        var hdc = GetDC(IntPtr.Zero);
+        try   { return GetDeviceCaps(hdc, LOGPIXELSX); }
+        finally { ReleaseDC(IntPtr.Zero, hdc); }
+    }
+
+    /// <summary>
+    /// Reads HKCU\Control Panel\Mouse\MouseSpeed.
+    /// Returns true if MouseSpeed != "0", false if "0", null if the key is missing.
+    /// </summary>
+    public static bool? ReadEnhancePointerPrecision()
+    {
+        if (!OperatingSystem.IsWindows()) return null;
+        using var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Mouse", writable: false);
+        if (key == null) return null;
+        var val = key.GetValue("MouseSpeed") as string;
+        if (val == null) return null;
+        return val != "0";
+    }
+
+    /// <summary>
+    /// Writes MouseSpeed to HKCU\Control Panel\Mouse.
+    /// Disabling broadcasts SPI_SETMOUSE immediately (safe to apply live).
+    /// Enabling writes only the registry value — NO broadcast (EPP activates on next logon
+    /// after the curve is already written, preventing a transient bad-curve window).
+    /// </summary>
+    public static void WriteEnhancePointerPrecision(bool enable)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Mouse", writable: true)
+                       ?? Registry.CurrentUser.CreateSubKey(@"Control Panel\Mouse", writable: true);
+        if (key == null) return;
+
+        if (!enable)
+        {
+            key.SetValue("MouseSpeed", "0", RegistryValueKind.String);
+            // Broadcast immediately — disabling EPP is safe to apply live.
+            SystemParametersInfo(SPI_SETMOUSE, 0, new int[] { 6, 10, 0 }, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+        }
+        else
+        {
+            key.SetValue("MouseSpeed", "1", RegistryValueKind.String);
+            // NO broadcast — enabling EPP activates on next logon after curve is already written.
+        }
+    }
 }

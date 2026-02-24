@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using MouseApp.Models;
 using System.ComponentModel;
@@ -133,5 +134,15 @@ public class MouseService : IMouseService
 
         // Apply Raw Accel template and sensitivity
         await _rawAccelProvider.ApplyTemplateAsync(profile.RawAccelTemplate, profile.SensMultiplier).ConfigureAwait(false);
+
+        // Apply EPP toggle if explicitly set on this profile.
+        // Null = do not touch EPP — respect the user's current system setting.
+        var eppValue = profile.UseEnhancePointerPrecision
+            ?? _profileService.Profiles.FirstOrDefault(p => p.IsGlobalDefault)?.UseEnhancePointerPrecision;
+        if (eppValue.HasValue && OperatingSystem.IsWindows())
+        {
+            try { MouseRegistryBridge.WriteEnhancePointerPrecision(eppValue.Value); }
+            catch { }
+        }
     }
 }
