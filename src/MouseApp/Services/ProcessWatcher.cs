@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using MouseApp.Models;
 
 namespace MouseApp.Services;
@@ -36,16 +35,6 @@ public sealed class ProcessWatcher : IProcessWatcher
     private const uint WINEVENT_OUTOFCONTEXT   = 0x0000;
 
     private delegate void WinEventDelegate(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
-    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-    /// <summary>Snapshot of attributes resolved for a single HWND.</summary>
-    private readonly struct WindowAttributes
-    {
-        public string Title     { get; init; }
-        public string Class     { get; init; }
-        public string ExeName   { get; init; }
-        public string FullPath  { get; init; }
-    }
 
     [DllImport("user32.dll")]
     private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr hmodWinEventProc, WinEventDelegate lpfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
@@ -53,47 +42,10 @@ public sealed class ProcessWatcher : IProcessWatcher
     [DllImport("user32.dll")]
     private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
 
-    [DllImport("user32.dll")]
-    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-
-    [DllImport("user32.dll")]
-    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    private static extern bool IsWindowVisible(IntPtr hWnd);
-
     private readonly ProfileService _profileService;
     private readonly Action<MouseProfile> _applyProfile;
     private readonly WinEventDelegate _winEventDelegate;
     private IntPtr _hook = IntPtr.Zero;
-
-    /// <summary>
-    /// Window classes that are Windows shell / compositor internals and will never
-    /// match a user profile. Checked with a cheap GetClassName call before the
-    /// expensive Process.GetProcessById lookup in GetWindowAttributes.
-    /// </summary>
-    private static readonly HashSet<string> _systemNoiseClasses = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "ForegroundStaging",            // focus-transition staging window
-        "XamlExplorerHostIslandWindow",  // alt-tab / Task View XAML island
-        "Shell_TrayWnd",                 // taskbar
-        "Shell_SecondaryTrayWnd",        // taskbar on secondary monitor
-        "TopLevelWindowForOverflowXamlIsland", // system-tray overflow
-        "NotifyIconOverflowWindow",      // legacy system-tray overflow
-        "WorkerW",                       // desktop worker window
-        "Progman",                       // program manager / desktop
-        "DummyDWMListenerWindow",        // DWM internal
-        "IME",                           // input method editor
-        "MSCTFIME UI",                   // text-framework IME
-        "ThumbnailDeviceHelperWnd",      // Explorer thumbnail cache helper (IsWindowVisible=true but no UI)
-        "EdgeUiInputTopWndClass",        // Explorer edge-swipe / input host helper
-    };
 
     private MouseProfile? _currentProfile;
     /// <summary>
@@ -187,10 +139,8 @@ public sealed class ProcessWatcher : IProcessWatcher
     private void HandleForeground(IntPtr hwnd)
     {
         // Stage 1 — class name (cheap; already needed for noise filter).
-        var classSb = new StringBuilder(256);
-        GetClassName(hwnd, classSb, classSb.Capacity);
-        var className = classSb.ToString();
-        if (_systemNoiseClasses.Contains(className))
+        var className = WindowResolver.GetClassName(hwnd);
+        if (WindowResolver.SystemNoiseClasses.Contains(className))
             return;
 
         // Stage 2 — class index look-up: zero process-open cost.
@@ -203,7 +153,7 @@ public sealed class ProcessWatcher : IProcessWatcher
         if (matched == null)
         {
             // Stage 3 — cheap ProcessName (no MainModule, no disk I/O).
-            GetWindowThreadProcessId(hwnd, out pid);
+            WindowResolver.GetWindowThreadProcessId(hwnd, out pid);
             if (pid != 0 && pid <= (uint)int.MaxValue)
             {
                 try
@@ -244,9 +194,7 @@ public sealed class ProcessWatcher : IProcessWatcher
         string title = string.Empty;
         if (matched == null && _titleRules.Count > 0)
         {
-            var titleSb = new StringBuilder(512);
-            GetWindowText(hwnd, titleSb, titleSb.Capacity);
-            title = titleSb.ToString();
+            title = WindowResolver.GetWindowTitle(hwnd);
             foreach (var (value, profile) in _titleRules)
             {
                 if (title.Contains(value, StringComparison.OrdinalIgnoreCase))
@@ -291,33 +239,30 @@ public sealed class ProcessWatcher : IProcessWatcher
         if (_currentProfile == null || !_knownForegroundHwnds.Remove(hwnd))
             return;
 
-        var attr = GetWindowAttributes(hwnd);
+        var attr = WindowResolver.Resolve(hwnd);
         Debug.WriteLine($"[ProcessWatcher] DESTROY — active-profile HWND destroyed (HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"); scanning desktop…");
 
         // Scan all remaining visible windows for any match with the active profile.
         // Apply the same noise-class filter as HandleForeground so system windows
         var activeProfile = _currentProfile;
         bool anyMatch = false;
-        var scanClassSb = new StringBuilder(256);
-        WindowAttributes survivorAttr = default;
+        WindowResolver.WindowAttributes survivorAttr = default;
 
         // Pre-compute which attribute categories the active profile actually uses so
         // the EnumWindows scan can skip expensive MainModule.FileName when not needed.
         bool profileNeedsFullPath = activeProfile.TargetAssociations?.Any(
             ta => ta.MatchType == TargetMatchType.FullPath) == true;
 
-        EnumWindows((w, _) =>
+        WindowResolver.EnumWindows((w, _) =>
         {
-            if (w == hwnd || !IsWindowVisible(w))
+            if (w == hwnd || !WindowResolver.IsWindowVisible(w))
                 return true;
 
-            scanClassSb.Clear();
-            GetClassName(w, scanClassSb, scanClassSb.Capacity);
-            if (_systemNoiseClasses.Contains(scanClassSb.ToString()))
+            if (WindowResolver.SystemNoiseClasses.Contains(WindowResolver.GetClassName(w)))
                 return true;
 
-            var wAttr = GetWindowAttributesStaged(w, resolveFullPath: profileNeedsFullPath);
-            if (GetWindowMatchesProfile(wAttr, activeProfile))
+            var wAttr = WindowResolver.Resolve(w, profileNeedsFullPath);
+            if (WindowResolver.MatchesAssociations(wAttr, activeProfile.TargetAssociations))
             {
                 anyMatch = true;
                 survivorAttr = wAttr;
@@ -404,152 +349,6 @@ public sealed class ProcessWatcher : IProcessWatcher
     /// <summary>Returns the first profile in <paramref name="list"/>, or <c>null</c>.</summary>
     private static MouseProfile? FirstMatch(List<MouseProfile>? list) =>
         list is { Count: > 0 } ? list[0] : null;
-
-    // -------------------------------------------------------------------------
-    // Central Matching Engine (Polymorphic)
-    // -------------------------------------------------------------------------
-
-    /// <summary>
-    /// Returns true if <paramref name="attr"/> satisfies at least one
-    /// <see cref="TargetAssociation"/> in <paramref name="profile"/>.
-    /// Priority order: FullPath → ExeName → WindowClass → WindowTitle.
-    /// </summary>
-    private static bool GetWindowMatchesProfile(in WindowAttributes attr, MouseProfile profile)
-    {
-        if (profile.TargetAssociations == null || profile.TargetAssociations.Count == 0)
-            return false;
-
-        foreach (var ta in profile.TargetAssociations)
-        {
-            bool hit = ta.MatchType switch
-            {
-                // 1. Full path — highest accuracy
-                TargetMatchType.FullPath    => string.Equals(ta.Value, attr.FullPath, StringComparison.OrdinalIgnoreCase),
-                // 2. Exe name
-                TargetMatchType.ExeName     => string.Equals(ta.Value, attr.ExeName,  StringComparison.OrdinalIgnoreCase),
-                // 3. Window class
-                TargetMatchType.WindowClass => string.Equals(ta.Value, attr.Class,    StringComparison.OrdinalIgnoreCase),
-                // 4. Window title (substring)
-                TargetMatchType.WindowTitle => attr.Title.Contains(ta.Value,          StringComparison.OrdinalIgnoreCase),
-                _ => false
-            };
-
-            if (hit)
-            {
-                if (ta.MatchType == TargetMatchType.FullPath)
-                    Debug.WriteLine($"[MATCH] Path Found: {attr.FullPath}");
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Resolves window attributes with optional FullPath resolution.
-    /// When <paramref name="resolveFullPath"/> is <c>false</c>, skips the expensive
-    /// <c>MainModule.FileName</c> call and uses <c>ProcessName</c> only — suitable
-    /// for the EnumWindows survivor scan when the active profile has no FullPath rules.
-    /// </summary>
-    private static WindowAttributes GetWindowAttributesStaged(IntPtr hwnd, bool resolveFullPath)
-    {
-        string exeName  = string.Empty;
-        string fullPath = string.Empty;
-
-        GetWindowThreadProcessId(hwnd, out var pidUint);
-        if (pidUint != 0 && pidUint <= (uint)int.MaxValue)
-        {
-            try
-            {
-                using var p = Process.GetProcessById((int)pidUint);
-                if (resolveFullPath)
-                {
-                    try
-                    {
-                        var full = p.MainModule?.FileName;
-                        if (!string.IsNullOrEmpty(full))
-                        {
-                            fullPath = full;
-                            exeName  = Path.GetFileName(full).ToLowerInvariant();
-                        }
-                    }
-                    catch (System.ComponentModel.Win32Exception) { }
-                    catch { }
-                }
-                if (string.IsNullOrEmpty(exeName))
-                    exeName = (p.ProcessName + ".exe").ToLowerInvariant();
-            }
-            catch { /* process exited */ }
-        }
-
-        var classSb = new StringBuilder(256);
-        GetClassName(hwnd, classSb, classSb.Capacity);
-
-        var titleSb = new StringBuilder(512);
-        GetWindowText(hwnd, titleSb, titleSb.Capacity);
-
-        return new WindowAttributes
-        {
-            FullPath = fullPath,
-            ExeName  = exeName,
-            Class    = classSb.ToString(),
-            Title    = titleSb.ToString()
-        };
-    }
-
-    /// <summary>
-    /// Resolves all window/process attributes for a given HWND into a <see cref="WindowAttributes"/> struct.
-    /// Uses <c>GetWindowThreadProcessId</c> + <c>Process.GetProcessById</c> to obtain the full executable
-    /// path; falls back gracefully on Access Denied or process-exited errors.
-    /// </summary>
-    private static WindowAttributes GetWindowAttributes(IntPtr hwnd)
-    {
-        string exeName  = string.Empty;
-        string fullPath = string.Empty;
-
-        GetWindowThreadProcessId(hwnd, out var pidUint);
-        if (pidUint != 0 && pidUint <= (uint)int.MaxValue)
-        {
-            try
-            {
-                using var p = Process.GetProcessById((int)pidUint);
-                try
-                {
-                    // Use MainModule.FileName to obtain the full executable path
-                    var full = p.MainModule?.FileName;
-                    if (!string.IsNullOrEmpty(full))
-                    {
-                        fullPath = full;
-                        exeName  = Path.GetFileName(full).ToLowerInvariant();
-                    }
-                }
-                catch (System.ComponentModel.Win32Exception)
-                {
-                    // Access Denied for system/elevated processes — fall back to ProcessName
-                    exeName = (p.ProcessName + ".exe").ToLowerInvariant();
-                }
-                catch
-                {
-                    exeName = (p.ProcessName + ".exe").ToLowerInvariant();
-                }
-            }
-            catch { /* process exited or otherwise inaccessible */ }
-        }
-
-        var classSb = new StringBuilder(256);
-        GetClassName(hwnd, classSb, classSb.Capacity);
-
-        var titleSb = new StringBuilder(512);
-        GetWindowText(hwnd, titleSb, titleSb.Capacity);
-
-        return new WindowAttributes
-        {
-            FullPath = fullPath,
-            ExeName  = exeName,
-            Class    = classSb.ToString(),
-            Title    = titleSb.ToString()
-        };
-    }
 
     // -------------------------------------------------------------------------
     // IDisposable

@@ -4,8 +4,6 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MouseApp.Models;
@@ -60,45 +58,6 @@ public partial class WindowEntry : ObservableObject
 // ── TargetManagerViewModel ───────────────────────────────────────────────────
 public partial class TargetManagerViewModel : ViewModelBase
 {
-    // ── Win32 ────────────────────────────────────────────────────────────────
-    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindowVisible(IntPtr hWnd);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
-
-    [DllImport("user32.dll")]
-    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-
-    // ── Noise filter — kept in sync with ProcessWatcher._systemNoiseClasses ──
-    // These classes are shell/compositor internals that will never be meaningful
-    // profile targets. Filtering them keeps the Active Windows list clean.
-    private static readonly HashSet<string> _systemNoiseClasses = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "ForegroundStaging",
-        "XamlExplorerHostIslandWindow",
-        "Shell_TrayWnd",
-        "Shell_SecondaryTrayWnd",
-        "TopLevelWindowForOverflowXamlIsland",
-        "NotifyIconOverflowWindow",
-        "WorkerW",
-        "Progman",
-        "DummyDWMListenerWindow",
-        "IME",
-        "MSCTFIME UI",
-        "ThumbnailDeviceHelperWnd",
-        "EdgeUiInputTopWndClass",
-    };
-
     // ── State ────────────────────────────────────────────────────────────────
     private readonly MouseProfile   _profile;
     private readonly ProfileService _profileService;
@@ -170,23 +129,19 @@ public partial class TargetManagerViewModel : ViewModelBase
 
         var entries = new List<WindowEntry>();
 
-        EnumWindows((hWnd, _) =>
+        WindowResolver.EnumWindows((hWnd, _) =>
         {
-            if (!IsWindowVisible(hWnd)) return true;
+            if (!WindowResolver.IsWindowVisible(hWnd)) return true;
 
             // Class — checked first (cheap) against noise filter
-            var classSb = new StringBuilder(256);
-            GetClassName(hWnd, classSb, classSb.Capacity);
-            var className = classSb.ToString();
-            if (_systemNoiseClasses.Contains(className)) return true;
+            var className = WindowResolver.GetClassName(hWnd);
+            if (WindowResolver.SystemNoiseClasses.Contains(className)) return true;
 
             // Title
-            var titleSb = new StringBuilder(256);
-            GetWindowText(hWnd, titleSb, titleSb.Capacity);
-            var title = titleSb.ToString();
+            var title = WindowResolver.GetWindowTitle(hWnd);
 
             // Process info
-            GetWindowThreadProcessId(hWnd, out var pidUint);
+            WindowResolver.GetWindowThreadProcessId(hWnd, out var pidUint);
             string exeName  = string.Empty;
             string fullPath = string.Empty;
             if (pidUint != 0 && pidUint <= (uint)int.MaxValue)
@@ -258,38 +213,15 @@ public partial class TargetManagerViewModel : ViewModelBase
         var visibleHwnds = new HashSet<IntPtr>(ActiveWindows.Select(e => e.Hwnd));
         int hiddenMatches = 0;
 
-        EnumWindows((hWnd, _) =>
+        WindowResolver.EnumWindows((hWnd, _) =>
         {
             if (visibleHwnds.Contains(hWnd)) return true; // already counted above
 
-            var classSb = new StringBuilder(256);
-            GetClassName(hWnd, classSb, classSb.Capacity);
-            if (_systemNoiseClasses.Contains(classSb.ToString())) return true;
+            var className = WindowResolver.GetClassName(hWnd);
+            if (WindowResolver.SystemNoiseClasses.Contains(className)) return true;
 
-            GetWindowThreadProcessId(hWnd, out var pidUint);
-            if (pidUint == 0 || pidUint > (uint)int.MaxValue) return true;
-
-            string exeName  = string.Empty;
-            string fullPath = string.Empty;
-            try
-            {
-                using var p = Process.GetProcessById((int)pidUint);
-                try
-                {
-                    var fp = p.MainModule?.FileName;
-                    if (!string.IsNullOrEmpty(fp)) { fullPath = fp; exeName = Path.GetFileName(fp).ToLowerInvariant(); }
-                }
-                catch { }
-                if (string.IsNullOrEmpty(exeName))
-                    exeName = (p.ProcessName + ".exe").ToLowerInvariant();
-            }
-            catch { return true; }
-
-            var titleSb = new StringBuilder(256);
-            GetWindowText(hWnd, titleSb, titleSb.Capacity);
-
-            var hiddenEntry = new WindowEntry(hWnd, titleSb.ToString(), exeName, fullPath, classSb.ToString());
-            if (WindowMatchesAssociations(hiddenEntry, associations))
+            var attrs = WindowResolver.Resolve(hWnd);
+            if (WindowResolver.MatchesAssociations(attrs, associations))
                 hiddenMatches++;
 
             return true;
@@ -311,25 +243,17 @@ public partial class TargetManagerViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// Mirrors <c>ProcessWatcher.GetWindowMatchesProfile</c> exactly.
-    /// Must be kept in sync if the matching logic in ProcessWatcher changes.
-    /// </summary>
+    /// <summary>Delegates to <see cref="WindowResolver.MatchesAssociations"/> using the entry's attributes.</summary>
     private static bool WindowMatchesAssociations(WindowEntry entry, List<TargetAssociation> associations)
     {
-        foreach (var ta in associations)
+        var attrs = new WindowResolver.WindowAttributes
         {
-            bool hit = ta.MatchType switch
-            {
-                TargetMatchType.FullPath    => string.Equals(ta.Value, entry.FullPath,  StringComparison.OrdinalIgnoreCase),
-                TargetMatchType.ExeName     => string.Equals(ta.Value, entry.ExeName,   StringComparison.OrdinalIgnoreCase),
-                TargetMatchType.WindowClass => string.Equals(ta.Value, entry.ClassName, StringComparison.OrdinalIgnoreCase),
-                TargetMatchType.WindowTitle => entry.Title.Contains(ta.Value,           StringComparison.OrdinalIgnoreCase),
-                _ => false
-            };
-            if (hit) return true;
-        }
-        return false;
+            ExeName  = entry.ExeName,
+            FullPath = entry.FullPath,
+            Class    = entry.ClassName,
+            Title    = entry.Title,
+        };
+        return WindowResolver.MatchesAssociations(attrs, associations);
     }
 
     // ── Add / Remove ─────────────────────────────────────────────────────────────────
