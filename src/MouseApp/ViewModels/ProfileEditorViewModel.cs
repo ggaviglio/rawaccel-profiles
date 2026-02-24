@@ -64,6 +64,26 @@ public partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     private string registryCurveString = string.Empty;
 
+    // ── Environment fields ──────────────────────────────────────────────────
+
+    // TargetScreenWidth (int?) + string proxy for TextBox binding
+    [ObservableProperty]
+    private int? targetScreenWidth;
+
+    [ObservableProperty]
+    private string targetScreenWidthString = string.Empty;
+
+    // TargetLogicalDpi (int?) + string proxy for TextBox binding
+    [ObservableProperty]
+    private int? targetLogicalDpi;
+
+    [ObservableProperty]
+    private string targetLogicalDpiString = string.Empty;
+
+    // EPP override — null = inherit, true = on, false = off
+    [ObservableProperty]
+    private bool? eppOverride;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTargetManagerEnabled))]
     [NotifyPropertyChangedFor(nameof(IsAutoSyncAvailable))]
@@ -152,6 +172,11 @@ public partial class ProfileEditorViewModel : ViewModelBase
             UseAutoRegSync        = profile.UseAutoRegSync;
             RegistryCurveOverride = profile.RegistryCurveOverride;
             RegistryCurveString   = profile.RegistryCurveOverride?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            TargetScreenWidth       = profile.TargetScreenWidth;
+            TargetScreenWidthString = profile.TargetScreenWidth?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            TargetLogicalDpi        = profile.TargetLogicalDpi;
+            TargetLogicalDpiString  = profile.TargetLogicalDpi?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            EppOverride             = profile.UseEnhancePointerPrecision;
             IsGlobalDefault       = profile.IsGlobalDefault;
         }
         finally
@@ -270,6 +295,80 @@ public partial class ProfileEditorViewModel : ViewModelBase
             _isSyncing = false;
         }
 
+        AutoPersist();
+        RecalculateMatchAccuracy();
+    }
+
+    partial void OnTargetScreenWidthChanged(int? oldValue, int? newValue)
+    {
+        if (_isSyncing) return;
+        _isSyncing = true;
+        TargetScreenWidthString = newValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        _isSyncing = false;
+        ApplyAutoOSSync();
+        AutoPersist();
+        RecalculateMatchAccuracy();
+    }
+
+    partial void OnTargetScreenWidthStringChanged(string? oldValue, string newValue)
+    {
+        if (_isSyncing) return;
+
+        if (string.IsNullOrWhiteSpace(newValue))
+        {
+            TargetScreenWidth = null;
+            return;
+        }
+
+        if (int.TryParse(newValue, out var parsed) && parsed > 0)
+        {
+            _isSyncing = true;
+            TargetScreenWidth = parsed;
+            _isSyncing = false;
+        }
+
+        ApplyAutoOSSync();
+        AutoPersist();
+        RecalculateMatchAccuracy();
+    }
+
+    partial void OnTargetLogicalDpiChanged(int? oldValue, int? newValue)
+    {
+        if (_isSyncing) return;
+        _isSyncing = true;
+        TargetLogicalDpiString = newValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        _isSyncing = false;
+        ApplyAutoOSSync();
+        AutoPersist();
+        RecalculateMatchAccuracy();
+    }
+
+    partial void OnTargetLogicalDpiStringChanged(string? oldValue, string newValue)
+    {
+        if (_isSyncing) return;
+
+        if (string.IsNullOrWhiteSpace(newValue))
+        {
+            TargetLogicalDpi = null;
+            return;
+        }
+
+        if (int.TryParse(newValue, out var parsed) && parsed > 0)
+        {
+            _isSyncing = true;
+            TargetLogicalDpi = parsed;
+            _isSyncing = false;
+        }
+
+        ApplyAutoOSSync();
+        AutoPersist();
+        RecalculateMatchAccuracy();
+    }
+
+    partial void OnEppOverrideChanged(bool? oldValue, bool? newValue)
+    {
+        if (_isSyncing) return;
+        ApplyAutoOSSync();
         AutoPersist();
         RecalculateMatchAccuracy();
     }
@@ -498,6 +597,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
         _editingProfile.WinPointerSpeed       = WinPointerSpeed;
         _editingProfile.UseAutoRegSync        = UseAutoRegSync;
         _editingProfile.RegistryCurveOverride = RegistryCurveOverride;
+        _editingProfile.TargetScreenWidth             = TargetScreenWidth;
+        _editingProfile.TargetLogicalDpi              = TargetLogicalDpi;
+        _editingProfile.UseEnhancePointerPrecision    = EppOverride;
         // IsGlobalDefault is intentionally NOT written here.
         // It is exclusively managed by OnIsGlobalDefaultChanged → SetGlobalDefaultAsync,
         // which performs the atomic exclusive-flag update and file write in one shot.

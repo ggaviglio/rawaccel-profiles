@@ -77,6 +77,25 @@
         </StackPanel>
       </StackPanel>
 
+      <!-- Environment Section -->
+      <StackPanel Spacing="4">
+        <TextBlock Text="Environment" FontSize="14" Opacity="0.8" />
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Text="Screen Width:" VerticalAlignment="Center" Width="110" />
+          <TextBox Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                   Width="120" Watermark="e.g. 1920 (leave empty to inherit)" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Text="Logical DPI:" VerticalAlignment="Center" Width="110" />
+          <TextBox Text="{Binding TargetLogicalDpiString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                   Width="120" Watermark="e.g. 96, 120, 144 (inherit)" />
+        </StackPanel>
+        <CheckBox IsThreeState="True"
+                  IsChecked="{Binding EppOverride, Mode=TwoWay}"
+                  Content="Enhance Pointer Precision"
+                  ToolTip.Tip="Checked = force on, Unchecked = force off, Indeterminate = inherit system setting" />
+      </StackPanel>
+
       <!-- Proof of Match -->
       <StackPanel Spacing="3">
         <TextBlock Text="Proof of Match" FontSize="14" Opacity="0.8" />
