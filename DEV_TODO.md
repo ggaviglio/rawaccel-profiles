@@ -1,8 +1,25 @@
 # TODO LIST / SCRATCHPAD FOR BRAINSTORMING
 
 ## 🟢 ACTIVE / NEXT STEPS
-- add precision critial to ai prompts
-- wildcard matching
+
+### Environment Awareness + EPP (spec in IMPLEMENTATION_MOUSE_APP.md §3)
+See IMPLEMENTATION_MOUSE_APP.md for full math spec and guard rails before touching any of these.
+
+**Chunk 1 — Math engine (PRECISION CRITICAL, confirm before Chunk 2):**
+- [ ] `MouseProfile`: add `TargetScreenWidth: int?`, `TargetLogicalDpi: int?`, `UseEnhancePointerPrecision: bool?`
+- [ ] `MouseRegistryBridge`: add `GetCurrentLogicalDpi()` P/Invoke, EPP read/write helpers
+- [ ] `ProfileService.GetEffectiveSensitivity`: add screen width + DPI compensation terms
+- [ ] `ProfileService.CalculateCompensations`: add envRatio to Step 1
+- [ ] `ProfileEditorViewModel`: add `GetBaseScreenWidth()`, `GetBaseLogicalDpi()` helpers; update `ApplyAutoOSSync`, `ApplyAutoRegSync`, `RecalculateMatchAccuracy`
+- [ ] `MouseService.ApplyProfileAsync`: wire `UseEnhancePointerPrecision` (asymmetric enable/disable — see spec §3.7)
+
+**Chunk 2 — UI wiring (safe to hand off, no precision risk):**
+- [ ] `ProfileEditorView.axaml`: add TargetScreenWidth, TargetLogicalDpi, EPP toggle fields
+- [ ] `ProfileEditorViewModel`: new ObservableProperty fields + callbacks + LoadProfile + AutoPersist
+
+### Other active
+- add PRECISION_CRITICAL_FILES.md reference to copilot-instructions.md / agent prompts
+- wildcard matching for target associations
 
 ## 🟡 BRAINSTORMING / BACKLOG
 target manager

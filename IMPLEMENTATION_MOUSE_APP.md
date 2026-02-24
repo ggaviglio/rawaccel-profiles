@@ -1,70 +1,287 @@
-# IMPLEMENTATION.md
+# IMPLEMENTATION SPEC: Mouse App
 
-## 1. DIRECTORY MAP (Workspace Skeleton)
-The project utilizes a nested `/src` structure to isolate core logic from project metadata and build artifacts.
+> **Written:** 2026-02-23 — reflects committed state `13d9772` plus planned features.  
+> **Precision-critical files:** See `PRECISION_CRITICAL_FILES.md` before modifying any math.
 
-### Root Level
-- **`/`**: Contains `.sln`, `.gitignore`, and project documentation (`IMPLEMENTATION.md`, etc.).
-- **`/Scripts`**: Non-C# automation or maintenance scripts (PowerShell, Python).
-- **`/src`**: Primary source code container.
+---
 
-### Application Core (`/src/MouseApp/`)
-The main project strictly adheres to the Avalonia MVVM pattern:
-- **`/Assets`**: Icons, logos, and default Raw Accel JSON templates.
-- **`/Helpers`**: Static utility classes, math converters, and Win32 P/Invoke signatures.
-- **`/Models`**: Pure data structures (e.g., `Profile.cs`).
-- **`/Services`**: Implementation of core logic and OS-level interactions.
-- **`/ViewModels`**: Presentation logic and state management.
-- **`/Views`**: XAML files and strictly empty code-behinds.
+## 1. PROJECT STRUCTURE
 
-## 2. CORE DATA MODEL (The Profile)
-The `Profile` model represents the configuration state for a specific context. It serves as the primary data source for the Profile Editor and the input for the Scaling Logic.
+```
+src/MouseApp/
+├── Models/
+│   └── MouseProfile.cs          — data model, all nullable fields
+├── Services/
+│   ├── ProfileService.cs        — SSOT for WinMultipliers, GetEffectiveSensitivity, CalculateCompensations
+│   ├── MouseService.cs          — hardware apply, dedup by computed value tuple
+│   ├── MouseRegistryBridge.cs   — 16.16 fixed-point write + EncodeRegCurve round-trip
+│   ├── RawAccelDriverProvider.cs — template swap + writer.exe call
+│   ├── ProcessWatcher.cs        — Win32 WinEvent hook, foreground + destroy handling
+│   ├── NavigationService.cs
+│   ├── SettingsService.cs
+│   ├── TemplateService.cs
+│   ├── AvaloniaStorageService.cs
+│   └── AvaloniaWindowService.cs
+├── ViewModels/
+│   ├── ProfileEditorViewModel.cs — math engine, auto-sync, match accuracy display
+│   ├── MainWindowViewModel.cs
+│   ├── SettingsViewModel.cs
+│   └── TargetManagerViewModel.cs
+├── Views/
+│   ├── MainWindow.axaml(.cs)
+│   ├── ProfileEditorView.axaml(.cs)
+│   ├── SettingsView.axaml(.cs)
+│   └── TargetManagerWindow.axaml(.cs)
+└── Bootstrap/
+    └── ServiceCollectionExtensions.cs
+```
 
-### Mandate: Sparse Data Support
-To support "skipping" settings, all configurable parameters—excluding the primary identifier and the anchor flags—**must** utilize nullable types.
+---
 
-### `Profile` Class Properties
+## 2. CURRENT MATH ENGINE (as of 13d9772)
 
-| Property | Type | Nullable | Intent / UI Mapping |
-| :--- | :--- | :--- | :--- |
-| **ProfileName** | `string` | No | Primary display name and ID. |
-| **RawAccelTemplate** | `string?` | Yes | Filename/Path of the `.json` in the Template Library. |
-| **SensMultiplier** | `double?` | Yes | The user-defined scaling factor for Raw Accel sensitivity. |
-| **UseAutoOSSync** | `bool` | No | **Toggle:** Auto-calculates `WinPointerSpeed`. |
-| **WinPointerSpeed** | `int?` | Yes | Manual OS speed (1–20) used if `UseAutoOSSync` is false. |
-| **UseAutoRegSync** | `bool` | No | **Toggle:** Auto-calculates `RegistryCurveOverride`. |
-| **RegistryCurveOverride**| `double?` | Yes | The numerical value for high-precision fine-tuning. |
-| **IsGlobalDefault** | `bool` | No | **The Anchor:** Used as base for all relative math. |
-| **TargetExecutables** | `List<string>` | No | Collection of process names (e.g., ["game.exe"]). |
+### 2.1 The Hardware Pipeline
 
-## 3. THE MATH ANCHOR (Scaling Logic)
-The application ensures consistent Effective DPI by mathematically balancing OS-level and Driver-level sensitivities.
+```
+Mouse hardware (CPI counts)
+  → Raw Accel driver (kernel, double precision)
+  → SmoothMouseYCurve / EPP (our regCurve, 16.16 fixed-point)
+  → Windows Pointer Speed (WinMult, 20 discrete steps)
+  → Cursor delta (physical pixels)
+```
 
-* **Base Baseline:** The profile where `IsGlobalDefault == true`. All compensations are relative to this profile.
-* **The Inverse Scale Factor ($1/x$):**
-    * Let $S_{base}$ be the Global Default Raw Accel sensitivity.
-    * Let $S_{target}$ be the active profile's Raw Accel sensitivity.
-    * $x = S_{target} / S_{base}$
-* **The Compensation Rule:** 1. **Coarse Adjustment:** If `UseAutoOSSync` is true, the `WinPointerSpeed` is set to the integer (1-20) that gets closest to the $1/x$ target.
-    2. **Fine Adjustment:** If `UseAutoRegSync` is true, the `RegistryCurveOverride` (double) is calculated to cover the exact remainder between the snapped Windows speed and the true $1/x$ target.
-    * **Result:** Total Multiplier ($W_{speed} \times R_{curve}$) perfectly equals $1/x$.
+Raw Accel intercepts **before** Windows processes anything. EPP/SmoothMouseCurve only applies if "Enhance Pointer Precision" is enabled in Windows Mouse settings.
 
-## 4. SERVICE DEFINITIONS (Interfaces Only)
+### 2.2 Effective Sensitivity Formula
 
-* **`IMouseService`**
-    * **Intent:** Orchestrates hardware/OS parameter manipulation.
-    * **Elevation Policy:**
-        * **Startup/Toggle:** Verify Admin rights if Registry Bridge is enabled; trigger UAC self-elevation if missing.
-        * **Goal:** Ensure profile transitions remain "Silent" without mid-session UAC prompts.
-    * **Raw Accel:** Manages template swapping and executes `writer.exe` for instant driver updates.
-    * **OS Sync:** Applies `winSpeedResult` (1-20) to the registry and invokes `SystemParametersInfo(SPI_SETMOUSE)` for real-time application.
-    * **Registry Bridge (Global Opt-in):** * **Implementation:** Integrates `MouseRegistryBridge` to scale the `SmoothMouseYCurve` using 16.16 fixed-point math.
-        * **Behavior:** Writes 64-bit Little-Endian binary values to `HKCU\Control Panel\Mouse` based on the `regResult` remainder.
+```
+Effective(profile) = SensMultiplier × WinMult[WinPointerSpeed] × EncodeRegCurve(RegistryCurveOverride)
+```
 
-* **`IProcessWatcher`**
-    * **Intent:** Efficiently monitors active context via Win32 `SetWinEventHook` (`EVENT_SYSTEM_FOREGROUND`).
-    * **Logic:** Maps focused window properties (Process Name/Title) to profile associations; triggers the "Apply" sequence on `IProfileManager`.
+Null fields inherit from Global Default (not from neutral 1.0), so a fully-null profile is a 100% match by definition.
 
-* **`IProfileManager`** (implemented via `ProfileService`)
-    * **Intent:** CRUD for `profiles.json` and calculation coordination.
-    * **Logic:** Executes `CalculateCompensations` to derive `winSpeedResult` and `regResult` relative to the `IsGlobalDefault` anchor.
+Fallback chain for each field when null:
+- `SensMultiplier ?? GlobalDefault.SensMultiplier ?? 1.0`
+- `WinPointerSpeed ?? GlobalDefault.WinPointerSpeed ?? 10`  (index 9 = 1.0×)
+- `RegistryCurveOverride ?? GlobalDefault.RegistryCurveOverride ?? 1.0`
+
+### 2.3 WinMultipliers Table (single source of truth in ProfileService)
+
+```csharp
+// Index 0 = speed 1 (0.03125×), index 9 = speed 10 (1.0×), index 19 = speed 20 (3.5×)
+{ 0.03125, 0.0625, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0,
+  1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25, 3.5 }
+```
+
+**DO NOT MODIFY.** These are the exact Windows-documented multipliers.
+
+### 2.4 EncodeRegCurve (MouseRegistryBridge)
+
+Round-trips `regResult` through 16.16 fixed-point encoding using the tightest anchor (2.5):
+
+```csharp
+long fixedVal = (long)Math.Round(2.5 * regResult * 65536.0);
+return fixedVal / (2.5 * 65536.0);
+// Step size ≈ 6.1e-6, max rounding error ≈ 3e-6 (sub-pixel)
+```
+
+**This formula must stay identical between `EncodeRegCurve` and `CurveToBinary` in `ApplyRegistryBridge`.** Breaking this parity means the display model no longer predicts reality.
+
+### 2.5 Three-Row Match Accuracy Display
+
+```
+Raw Accel Only  : (curSens / S_base) × 100%
+                  — how much raw DPI shifted; S_base denominator only
+
+Win Speed Only  : (curSens × WinMult) / Effective(base) × 100%
+                  — how close integer steps get you
+
+Full Match      : (curSens × WinMult × EncodeRegCurve(regCurve)) / Effective(base) × 100%
+                  — terminal accuracy after registry fine-tune
+```
+
+100% Full Match = exact compensation across all three layers.
+
+### 2.6 Auto-Sync Targets
+
+**ApplyAutoOSSync** — choose WinMult closest to:
+```
+target = Effective(base) / S_target
+```
+
+**ApplyAutoRegSync** — solve exact remainder:
+```
+regResult = Effective(base) / (S_target × WinMult_chosen)
+```
+
+Both always call `GetEffectiveSensitivity(baseProfile)` — never compute base independently.
+
+### 2.7 CalculateCompensations (ProfileService, apply-time)
+
+Same math as above, used when ProcessWatcher fires and MouseService needs to write hardware values. Must stay in sync with ViewModel auto-sync methods. Both steps use `baseEffectiveSens = GetEffectiveSensitivity(baseProfile)`.
+
+### 2.8 Dedup in MouseService
+
+Hardware writes are skipped when the computed state tuple is unchanged:
+```csharp
+(int? winSpeed, double? regResult, string? template, double? sens)
+```
+Dedup happens **after** `CalculateCompensations` runs — so Global Default changes always propagate on next focus event.
+
+---
+
+## 3. PLANNED FEATURE: ENVIRONMENT AWARENESS
+
+> **Status:** Spec only. Not yet implemented.  
+> **Implementation:** Two chunks — see Section 5.
+
+### 3.1 The Problem
+
+The current math ensures all profiles have the same **physical multiplier ratio**. But physical feel also depends on:
+
+1. **Display resolution** — more pixels on the same screen = more hand movement needed to cross it  
+2. **Windows logical DPI** — Windows internally scales the SmoothMouseCurve output by `logicalDPI / 96` before applying it, so `regResult = 1.0` is only a true MarkC fix at 96 DPI (100% scaling)
+
+Currently `regResult = 1.0` at 150% scaling delivers 1.5× more cursor movement through EPP than intended — the written curve values are calibrated to 96 DPI.
+
+### 3.2 New MouseProfile Fields
+
+```csharp
+// All nullable — null means inherit from Global Default
+int?  TargetScreenWidth   // horizontal resolution this profile is designed for, e.g. 1920
+int?  TargetLogicalDpi    // Windows logical DPI this profile is designed for, e.g. 96, 120, 144
+bool? UseEnhancePointerPrecision  // EPP on/off for this profile
+```
+
+**Null semantics (consistent with all other fields):**
+- Null = inherit from Global Default
+- Global Default null = no environment normalization applied (existing behavior preserved — zero regression)
+
+### 3.3 Updated Effective Sensitivity Formula
+
+```
+Effective(profile) =
+    SensMultiplier
+  × WinMult[WinPointerSpeed]
+  × EncodeRegCurve(RegistryCurveOverride)
+  × (ScreenWidth_base / ScreenWidth_profile)    -- resolution compensation
+  × (96.0 / LogicalDpi_profile)                 -- DPI compensation (EPP correction)
+```
+
+The two new terms:
+- **ScreenWidth ratio is inverted** — a wider screen needs more multiplier to maintain the same cm-per-crossing feel, so base/active normalizes correctly
+- **DPI ratio is `96 / profileDPI`** — at 150% (144 DPI), EPP amplifies by 1.5× so we divide by 1.5 to get net 1.0×
+
+When fields are null (inherit from Global Default), both ratios resolve to `1.0` — formula collapses to current behavior.
+
+**True MarkC neutral baseline (EPP active, any DPI):**
+```
+neutralRegResult = 96.0 / effectiveLogicalDpi
+```
+e.g. at 125% scaling (120 DPI): `neutralRegResult = 0.8`
+
+### 3.4 Auto-Sync Target Updates
+
+**ApplyAutoOSSync target** (was `Effective(base) / S_target`):
+```
+target = (Effective(base) × envRatio) / S_target
+
+where envRatio = (ScreenWidth_base / ScreenWidth_active)
+              × (LogicalDpi_active / 96.0) / (LogicalDpi_base / 96.0)
+             = (ScreenWidth_base / ScreenWidth_active)
+              × (LogicalDpi_active / LogicalDpi_base)
+```
+
+**ApplyAutoRegSync** solves the remainder after Win Speed is chosen — formula structure unchanged, but `Effective(base)` now includes the env terms from 3.3.
+
+### 3.5 Match Accuracy Row Updates
+
+```
+Raw Accel Only  : (curSens / S_base) × 100%
+                  — UNCHANGED. This row is always DPI/res independent.
+
+Win Speed Only  : (curSens × WinMult × envRatio) / Effective(base) × 100%
+                  — now includes envRatio
+
+Full Match      : (curSens × WinMult × EncodeRegCurve(reg) × envRatio) / Effective(base) × 100%
+                  — includes envRatio + DPI correction through EncodeRegCurve
+```
+
+Where `envRatio = (ScreenWidth_base / ScreenWidth_active) × (LogicalDpi_base / LogicalDpi_active)`.
+
+Note: when all env fields are null, `envRatio = 1.0` and display is identical to current behavior.
+
+### 3.6 Registry Neutral Baseline
+
+`GetEffectiveSensitivity` uses `EncodeRegCurve(RegistryCurveOverride ?? neutralRegResult)` where:
+```csharp
+double neutralRegResult = 96.0 / (profile.TargetLogicalDpi ?? baseProfile.TargetLogicalDpi ?? 96);
+```
+
+This replaces the current hardcoded `?? 1.0` fallback for `RegistryCurveOverride` when DPI is declared.
+
+### 3.7 EPP Toggle (UseEnhancePointerPrecision)
+
+The SmoothMouseCurve only affects cursor movement when EPP is enabled. The toggle must be applied asymmetrically to avoid a transient bad state:
+
+**Disabling EPP:**
+```csharp
+// Safe to apply live — goes from "possible acceleration" to "no acceleration"
+// Write MouseSpeed=0 to HKCU\Control Panel\Mouse
+// Then SPI_SETMOUSE broadcast to apply immediately
+```
+
+**Enabling EPP:**
+```csharp
+// Write registry curve first (so EPP activates into a known-good curve)
+// Write MouseSpeed=1 to HKCU\Control Panel\Mouse
+// NO SPI broadcast — EPP activates on next session start when curve is also reloaded
+// (Prevents transient window where EPP is on but default Windows curve is still loaded)
+```
+
+If `UseEnhancePointerPrecision` is null, the profile does not touch EPP state — existing user setting is preserved.
+
+When EPP is explicitly set to false, `RegistryCurveOverride` and the reg curve math become irrelevant for that profile — `GetEffectiveSensitivity` should treat the reg factor as `1.0` regardless of stored value.
+
+---
+
+## 4. GUARD RAILS FOR IMPLEMENTING MODELS
+
+See `PRECISION_CRITICAL_FILES.md` for the full list. Summary of invariants that must never be violated:
+
+1. `EncodeRegCurve` formula must stay identical to `CurveToBinary` in `ApplyRegistryBridge`
+2. `WinMultipliers[]` table is fixed — never edit values
+3. `AutoPersist()` must always be called **before** `RecalculateMatchAccuracy()` in every callback
+4. `_isSyncing` save/restore pattern (`wasSyncing`) must be preserved in `ApplyAutoOSSync`/`ApplyAutoRegSync`
+5. `CalculateCompensations` in `ProfileService` must stay in sync with `ApplyAutoOSSync`/`ApplyAutoRegSync` in `ProfileEditorViewModel` — both are apply paths for the same math
+6. Dedup in `MouseService` compares computed tuples — never revert to `ReferenceEquals`
+7. All null field fallbacks must read from Global Default, not from neutral constants
+
+---
+
+## 5. IMPLEMENTATION CHUNKS
+
+### Chunk 1 — Math Engine + Model (PRECISION CRITICAL)
+**Do not combine with Chunk 2. Confirm math outputs before proceeding.**
+
+Files touched:
+- `Models/MouseProfile.cs` — add 3 new nullable fields
+- `Services/ProfileService.cs` — `GetEffectiveSensitivity` env terms, `CalculateCompensations` env ratio
+- `Services/MouseRegistryBridge.cs` — `GetCurrentLogicalDpi()` P/Invoke, EPP read/write helpers, neutral baseline
+- `Services/MouseService.cs` — wire `UseEnhancePointerPrecision` into `ApplyProfileAsync`
+- `ViewModels/ProfileEditorViewModel.cs` — new `GetBaseScreenWidth()`, `GetBaseLogicalDpi()` helpers; update `ApplyAutoOSSync`, `ApplyAutoRegSync`, `RecalculateMatchAccuracy`
+
+**Confirmation test after Chunk 1:**
+- Build passes
+- Two profiles with identical settings → Full Match shows 100%
+- Profile with `TargetScreenWidth = null` → envRatio = 1.0 → no change from current behavior
+- Profile with `TargetLogicalDpi = 144` vs base `96` → Full Match compensates to 100% when regResult is auto-synced
+
+### Chunk 2 — UI Wiring (safe to hand off independently)
+**AXAML + ViewModel surface only. Does not touch the math engine.**
+
+Files touched:
+- `Views/ProfileEditorView.axaml` — add fields for TargetScreenWidth, TargetLogicalDpi, EPP toggle
+- `ViewModels/ProfileEditorViewModel.cs` — new `[ObservableProperty]` fields, string proxies, `On*Changed` callbacks, `LoadProfile` additions, `AutoPersist` additions
+
+Chunk 2 has no precision risk. A separate model can handle it with only `PRECISION_CRITICAL_FILES.md` as a constraint (to confirm it's not touching anything in that list).
