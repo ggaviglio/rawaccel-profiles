@@ -101,7 +101,7 @@
         <TextBlock Text="Proof of Match" FontSize="14" Opacity="0.8" />
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <TextBlock Text="Raw Accel Only:" FontWeight="SemiBold" VerticalAlignment="Center" Width="110"
-                     ToolTip.Tip="(Sens × screenWidthRatio) ÷ S_base — raw sensitivity delta including screen width compensation. DPI correction excluded (EPP/registry layer only)." />
+                     ToolTip.Tip="(Sens × screenWidthRatio × dpiRatio) ÷ S_base — how well raw accel alone offsets the full environmental delta (screen resolution + DPI) before Win Speed or Registry Bridge contribute" />
           <TextBlock Text="{Binding RawAccelMatchAccuracy}" VerticalAlignment="Center" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
