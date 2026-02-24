@@ -306,9 +306,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     /// <summary>
     /// Returns the Raw Accel SensMultiplier of the Global Default (fallback 1.0).
-    /// This is the only value used as the compensation base — the Global Default's
-    /// own WinPointerSpeed and RegistryCurveOverride are independent baseline settings,
-    /// not part of the compensation target.
+    /// This is the sole denominator for all proof-of-match calculations.
+    /// The Global Default's WinPointerSpeed/RegistryCurveOverride are independent
+    /// baseline settings and must not affect any other profile's proof values.
     /// </summary>
     private double GetBaseSens()
     {
@@ -316,22 +316,6 @@ public partial class ProfileEditorViewModel : ViewModelBase
                        ?? _profileService.Profiles.FirstOrDefault();
         var s = baseProfile?.SensMultiplier ?? 1.0;
         return s == 0 ? 1.0 : s;
-    }
-
-    /// <summary>
-    /// Returns the full effective sensitivity of the Global Default profile
-    /// (Sens × WinMult × RegCurve), used only for proof-of-match display.
-    /// Because NormalizeGlobalDefault enforces neutral WinSpeed/RegCurve on the
-    /// Global Default, this always equals GetBaseSens(). Kept as a named helper
-    /// so the display code reads clearly.
-    /// </summary>
-    private double GetBaseEffective()
-    {
-        var baseProfile = _profileService.Profiles.FirstOrDefault(p => p.IsGlobalDefault)
-                       ?? _profileService.Profiles.FirstOrDefault();
-        if (baseProfile == null) return 1.0;
-        var eff = _profileService.GetEffectiveSensitivity(baseProfile);
-        return eff == 0 ? 1.0 : eff;
     }
 
     /// <summary>
@@ -401,32 +385,16 @@ public partial class ProfileEditorViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Recalculates the Proof-of-Match display.
-    /// Total Effective = (SensMultiplier ?? 1.0) × WinMult × (RegistryCurveOverride ?? 1.0)
-    /// MatchAccuracy   = (CurrentTotalEffective / GlobalDefaultTotalEffective) × 100
-    /// 100.00% means the compensation is exact across all three factors.
+    /// Recalculates all three Proof-of-Match rows.
+    /// Denominator is always S_base (raw SensMultiplier of the Global Default only).
+    /// The Global Default's WinPointerSpeed and RegistryCurveOverride are independent
+    /// baseline settings and must never affect other profiles' proof values.
+    /// On the Global Default itself, Raw Accel Only always shows 100% (S_base / S_base).
     /// </summary>
     private void RecalculateMatchAccuracy()
     {
-        var baseProfile = _profileService.Profiles.FirstOrDefault(p => p.IsGlobalDefault)
-                       ?? _profileService.Profiles.FirstOrDefault();
-
-        if (baseProfile == null)
-        {
-            RawAccelMatchAccuracy = "N/A";
-            WinSpeedMatchAccuracy = "N/A";
-            MatchAccuracy         = "N/A";
-            return;
-        }
-
-        double baseEffective = _profileService.GetEffectiveSensitivity(baseProfile);
-        if (baseEffective == 0)
-        {
-            RawAccelMatchAccuracy = "N/A";
-            WinSpeedMatchAccuracy = "N/A";
-            MatchAccuracy         = "N/A";
-            return;
-        }
+        // GetBaseSens() handles no-profile and zero fallback internally.
+        double sBasis = GetBaseSens();
 
         var curSens     = Sensitivity ?? 1.0;
         var curWinIndex = Math.Clamp((WinPointerSpeed ?? 10) - 1, 0, ProfileService.WinMultipliers.Length - 1);
@@ -438,9 +406,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var winEff  = rawEff * curWinMult;   // + Win Pointer Speed coarse snap
         var fullEff = winEff * curRegCurve;  // + Registry Bridge fine remainder
 
-        RawAccelMatchAccuracy = ((rawEff  / baseEffective) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
-        WinSpeedMatchAccuracy = ((winEff  / baseEffective) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
-        MatchAccuracy         = ((fullEff / baseEffective) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
+        RawAccelMatchAccuracy = ((rawEff  / sBasis) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
+        WinSpeedMatchAccuracy = ((winEff  / sBasis) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
+        MatchAccuracy         = ((fullEff / sBasis) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
     }
 
     // ── Auto-Persist ────────────────────────────────────────────────────────
