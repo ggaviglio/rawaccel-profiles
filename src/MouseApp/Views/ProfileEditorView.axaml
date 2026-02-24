@@ -75,6 +75,11 @@
       <StackPanel Spacing="3">
         <TextBlock Text="Proof of Match" FontSize="14" Opacity="0.8" />
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Text="Raw Accel Only:" FontWeight="SemiBold" VerticalAlignment="Center" Width="110"
+                     ToolTip.Tip="Sens ÷ Effective(GlobalDefault) — the raw sensitivity delta before any OS compensation" />
+          <TextBlock Text="{Binding RawAccelMatchAccuracy}" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <TextBlock Text="Win Speed Only:" FontWeight="SemiBold" VerticalAlignment="Center" Width="110"
                      ToolTip.Tip="(Sens × WinMult) ÷ Effective(GlobalDefault) — shows how close Raw Accel + Win Pointer Speed alone gets you before the registry bridge" />
           <TextBlock Text="{Binding WinSpeedMatchAccuracy}" VerticalAlignment="Center" />

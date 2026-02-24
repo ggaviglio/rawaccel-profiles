@@ -71,6 +71,13 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     // ── Derived display ─────────────────────────────────────────────────────
     /// <summary>
+    /// Raw-Accel-only proof: Sens / Effective(GlobalDefault) × 100.
+    /// Shows the raw sensitivity delta before any OS compensation is applied.
+    /// </summary>
+    [ObservableProperty]
+    private string rawAccelMatchAccuracy = "N/A";
+
+    /// <summary>
     /// Win-speed-only proof: (Sens × WinMult) / Effective(GlobalDefault) × 100.
     /// Shows how close Raw Accel + WinPointerSpeed alone gets you, before the registry bridge.
     /// </summary>
@@ -375,6 +382,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         if (baseProfile == null)
         {
+            RawAccelMatchAccuracy = "N/A";
             WinSpeedMatchAccuracy = "N/A";
             MatchAccuracy         = "N/A";
             return;
@@ -383,6 +391,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         double baseEffective = _profileService.GetEffectiveSensitivity(baseProfile);
         if (baseEffective == 0)
         {
+            RawAccelMatchAccuracy = "N/A";
             WinSpeedMatchAccuracy = "N/A";
             MatchAccuracy         = "N/A";
             return;
@@ -396,6 +405,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var winOnlyEffective = curSens * curWinMult;
         var fullEffective    = winOnlyEffective * curRegCurve;
 
+        RawAccelMatchAccuracy = ((curSens          / baseEffective) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
         WinSpeedMatchAccuracy = ((winOnlyEffective / baseEffective) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
         MatchAccuracy         = ((fullEffective    / baseEffective) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
     }
