@@ -17,8 +17,8 @@ public class MouseService : IMouseService
 {
     private readonly ProfileService _profileService;
     private readonly RawAccelDriverProvider _rawAccelProvider;
-    /// <summary>Last profile sent to hardware — prevents redundant registry/SPI writes on repeated focus events.</summary>
-    private MouseProfile? _lastAppliedProfile;
+    /// <summary>Last hardware state written — prevents redundant registry/SPI writes when nothing has changed.</summary>
+    private (int? winSpeed, double? regResult, string? template, double? sens) _lastAppliedState;
 
     public MouseService(ProfileService profileService, RawAccelDriverProvider rawAccelProvider)
     {
@@ -84,16 +84,17 @@ public class MouseService : IMouseService
         Debug.WriteLine($"[MouseService] ApplyProfileAsync entered for '{profile?.ProfileName}'.");
         if (profile == null) throw new ArgumentNullException(nameof(profile));
 
-        // Dedup: skip hardware writes if the same profile is already applied
-        if (ReferenceEquals(profile, _lastAppliedProfile))
+        var (winSpeed, regResult) = _profileService.CalculateCompensations(profile);
+        var newState = (winSpeed, regResult, profile.RawAccelTemplate, profile.SensMultiplier);
+
+        // Dedup: skip hardware writes if effective values haven't changed
+        if (newState == _lastAppliedState)
         {
-            Debug.WriteLine($"[MouseService] ApplyProfileAsync — skipping, '{profile.ProfileName}' already active.");
+            Debug.WriteLine($"[MouseService] ApplyProfileAsync — skipping, hardware state unchanged for '{profile.ProfileName}'.");
             return;
         }
-        _lastAppliedProfile = profile;
+        _lastAppliedState = newState;
         Debug.WriteLine($"[MouseService] Applying profile '{profile.ProfileName}' to hardware.");
-
-        var (winSpeed, regResult) = _profileService.CalculateCompensations(profile);
 
         // Apply registry bridge (fine-tune) if available
         if (regResult.HasValue)

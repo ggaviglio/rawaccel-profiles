@@ -180,17 +180,15 @@ public class ProfileService
         var baseProfile = Profiles.FirstOrDefault(p => p.IsGlobalDefault) ?? Profiles.FirstOrDefault();
         if (baseProfile == null) return (activeProfile.WinPointerSpeed, activeProfile.RegistryCurveOverride);
 
-        // Win-level baseline of the Global Default: S_base × WinMult_base
-        // Active profile's WinMult must satisfy: S_target × WinMult ≈ S_base × WinMult_base
-        var sBase        = baseProfile.SensMultiplier ?? 1.0;
-        if (sBase == 0) sBase = 1.0;
-        var winBaseIdx   = Math.Clamp((baseProfile.WinPointerSpeed ?? 10) - 1, 0, WinMultipliers.Length - 1);
-        var winBaseMult  = WinMultipliers[winBaseIdx];
+        // Effective(base) = S_base × WinMult_base × EncodeRegCurve(RegCurve_base)
+        // This is the single reference value both compensation steps target.
+        var baseEffectiveSens = GetEffectiveSensitivity(baseProfile);
+        if (baseEffectiveSens == 0) baseEffectiveSens = 1.0;
 
         var sTarget = activeProfile.SensMultiplier ?? 1.0;
         if (sTarget == 0) sTarget = 1.0;
 
-        var targetWinMult = (sBase * winBaseMult) / sTarget; // goal for WinMult
+        var targetWinMult = baseEffectiveSens / sTarget; // goal for WinMult — matches ApplyAutoOSSync in ViewModel
 
         int? winSpeedResult = activeProfile.WinPointerSpeed;
         double? regResult = activeProfile.RegistryCurveOverride;
@@ -216,10 +214,8 @@ public class ProfileService
         // so that S_target × WinMult × RegCurve == Effective(base) exactly.
         if (activeProfile.UseAutoRegSync)
         {
-            var baseEffective  = GetEffectiveSensitivity(baseProfile);
-            if (baseEffective == 0) baseEffective = 1.0;
             var currentWinMult = WinMultipliers[Math.Clamp((winSpeedResult ?? 10) - 1, 0, WinMultipliers.Length - 1)];
-            regResult = (sTarget * currentWinMult) == 0 ? 1.0 : baseEffective / (sTarget * currentWinMult);
+            regResult = (sTarget * currentWinMult) == 0 ? 1.0 : baseEffectiveSens / (sTarget * currentWinMult);
         }
 
         return (winSpeedResult, regResult);

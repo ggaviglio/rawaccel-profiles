@@ -195,7 +195,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
             return;
         }
 
-        if (double.TryParse(newValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+        if (double.TryParse(newValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)
+            && parsed > 0)
         {
             _isSyncing = true;
             Sensitivity = parsed;
@@ -261,7 +262,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
             return;
         }
 
-        if (double.TryParse(newValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+        if (double.TryParse(newValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)
+            && parsed > 0)
         {
             _isSyncing = true;
             RegistryCurveOverride = parsed;
@@ -398,16 +400,22 @@ public partial class ProfileEditorViewModel : ViewModelBase
         }
     }
     /// <summary>
-    /// Three-row waterfall proof — all three rows measure against Effective(base).
+    /// Three-row waterfall proof — all rows measure against Effective(base).
     ///
     ///   Raw Accel Only  : curSens / S_base
-    ///       How much the raw DPI shifted.  S_base denominator keeps this
-    ///       independent of Win/Reg settings on Global Default.
+    ///       How much the raw DPI shifted relative to the Global Default's raw sens.
+    ///       S_base denominator is intentional — keeps this row independent of Win/Reg
+    ///       settings on the Global Default.
     ///
-    ///   Win Speed Only  : (curSens x WinMult) / Effective(base)
-    ///       How close integer Win Pointer Speed steps get the pointer back to the
-    ///       original effective feel.  Auto-Win targets Effective(base) / S_target.
+    ///   Win Speed Only  : (curSens × WinMult) / Effective(base)
+    ///       How close integer Win Pointer Speed steps get you back to Effective(base).
+    ///       Auto-Win targets Effective(base) / S_target.
     ///
+    ///   Full Match      : (curSens × WinMult × EncodeRegCurve(regCurve)) / Effective(base)
+    ///       The terminal accuracy after the registry bridge fine-tunes the remainder.
+    ///       EncodeRegCurve round-trips through 16.16 fixed-point — this is the real
+    ///       value Windows stores, revealing the ~6.1e-6 (0.0006%) precision floor.
+    ///       100.00% = exact compensation across all three layers.
     /// </summary>
     private void RecalculateMatchAccuracy()
     {
