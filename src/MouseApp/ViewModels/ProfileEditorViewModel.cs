@@ -304,42 +304,40 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     // ── Math Engine ─────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Returns the Raw Accel SensMultiplier of the Global Default (fallback 1.0).
-    /// This is the sole denominator for all proof-of-match calculations.
-    /// The Global Default's WinPointerSpeed/RegistryCurveOverride are independent
-    /// baseline settings and must not affect any other profile's proof values.
-    /// </summary>
+    private MouseProfile? GetBaseProfile() =>
+        _profileService.Profiles.FirstOrDefault(p => p.IsGlobalDefault)
+        ?? _profileService.Profiles.FirstOrDefault();
+
+    /// <summary>Raw Accel SensMultiplier of the Global Default (fallback 1.0).</summary>
     private double GetBaseSens()
     {
-        var baseProfile = _profileService.Profiles.FirstOrDefault(p => p.IsGlobalDefault)
-                       ?? _profileService.Profiles.FirstOrDefault();
-        var s = baseProfile?.SensMultiplier ?? 1.0;
+        var s = GetBaseProfile()?.SensMultiplier ?? 1.0;
         return s == 0 ? 1.0 : s;
     }
 
+    /// <summary>WinMultipliers entry for the Global Default's WinPointerSpeed (fallback index 9 = 1.0×).</summary>
+    private double GetBaseWinMult()
+    {
+        var bp  = GetBaseProfile();
+        var idx = Math.Clamp((bp?.WinPointerSpeed ?? 10) - 1, 0, ProfileService.WinMultipliers.Length - 1);
+        return ProfileService.WinMultipliers[idx];
+    }
+
     /// <summary>
-    /// When UseAutoOSSync is enabled, sets WinPointerSpeed to the index in
-    /// WinMultipliers that is closest to S_base / S_target (= 1/x).
-    /// Always delegates to ApplyAutoRegSync afterward.
+    /// Auto Win Pointer Speed: choose the WinMult closest to (S_base × WinMult_base) / S_target,
+    /// so that S_target × WinMult ≈ S_base × WinMult_base (matching the global default’s win-level effective).
     /// </summary>
     private void ApplyAutoOSSync()
     {
-        // The Global Default is the reference point — auto-sync has no target to compute against.
-        // Its WinPointerSpeed is a user-controlled baseline setting, not a compensation value.
         if (IsGlobalDefault) { ApplyAutoRegSync(); return; }
 
         if (UseAutoOSSync)
         {
-            // Target for WinMult: S_base / S_target (pure raw-accel ratio).
-            // The Global Default's own WinSpeed/RegCurve are independent; only the
-            // difference in Raw Accel sensitivity drives the compensation.
-            var sBase   = GetBaseSens();
             var sTarget = Sensitivity ?? 1.0;
             if (sTarget == 0) sTarget = 1.0;
-            var target  = sBase / sTarget;
+            var target = (GetBaseSens() * GetBaseWinMult()) / sTarget;
 
-            int bestIndex = 0;
+            int bestIndex  = 0;
             double minDiff = double.MaxValue;
             for (int i = 0; i < ProfileService.WinMultipliers.Length; i++)
             {
@@ -348,7 +346,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             }
 
             _isSyncing = true;
-            WinPointerSpeed = bestIndex + 1; // 1-based
+            WinPointerSpeed = bestIndex + 1;
             _isSyncing = false;
         }
 
@@ -356,26 +354,25 @@ public partial class ProfileEditorViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// When UseAutoRegSync is enabled, calculates RegistryCurveOverride as the
-    /// exact remainder so that WinMult × RegCurve == S_base / S_target (= 1/x),
-    /// achieving 100% MatchAccuracy relative to the Global Default.
+    /// Auto Registry Bridge: RegCurve = Effective(base) / (S_target × WinMult_current),
+    /// covering the exact gap so that S_target × WinMult × RegCurve == Effective(base).
     /// </summary>
     private void ApplyAutoRegSync()
     {
-        // Same guard: Global Default's RegCurve is a user setting, not auto-computed.
         if (IsGlobalDefault) return;
 
         if (UseAutoRegSync)
         {
-            // Same S_base / S_target target — RegCurve covers the exact remainder.
-            var sBase   = GetBaseSens();
-            var sTarget = Sensitivity ?? 1.0;
+            var bp      = GetBaseProfile();
+            var baseEff = bp != null ? _profileService.GetEffectiveSensitivity(bp) : 1.0;
+            if (baseEff == 0) baseEff = 1.0;
+
+            var sTarget  = Sensitivity ?? 1.0;
             if (sTarget == 0) sTarget = 1.0;
-            var targetMultiplier = sBase / sTarget;
 
             var winIndex  = Math.Clamp((WinPointerSpeed ?? 10) - 1, 0, ProfileService.WinMultipliers.Length - 1);
             var winMult   = ProfileService.WinMultipliers[winIndex];
-            var remainder = winMult == 0 ? 1.0 : targetMultiplier / winMult;
+            var remainder = (sTarget * winMult) == 0 ? 1.0 : baseEff / (sTarget * winMult);
 
             _isSyncing = true;
             RegistryCurveOverride = remainder;
@@ -385,30 +382,34 @@ public partial class ProfileEditorViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Recalculates all three Proof-of-Match rows.
-    /// Denominator is always S_base (raw SensMultiplier of the Global Default only).
-    /// The Global Default's WinPointerSpeed and RegistryCurveOverride are independent
-    /// baseline settings and must never affect other profiles' proof values.
-    /// On the Global Default itself, Raw Accel Only always shows 100% (S_base / S_base).
+    /// Three-row waterfall proof — each row’s denominator matches its numerator’s scope:
+    ///   Raw Accel Only  : curSens                     / S_base
+    ///   Win Speed Only  : curSens × WinMult           / (S_base × WinMult_base)
+    ///   Full Match      : curSens × WinMult × RegCurve / Effective(base)
+    /// 100% on Full Match = profile’s effective feel exactly equals the Global Default.
+    /// On the Global Default itself all three rows always show 100%.
     /// </summary>
     private void RecalculateMatchAccuracy()
     {
-        // GetBaseSens() handles no-profile and zero fallback internally.
-        double sBasis = GetBaseSens();
+        var bp       = GetBaseProfile();
+        var sBase    = GetBaseSens();
+        var wmBase   = GetBaseWinMult();
+        var winBase  = sBase * wmBase;   // S_base × WinMult_base
+        var fullBase = bp != null ? _profileService.GetEffectiveSensitivity(bp) : sBase;
+        if (fullBase == 0) fullBase = 1.0;
 
         var curSens     = Sensitivity ?? 1.0;
         var curWinIndex = Math.Clamp((WinPointerSpeed ?? 10) - 1, 0, ProfileService.WinMultipliers.Length - 1);
         var curWinMult  = ProfileService.WinMultipliers[curWinIndex];
         var curRegCurve = RegistryCurveOverride ?? 1.0;
 
-        // Waterfall — each row explicitly builds on the previous layer.
-        var rawEff  = curSens;               // Raw Accel only  (no OS compensation)
-        var winEff  = rawEff * curWinMult;   // + Win Pointer Speed coarse snap
-        var fullEff = winEff * curRegCurve;  // + Registry Bridge fine remainder
+        var rawEff  = curSens;
+        var winEff  = rawEff  * curWinMult;
+        var fullEff = winEff  * curRegCurve;
 
-        RawAccelMatchAccuracy = ((rawEff  / sBasis) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
-        WinSpeedMatchAccuracy = ((winEff  / sBasis) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
-        MatchAccuracy         = ((fullEff / sBasis) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
+        RawAccelMatchAccuracy = ((rawEff  / sBase)    * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
+        WinSpeedMatchAccuracy = ((winEff  / winBase)  * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
+        MatchAccuracy         = ((fullEff / fullBase) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
     }
 
     // ── Auto-Persist ────────────────────────────────────────────────────────

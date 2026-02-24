@@ -179,16 +179,17 @@ public class ProfileService
         var baseProfile = Profiles.FirstOrDefault(p => p.IsGlobalDefault) ?? Profiles.FirstOrDefault();
         if (baseProfile == null) return (activeProfile.WinPointerSpeed, activeProfile.RegistryCurveOverride);
 
-        // Target: S_base / S_target — pure raw accel ratio.
-        // The Global Default's own WinPointerSpeed/RegistryCurveOverride are independent
-        // baseline settings, not part of the compensation target. NormalizeGlobalDefault
-        // enforces neutral values for those anyway.
-        var sBase = baseProfile.SensMultiplier ?? 1.0;
+        // Win-level baseline of the Global Default: S_base × WinMult_base
+        // Active profile's WinMult must satisfy: S_target × WinMult ≈ S_base × WinMult_base
+        var sBase        = baseProfile.SensMultiplier ?? 1.0;
         if (sBase == 0) sBase = 1.0;
+        var winBaseIdx   = Math.Clamp((baseProfile.WinPointerSpeed ?? 10) - 1, 0, WinMultipliers.Length - 1);
+        var winBaseMult  = WinMultipliers[winBaseIdx];
+
         var sTarget = activeProfile.SensMultiplier ?? 1.0;
         if (sTarget == 0) sTarget = 1.0;
 
-        var targetMultiplier = sBase / sTarget; // goal for WinMult × RegCurve
+        var targetWinMult = (sBase * winBaseMult) / sTarget; // goal for WinMult
 
         int? winSpeedResult = activeProfile.WinPointerSpeed;
         double? regResult = activeProfile.RegistryCurveOverride;
@@ -196,11 +197,11 @@ public class ProfileService
         // STEP 1: Choose best Windows Pointer Speed
         if (activeProfile.UseAutoOSSync)
         {
-            int bestIndex = 0;
+            int bestIndex  = 0;
             double minDiff = double.MaxValue;
             for (int i = 0; i < WinMultipliers.Length; i++)
             {
-                double diff = Math.Abs(WinMultipliers[i] - targetMultiplier);
+                double diff = Math.Abs(WinMultipliers[i] - targetWinMult);
                 if (diff < minDiff)
                 {
                     minDiff = diff;
@@ -210,11 +211,14 @@ public class ProfileService
             winSpeedResult = bestIndex + 1; // 1-based
         }
 
-        // STEP 2: Calculate exact registry remainder so WinMult × RegCurve == targetMultiplier
+        // STEP 2: RegCurve = Effective(base) / (S_target × WinMult_chosen)
+        // so that S_target × WinMult × RegCurve == Effective(base) exactly.
         if (activeProfile.UseAutoRegSync)
         {
-            double currentWinMult = WinMultipliers[Math.Clamp((winSpeedResult ?? 10) - 1, 0, WinMultipliers.Length - 1)];
-            regResult = currentWinMult == 0 ? 1.0 : targetMultiplier / currentWinMult;
+            var baseEffective  = GetEffectiveSensitivity(baseProfile);
+            if (baseEffective == 0) baseEffective = 1.0;
+            var currentWinMult = WinMultipliers[Math.Clamp((winSpeedResult ?? 10) - 1, 0, WinMultipliers.Length - 1)];
+            regResult = (sTarget * currentWinMult) == 0 ? 1.0 : baseEffective / (sTarget * currentWinMult);
         }
 
         return (winSpeedResult, regResult);
