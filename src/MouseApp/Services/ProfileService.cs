@@ -179,15 +179,16 @@ public class ProfileService
         var baseProfile = Profiles.FirstOrDefault(p => p.IsGlobalDefault) ?? Profiles.FirstOrDefault();
         if (baseProfile == null) return (activeProfile.WinPointerSpeed, activeProfile.RegistryCurveOverride);
 
-        // Target: Sens_active × WinMult × RegCurve  ==  Effective(GlobalDefault)
-        // → WinMult × RegCurve  ==  Effective(base) / Sens_active
-        var baseEffective = GetEffectiveSensitivity(baseProfile);
-        if (baseEffective == 0) baseEffective = 1.0;
-
+        // Target: S_base / S_target — pure raw accel ratio.
+        // The Global Default's own WinPointerSpeed/RegistryCurveOverride are independent
+        // baseline settings, not part of the compensation target. NormalizeGlobalDefault
+        // enforces neutral values for those anyway.
+        var sBase = baseProfile.SensMultiplier ?? 1.0;
+        if (sBase == 0) sBase = 1.0;
         var sTarget = activeProfile.SensMultiplier ?? 1.0;
         if (sTarget == 0) sTarget = 1.0;
 
-        var targetMultiplier = baseEffective / sTarget; // goal for WinMult × RegCurve
+        var targetMultiplier = sBase / sTarget; // goal for WinMult × RegCurve
 
         int? winSpeedResult = activeProfile.WinPointerSpeed;
         double? regResult = activeProfile.RegistryCurveOverride;

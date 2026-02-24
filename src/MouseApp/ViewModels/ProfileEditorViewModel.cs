@@ -305,9 +305,25 @@ public partial class ProfileEditorViewModel : ViewModelBase
     // ── Math Engine ─────────────────────────────────────────────────────────
 
     /// <summary>
+    /// Returns the Raw Accel SensMultiplier of the Global Default (fallback 1.0).
+    /// This is the only value used as the compensation base — the Global Default's
+    /// own WinPointerSpeed and RegistryCurveOverride are independent baseline settings,
+    /// not part of the compensation target.
+    /// </summary>
+    private double GetBaseSens()
+    {
+        var baseProfile = _profileService.Profiles.FirstOrDefault(p => p.IsGlobalDefault)
+                       ?? _profileService.Profiles.FirstOrDefault();
+        var s = baseProfile?.SensMultiplier ?? 1.0;
+        return s == 0 ? 1.0 : s;
+    }
+
+    /// <summary>
     /// Returns the full effective sensitivity of the Global Default profile
-    /// (Sens × WinMult × RegCurve), falling back to 1.0 if unavailable or zero.
-    /// This is the correct base for all compensation calculations.
+    /// (Sens × WinMult × RegCurve), used only for proof-of-match display.
+    /// Because NormalizeGlobalDefault enforces neutral WinSpeed/RegCurve on the
+    /// Global Default, this always equals GetBaseSens(). Kept as a named helper
+    /// so the display code reads clearly.
     /// </summary>
     private double GetBaseEffective()
     {
@@ -331,12 +347,13 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         if (UseAutoOSSync)
         {
-            // Target for WinMult: Effective(base) / S_target
-            // so that S_target × WinMult × RegCurve == Effective(base) at 100% accuracy.
-            var baseEffective = GetBaseEffective();
+            // Target for WinMult: S_base / S_target (pure raw-accel ratio).
+            // The Global Default's own WinSpeed/RegCurve are independent; only the
+            // difference in Raw Accel sensitivity drives the compensation.
+            var sBase   = GetBaseSens();
             var sTarget = Sensitivity ?? 1.0;
             if (sTarget == 0) sTarget = 1.0;
-            var target = baseEffective / sTarget;
+            var target  = sBase / sTarget;
 
             int bestIndex = 0;
             double minDiff = double.MaxValue;
@@ -366,11 +383,11 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         if (UseAutoRegSync)
         {
-            // Same target: Effective(base) / S_target
-            var baseEffective = GetBaseEffective();
+            // Same S_base / S_target target — RegCurve covers the exact remainder.
+            var sBase   = GetBaseSens();
             var sTarget = Sensitivity ?? 1.0;
             if (sTarget == 0) sTarget = 1.0;
-            var targetMultiplier = baseEffective / sTarget;
+            var targetMultiplier = sBase / sTarget;
 
             var winIndex  = Math.Clamp((WinPointerSpeed ?? 10) - 1, 0, ProfileService.WinMultipliers.Length - 1);
             var winMult   = ProfileService.WinMultipliers[winIndex];
