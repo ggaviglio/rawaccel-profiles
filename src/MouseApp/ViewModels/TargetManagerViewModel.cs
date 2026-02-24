@@ -15,8 +15,27 @@ namespace MouseApp.ViewModels;
 
 // ── Window-list entry ────────────────────────────────────────────────────────
 /// <summary>Represents a single top-level window returned by the discovery scan.</summary>
-public sealed record WindowEntry(IntPtr Hwnd, string Title, string ExeName, string FullPath, string ClassName)
+public partial class WindowEntry : ObservableObject
 {
+    public IntPtr Hwnd      { get; }
+    public string Title     { get; }
+    public string ExeName   { get; }
+    public string FullPath  { get; }
+    public string ClassName { get; }
+
+    /// <summary>Set by Test Match — true when this window satisfies a current association.</summary>
+    [ObservableProperty]
+    private bool isMatched;
+
+    public WindowEntry(IntPtr hwnd, string title, string exeName, string fullPath, string className)
+    {
+        Hwnd      = hwnd;
+        Title     = title;
+        ExeName   = exeName;
+        FullPath  = fullPath;
+        ClassName = className;
+    }
+
     public string DisplayText
     {
         get
@@ -31,8 +50,8 @@ public sealed record WindowEntry(IntPtr Hwnd, string Title, string ExeName, stri
     {
         get
         {
-            var path  = string.IsNullOrEmpty(FullPath) ? "(path unavailable)" : FullPath;
-            var cls   = string.IsNullOrEmpty(ClassName) ? "(unknown)" : ClassName;
+            var path = string.IsNullOrEmpty(FullPath) ? "(path unavailable)" : FullPath;
+            var cls  = string.IsNullOrEmpty(ClassName) ? "(unknown)" : ClassName;
             return $"Path:  {path}\nClass: {cls}";
         }
     }
@@ -107,12 +126,17 @@ public partial class TargetManagerViewModel : ViewModelBase
 
     // ── Commands ─────────────────────────────────────────────────────────────
     public IRelayCommand                    RefreshWindowsCommand { get; }
+    public IRelayCommand                    TestMatchCommand      { get; }
     public IRelayCommand                    AddAsExeCommand       { get; }
     public IRelayCommand                    AddAsPathCommand      { get; }
     public IRelayCommand                    AddAsTitleCommand     { get; }
     public IRelayCommand                    AddAsClassCommand     { get; }
     public IRelayCommand                    AddManualCommand      { get; }
     public IRelayCommand<TargetAssociation> RemoveCommand         { get; }
+
+    /// <summary>Summary line shown below the Active Windows list after a Test Match run.</summary>
+    [ObservableProperty]
+    private string matchSummary = string.Empty;
 
     // ── Constructor ──────────────────────────────────────────────────────────
     public TargetManagerViewModel(MouseProfile profile, ProfileService profileService)
@@ -125,6 +149,7 @@ public partial class TargetManagerViewModel : ViewModelBase
             Associations.Add(ta);
 
         RefreshWindowsCommand = new RelayCommand(ExecuteRefreshWindows);
+        TestMatchCommand      = new RelayCommand(ExecuteTestMatch);
         AddAsExeCommand       = new RelayCommand(ExecuteAddAsExe,   () => SelectedWindow is not null);
         AddAsPathCommand      = new RelayCommand(ExecuteAddAsPath,  () => SelectedWindow is not null && !string.IsNullOrEmpty(SelectedWindow.FullPath));
         AddAsTitleCommand     = new RelayCommand(ExecuteAddAsTitle, () => SelectedWindow is not null && !string.IsNullOrEmpty(SelectedWindow.Title));
@@ -195,7 +220,64 @@ public partial class TargetManagerViewModel : ViewModelBase
 
         foreach (var e in entries)
             ActiveWindows.Add(e);
+
+        // Clear stale match results whenever the window list is rebuilt.
+        foreach (var entry in ActiveWindows)
+            entry.IsMatched = false;
+        MatchSummary = string.Empty;
     }
+
+    // ── Test Match ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Runs each window in the Active Windows list through the same staged
+    /// matching logic used by <see cref="ProcessWatcher"/> and highlights hits.
+    /// </summary>
+    private void ExecuteTestMatch()
+    {
+        var associations = _profile.TargetAssociations;
+
+        if (associations == null || associations.Count == 0)
+        {
+            foreach (var e in ActiveWindows) e.IsMatched = false;
+            MatchSummary = "No associations defined — add targets first.";
+            return;
+        }
+
+        int matchCount = 0;
+        foreach (var entry in ActiveWindows)
+        {
+            entry.IsMatched = WindowMatchesAssociations(entry, associations);
+            if (entry.IsMatched) matchCount++;
+        }
+
+        MatchSummary = matchCount == 0
+            ? "No open windows match the current associations."
+            : $"{matchCount} of {ActiveWindows.Count} windows match — profile would activate on any of these.";
+    }
+
+    /// <summary>
+    /// Mirrors <c>ProcessWatcher.GetWindowMatchesProfile</c> exactly.
+    /// Must be kept in sync if the matching logic in ProcessWatcher changes.
+    /// </summary>
+    private static bool WindowMatchesAssociations(WindowEntry entry, List<TargetAssociation> associations)
+    {
+        foreach (var ta in associations)
+        {
+            bool hit = ta.MatchType switch
+            {
+                TargetMatchType.FullPath    => string.Equals(ta.Value, entry.FullPath,  StringComparison.OrdinalIgnoreCase),
+                TargetMatchType.ExeName     => string.Equals(ta.Value, entry.ExeName,   StringComparison.OrdinalIgnoreCase),
+                TargetMatchType.WindowClass => string.Equals(ta.Value, entry.ClassName, StringComparison.OrdinalIgnoreCase),
+                TargetMatchType.WindowTitle => entry.Title.Contains(ta.Value,           StringComparison.OrdinalIgnoreCase),
+                _ => false
+            };
+            if (hit) return true;
+        }
+        return false;
+    }
+
+    // ── Add / Remove ─────────────────────────────────────────────────────────────────
 
     private void ExecuteAddAsExe()
     {

@@ -26,19 +26,39 @@
           <Button Content="⟳ Refresh"
                   Command="{Binding RefreshWindowsCommand}"
                   Padding="8,3" />
+          <Button Content="⚡ Test Match"
+                  Command="{Binding TestMatchCommand}"
+                  Padding="8,3"
+                  ToolTip.Tip="Run current associations against the active window list and highlight matches" />
         </StackPanel>
 
-        <ListBox Height="350"
+        <ListBox Height="340"
                  ItemsSource="{Binding ActiveWindows}"
                  SelectedItem="{Binding SelectedWindow, Mode=TwoWay}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:WindowEntry">
-              <TextBlock Text="{Binding DisplayText}"
-                         TextTrimming="CharacterEllipsis"
-                         ToolTip.Tip="{Binding DetailTooltip}" />
+              <Grid ColumnDefinitions="6,*">
+                <!-- Green match bar — only visible after Test Match -->
+                <Border Grid.Column="0"
+                        Background="#4CAF50"
+                        IsVisible="{Binding IsMatched}"
+                        Margin="0,2,5,2"
+                        CornerRadius="2" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding DisplayText}"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip.Tip="{Binding DetailTooltip}" />
+              </Grid>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
+
+        <!-- Match summary shown after Test Match run -->
+        <TextBlock Text="{Binding MatchSummary}"
+                   FontSize="11"
+                   Opacity="0.75"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding MatchSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
       </StackPanel>
 
       <!-- CENTER: Action buttons -->
