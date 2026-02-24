@@ -92,8 +92,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     // ── Derived display ─────────────────────────────────────────────────────
     /// <summary>
-    /// Raw-Accel-only proof: Sens / Effective(GlobalDefault) × 100.
-    /// Shows the raw sensitivity delta before any OS compensation is applied.
+    /// Raw-Accel-only proof: (Sens × screenWidthRatio) / S_base × 100.
+    /// Shows how well raw accel sensitivity compensates for both the raw DPI change
+    /// and the target screen width difference. DPI (EPP) correction excluded — that
+    /// belongs to the registry layer, not raw accel.
     /// </summary>
     [ObservableProperty]
     private string rawAccelMatchAccuracy = "N/A";
@@ -531,10 +533,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>
     /// Three-row waterfall proof — all rows measure against Effective(base).
     ///
-    ///   Raw Accel Only  : curSens / S_base
-    ///       How much the raw DPI shifted relative to the Global Default's raw sens.
-    ///       S_base denominator is intentional — keeps this row independent of Win/Reg
-    ///       settings on the Global Default.
+    ///   Raw Accel Only  : (curSens × screenWidthRatio) / S_base
+    ///       How well raw accel sensitivity compensates for the raw DPI change AND the
+    ///       target screen width difference. screenWidthRatio = baseW / activeW.
+    ///       DPI correction is excluded — EPP/registry layer only, not raw accel.
     ///
     ///   Win Speed Only  : (curSens × WinMult) / Effective(base)
     ///       How close integer Win Pointer Speed steps get you back to Effective(base).
@@ -586,8 +588,15 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var winEff  = rawEff  * curWinMult * envScreenRatio * envDpiRatio;
         var fullEff = winEff  * curRegCurve;
 
-        // Row 1: Raw Accel Only — DPI/resolution independent, denominator is always sBase.
-        RawAccelMatchAccuracy = ((rawEff  / sBase)    * 100.0).ToString("G10", CultureInfo.InvariantCulture) + "%";
+        // Row 1 display: include screen width ratio so it reflects actual raw feel delta —
+        // raw accel can compensate for screen size changes by scaling sensitivity directly.
+        // DPI is intentionally excluded: DPI correction is an EPP/registry-layer effect,
+        // not something raw accel interacts with. Separate variable avoids double-counting
+        // envScreenRatio in the winEff/fullEff chain above.
+        var rawEffDisplay = curSens * envScreenRatio;
+
+        // Row 1: Raw Accel Only — screen-width-aware, DPI independent, denominator is sBase.
+        RawAccelMatchAccuracy = ((rawEffDisplay / sBase) * 100.0).ToString("G10", CultureInfo.InvariantCulture) + "%";
         WinSpeedMatchAccuracy = ((winEff  / fullBase) * 100.0).ToString("G10", CultureInfo.InvariantCulture) + "%";
         MatchAccuracy         = ((fullEff / fullBase) * 100.0).ToString("G10", CultureInfo.InvariantCulture) + "%";
     }
