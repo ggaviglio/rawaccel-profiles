@@ -69,4 +69,18 @@ public static class MouseRegistryBridge
         if (!ok)
             throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "SystemParametersInfo(SPI_SETMOUSE) failed");
     }
+
+    /// <summary>
+    /// Returns the regResult value that Windows will actually apply after 16.16 fixed-point
+    /// encoding and decoding.  The tightest anchor is 2.5 (step = 1/163840 ≈ 6.1e-6).
+    /// Use this in the proof-of-match display so it reflects real-world precision rather
+    /// than the idealised double value.
+    /// </summary>
+    public static double EncodeRegCurve(double regResult)
+    {
+        // Tightest non-zero anchor: 2.5
+        const double tightestAnchor = 2.5;
+        long fixedVal = (long)Math.Round(tightestAnchor * regResult * 65536.0);
+        return fixedVal / (tightestAnchor * 65536.0);
+    }
 }

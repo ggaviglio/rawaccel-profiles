@@ -422,15 +422,18 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var curSens     = Sensitivity          ?? GetBaseSens();
         var curWinIndex = Math.Clamp((WinPointerSpeed ?? GetBaseWinPointerSpeed()) - 1, 0, ProfileService.WinMultipliers.Length - 1);
         var curWinMult  = ProfileService.WinMultipliers[curWinIndex];
-        var curRegCurve = RegistryCurveOverride ?? GetBaseRegCurve();
+        // Use the round-tripped (16.16 encoded) regCurve — this is what Windows will actually apply,
+        // and reveals the ~0.0003% precision limit when the value straddles a representable step.
+        var rawRegCurve = RegistryCurveOverride ?? GetBaseRegCurve();
+        var curRegCurve = MouseRegistryBridge.EncodeRegCurve(rawRegCurve);
 
         var rawEff  = curSens;
         var winEff  = rawEff  * curWinMult;
         var fullEff = winEff  * curRegCurve;
 
-        RawAccelMatchAccuracy = ((rawEff  / sBase)    * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
-        WinSpeedMatchAccuracy = ((winEff  / fullBase) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
-        MatchAccuracy         = ((fullEff / fullBase) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
+        RawAccelMatchAccuracy = ((rawEff  / sBase)    * 100.0).ToString("G10", CultureInfo.InvariantCulture) + "%";
+        WinSpeedMatchAccuracy = ((winEff  / fullBase) * 100.0).ToString("G10", CultureInfo.InvariantCulture) + "%";
+        MatchAccuracy         = ((fullEff / fullBase) * 100.0).ToString("G10", CultureInfo.InvariantCulture) + "%";
     }
 
     // ── Auto-Persist ────────────────────────────────────────────────────────
