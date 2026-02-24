@@ -320,6 +320,16 @@ public partial class ProfileEditorViewModel : ViewModelBase
         return s == 0 ? 1.0 : s;
     }
 
+    /// <summary>WinPointerSpeed index (1-20) of the Global Default (fallback 10 = neutral).</summary>
+    private int GetBaseWinPointerSpeed() => GetBaseProfile()?.WinPointerSpeed ?? 10;
+
+    /// <summary>RegistryCurveOverride of the Global Default (fallback 1.0 = neutral).</summary>
+    private double GetBaseRegCurve()
+    {
+        var r = GetBaseProfile()?.RegistryCurveOverride ?? 1.0;
+        return r == 0 ? 1.0 : r;
+    }
+
 
     /// <summary>
     /// Auto Win Pointer Speed: choose the WinMult closest to Effective(base) / S_target,
@@ -336,7 +346,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
             var baseEff = bp != null ? _profileService.GetEffectiveSensitivity(bp) : GetBaseSens();
             if (baseEff == 0) baseEff = 1.0;
 
-            var sTarget = Sensitivity ?? 1.0;
+            // Null Sensitivity = inherit base raw sens — target is still Effective(base) / baseSens = baseWinMult*baseReg
+            var sTarget = Sensitivity ?? GetBaseSens();
             if (sTarget == 0) sTarget = 1.0;
             var target = baseEff / sTarget;
 
@@ -371,10 +382,11 @@ public partial class ProfileEditorViewModel : ViewModelBase
             var baseEff = bp != null ? _profileService.GetEffectiveSensitivity(bp) : 1.0;
             if (baseEff == 0) baseEff = 1.0;
 
-            var sTarget  = Sensitivity ?? 1.0;
+            // Null Sensitivity/WinPointerSpeed = inherit base values so registry compensates the real remainder
+            var sTarget  = Sensitivity ?? GetBaseSens();
             if (sTarget == 0) sTarget = 1.0;
 
-            var winIndex  = Math.Clamp((WinPointerSpeed ?? 10) - 1, 0, ProfileService.WinMultipliers.Length - 1);
+            var winIndex  = Math.Clamp((WinPointerSpeed ?? GetBaseWinPointerSpeed()) - 1, 0, ProfileService.WinMultipliers.Length - 1);
             var winMult   = ProfileService.WinMultipliers[winIndex];
             var remainder = (sTarget * winMult) == 0 ? 1.0 : baseEff / (sTarget * winMult);
 
@@ -406,10 +418,11 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var fullBase = bp != null ? _profileService.GetEffectiveSensitivity(bp) : sBase;
         if (fullBase == 0) fullBase = 1.0;
 
-        var curSens     = Sensitivity ?? 1.0;
-        var curWinIndex = Math.Clamp((WinPointerSpeed ?? 10) - 1, 0, ProfileService.WinMultipliers.Length - 1);
+        // Null fields inherit from Global Default — null profile is a perfect 100% match by definition
+        var curSens     = Sensitivity          ?? GetBaseSens();
+        var curWinIndex = Math.Clamp((WinPointerSpeed ?? GetBaseWinPointerSpeed()) - 1, 0, ProfileService.WinMultipliers.Length - 1);
         var curWinMult  = ProfileService.WinMultipliers[curWinIndex];
-        var curRegCurve = RegistryCurveOverride ?? 1.0;
+        var curRegCurve = RegistryCurveOverride ?? GetBaseRegCurve();
 
         var rawEff  = curSens;
         var winEff  = rawEff  * curWinMult;

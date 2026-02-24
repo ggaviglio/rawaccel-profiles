@@ -3,7 +3,8 @@
 ## 🟢 ACTIVE / NEXT STEPS
 
 ## 🟡 BRAINSTORMING / BACKLOG
-- wildcard matching 
+- make it so global default cant be unchecked? hide match percentage
+- wildcard matching
 - make target manager close if app fully closes.
 - make enter/esc work in target manager
 - cant return to last profile from settings screen, only others
