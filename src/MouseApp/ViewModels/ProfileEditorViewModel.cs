@@ -161,6 +161,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         RefreshAssociationsSummary();
         OpenTargetManagerCommand.NotifyCanExecuteChanged();
+        ApplyAutoOSSync();         // re-run with correct IsGlobalDefault + all loaded values
         RecalculateMatchAccuracy();
     }
 
@@ -180,8 +181,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
         _isSyncing = false;
 
         ApplyAutoOSSync();
+        AutoPersist();             // persist before recalc so GetEffectiveSensitivity sees current model
         RecalculateMatchAccuracy();
-        AutoPersist();
     }
 
     partial void OnSensitivityStringChanged(string? oldValue, string newValue)
@@ -202,16 +203,16 @@ public partial class ProfileEditorViewModel : ViewModelBase
         }
 
         ApplyAutoOSSync();
-        RecalculateMatchAccuracy();
         AutoPersist();
+        RecalculateMatchAccuracy();
     }
 
     partial void OnUseAutoOSSyncChanged(bool oldValue, bool newValue)
     {
         if (_isSyncing) return;
         ApplyAutoOSSync();
-        RecalculateMatchAccuracy();
         AutoPersist();
+        RecalculateMatchAccuracy();
     }
 
     partial void OnWinPointerSpeedChanged(int? oldValue, int? newValue)
@@ -222,20 +223,22 @@ public partial class ProfileEditorViewModel : ViewModelBase
         if (UseAutoOSSync)
         {
             ApplyAutoOSSync();
+            AutoPersist();
+            RecalculateMatchAccuracy();
             return;
         }
 
         ApplyAutoRegSync();
-        RecalculateMatchAccuracy();
         AutoPersist();
+        RecalculateMatchAccuracy();
     }
 
     partial void OnUseAutoRegSyncChanged(bool oldValue, bool newValue)
     {
         if (_isSyncing) return;
         ApplyAutoRegSync();
-        RecalculateMatchAccuracy();
         AutoPersist();
+        RecalculateMatchAccuracy();
     }
 
     partial void OnRegistryCurveOverrideChanged(double? oldValue, double? newValue)
@@ -244,8 +247,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
         _isSyncing = true;
         RegistryCurveString = newValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
         _isSyncing = false;
-        RecalculateMatchAccuracy();
         AutoPersist();
+        RecalculateMatchAccuracy();
     }
 
     partial void OnRegistryCurveStringChanged(string? oldValue, string newValue)
@@ -265,8 +268,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
             _isSyncing = false;
         }
 
-        RecalculateMatchAccuracy();
         AutoPersist();
+        RecalculateMatchAccuracy();
     }
 
     partial void OnSelectedTemplateChanged(string? oldValue, string? newValue)
