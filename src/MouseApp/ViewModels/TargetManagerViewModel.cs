@@ -244,16 +244,71 @@ public partial class TargetManagerViewModel : ViewModelBase
             return;
         }
 
-        int matchCount = 0;
+        // Pass 1 — highlight entries already in the visible Active Windows list.
+        int visibleMatches = 0;
         foreach (var entry in ActiveWindows)
         {
             entry.IsMatched = WindowMatchesAssociations(entry, associations);
-            if (entry.IsMatched) matchCount++;
+            if (entry.IsMatched) visibleMatches++;
         }
 
-        MatchSummary = matchCount == 0
-            ? "No open windows match the current associations."
-            : $"{matchCount} of {ActiveWindows.Count} windows match — profile would activate on any of these.";
+        // Pass 2 — scan ALL windows (including hidden/tray) to catch apps that matched
+        // ProcessWatcher but are currently hidden via ShowWindow(SW_HIDE).
+        // We don't add these to the display list; we just count them for the summary.
+        var visibleHwnds = new HashSet<IntPtr>(ActiveWindows.Select(e => e.Hwnd));
+        int hiddenMatches = 0;
+
+        EnumWindows((hWnd, _) =>
+        {
+            if (visibleHwnds.Contains(hWnd)) return true; // already counted above
+
+            var classSb = new StringBuilder(256);
+            GetClassName(hWnd, classSb, classSb.Capacity);
+            if (_systemNoiseClasses.Contains(classSb.ToString())) return true;
+
+            GetWindowThreadProcessId(hWnd, out var pidUint);
+            if (pidUint == 0 || pidUint > (uint)int.MaxValue) return true;
+
+            string exeName  = string.Empty;
+            string fullPath = string.Empty;
+            try
+            {
+                using var p = Process.GetProcessById((int)pidUint);
+                try
+                {
+                    var fp = p.MainModule?.FileName;
+                    if (!string.IsNullOrEmpty(fp)) { fullPath = fp; exeName = Path.GetFileName(fp).ToLowerInvariant(); }
+                }
+                catch { }
+                if (string.IsNullOrEmpty(exeName))
+                    exeName = (p.ProcessName + ".exe").ToLowerInvariant();
+            }
+            catch { return true; }
+
+            var titleSb = new StringBuilder(256);
+            GetWindowText(hWnd, titleSb, titleSb.Capacity);
+
+            var hiddenEntry = new WindowEntry(hWnd, titleSb.ToString(), exeName, fullPath, classSb.ToString());
+            if (WindowMatchesAssociations(hiddenEntry, associations))
+                hiddenMatches++;
+
+            return true;
+        }, IntPtr.Zero);
+
+        int total = visibleMatches + hiddenMatches;
+        if (total == 0)
+        {
+            MatchSummary = "No open windows match the current associations.";
+        }
+        else
+        {
+            var parts = new List<string>();
+            if (visibleMatches > 0)
+                parts.Add($"{visibleMatches} visible");
+            if (hiddenMatches > 0)
+                parts.Add($"{hiddenMatches} hidden/tray");
+            MatchSummary = $"{string.Join(" + ", parts)} window(s) match — profile would activate on any of these.";
+        }
     }
 
     /// <summary>
