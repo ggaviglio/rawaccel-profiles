@@ -28,10 +28,10 @@ public static class WindowResolver
     [DllImport("user32.dll")]
     public  static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    [DllImport("user32.dll", CharSet = CharSet.Auto, EntryPoint = "GetClassName")]
     private static extern int GetClassNameNative(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    [DllImport("user32.dll", CharSet = CharSet.Auto, EntryPoint = "GetWindowText")]
     private static extern int GetWindowTextNative(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
     // ── Convenience wrappers ──────────────────────────────────────────────────
