@@ -46,6 +46,12 @@
           <ComboBox ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate, Mode=TwoWay}" Width="220" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <CheckBox IsChecked="{Binding UseAutoRawSync, Mode=TwoWay}"
+                    IsEnabled="{Binding IsAutoSyncAvailable}"
+                    Content="Auto Sensitivity"
+                    ToolTip.Tip="Automatically sets raw sensitivity so the Raw Accel Only row equals 100%, compensating for environment changes (screen resolution + DPI)" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <TextBlock Text="Sensitivity:" VerticalAlignment="Center" />
           <TextBox Text="{Binding SensitivityString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120" Watermark="leave empty to skip" />
         </StackPanel>

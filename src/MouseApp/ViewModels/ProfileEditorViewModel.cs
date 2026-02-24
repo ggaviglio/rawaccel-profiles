@@ -47,6 +47,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     private string sensitivityString = string.Empty;
 
+    [ObservableProperty]
+    private bool useAutoRawSync;
+
     // OS-level auto-sync toggle
     [ObservableProperty]
     private bool useAutoOSSync;
@@ -168,6 +171,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             SelectedTemplate      = profile.RawAccelTemplate;
             Sensitivity           = profile.SensMultiplier;
             SensitivityString     = profile.SensMultiplier?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            UseAutoRawSync        = profile.UseAutoRawSync;
             UseAutoOSSync         = profile.UseAutoOSSync;
             WinPointerSpeed       = profile.WinPointerSpeed;
             UseAutoRegSync        = profile.UseAutoRegSync;
@@ -374,6 +378,14 @@ public partial class ProfileEditorViewModel : ViewModelBase
         RecalculateMatchAccuracy();
     }
 
+    partial void OnUseAutoRawSyncChanged(bool oldValue, bool newValue)
+    {
+        if (_isSyncing) return;
+        ApplyAutoOSSync();
+        AutoPersist();
+        RecalculateMatchAccuracy();
+    }
+
     partial void OnSelectedTemplateChanged(string? oldValue, string? newValue)
     {
         AutoPersist();
@@ -440,6 +452,40 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
 
     /// <summary>
+    /// Auto Raw Sensitivity: compute the exact raw sens so that
+    ///   Sens × envScreenRatio × envDpiRatio == S_base
+    /// giving Raw Accel Only = 100% before Win Speed or Reg Bridge contribute.
+    /// </summary>
+    private void ApplyAutoRawSync()
+    {
+        if (IsGlobalDefault || !UseAutoRawSync) return;
+
+        var sBase  = GetBaseSens();
+        var bp     = GetBaseProfile();
+
+        var useEpp     = _editingProfile?.UseEnhancePointerPrecision ?? bp?.UseEnhancePointerPrecision;
+        var logicalDpi = _editingProfile?.TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
+
+        double envScreenRatio = 1.0;
+        var baseW  = GetBaseScreenWidth();
+        var activeW = _editingProfile?.TargetScreenWidth ?? baseW;
+        if (baseW.HasValue && activeW.HasValue && baseW.Value > 0)
+            envScreenRatio = (double)baseW.Value / activeW.Value;
+
+        double envDpiRatio = (useEpp != false) ? (96.0 / logicalDpi) : 1.0;
+
+        // Target: Sens × envScreenRatio × envDpiRatio = S_base
+        var envFactor = envScreenRatio * envDpiRatio;
+        var newSens   = envFactor == 0 ? sBase : sBase / envFactor;
+
+        var wasSyncing = _isSyncing;
+        _isSyncing = true;
+        Sensitivity       = newSens;
+        SensitivityString = newSens.ToString("G6", CultureInfo.InvariantCulture);
+        _isSyncing = wasSyncing;
+    }
+
+    /// <summary>
     /// Auto Win Pointer Speed: choose the WinMult closest to Effective(base) / S_target,
     /// so that S_target × WinMult ≈ Effective(base) — compensating the raw DPI change as
     /// closely as possible using only the integer Win Pointer Speed steps.
@@ -447,6 +493,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
     private void ApplyAutoOSSync()
     {
         if (IsGlobalDefault) { ApplyAutoRegSync(); return; }
+
+        ApplyAutoRawSync(); // runs first — updates Sensitivity before Win Speed target is computed
 
         if (UseAutoOSSync)
         {
@@ -613,6 +661,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         _editingProfile.ProfileName           = ProfileName;
         _editingProfile.RawAccelTemplate      = SelectedTemplate;
         _editingProfile.SensMultiplier        = Sensitivity;
+        _editingProfile.UseAutoRawSync        = UseAutoRawSync;
         _editingProfile.UseAutoOSSync         = UseAutoOSSync;
         _editingProfile.WinPointerSpeed       = WinPointerSpeed;
         _editingProfile.UseAutoRegSync        = UseAutoRegSync;

@@ -38,6 +38,9 @@ public partial class MouseProfile : ObservableObject
     public partial double? SensMultiplier { get; set; }
 
     [ObservableProperty]
+    public partial bool UseAutoRawSync { get; set; }
+
+    [ObservableProperty]
     public partial bool UseAutoOSSync { get; set; }
 
     [ObservableProperty]
