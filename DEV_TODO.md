@@ -3,7 +3,7 @@
 ## 🟢 ACTIVE / NEXT STEPS
 
 ## 🟡 BRAINSTORMING / BACKLOG
-- share the same filter list for target manager and profile editor
+- make target manager close if app fully closes.
 - make enter/esc work in target manager
 - cant return to last profile from settings screen, only others
 - auto hide certain files or folder from ai?

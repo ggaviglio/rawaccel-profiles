@@ -25,8 +25,12 @@ public class ProfileService
     /// </summary>
     private readonly System.Threading.SemaphoreSlim _saveLock = new(1, 1);
 
-    // Lookup table mapping Windows Pointer Speed (1..20) to their effective multipliers
-    private static readonly double[] WinMultipliers =
+    /// <summary>
+    /// Windows Pointer Speed (1–20) → effective mouse multiplier.
+    /// Index 0 = speed 1 (0.03125×), index 9 = speed 10 (1.0×, neutral), index 19 = speed 20 (3.5×).
+    /// Shared with <c>ProfileEditorViewModel</c> — single source of truth.
+    /// </summary>
+    public static readonly double[] WinMultipliers =
     {
         0.03125, 0.0625, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0,
         1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25, 3.5
@@ -159,12 +163,15 @@ public class ProfileService
         var baseProfile = Profiles.FirstOrDefault(p => p.IsGlobalDefault) ?? Profiles.FirstOrDefault();
         if (baseProfile == null) return (activeProfile.WinPointerSpeed, activeProfile.RegistryCurveOverride);
 
-        var sBase = baseProfile.SensMultiplier ?? 1.0;
-        var sTarget = activeProfile.SensMultiplier ?? sBase;
-        var x = sTarget / sBase;
-        if (x == 0) x = 1.0;
+        // Target: Sens_active × WinMult × RegCurve  ==  Effective(GlobalDefault)
+        // → WinMult × RegCurve  ==  Effective(base) / Sens_active
+        var baseEffective = GetEffectiveSensitivity(baseProfile);
+        if (baseEffective == 0) baseEffective = 1.0;
 
-        var targetMultiplier = 1.0 / x; // goal for WinMult * RegMult
+        var sTarget = activeProfile.SensMultiplier ?? 1.0;
+        if (sTarget == 0) sTarget = 1.0;
+
+        var targetMultiplier = baseEffective / sTarget; // goal for WinMult × RegCurve
 
         int? winSpeedResult = activeProfile.WinPointerSpeed;
         double? regResult = activeProfile.RegistryCurveOverride;

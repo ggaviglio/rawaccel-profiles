@@ -14,13 +14,6 @@ namespace MouseApp.ViewModels;
 
 public partial class ProfileEditorViewModel : ViewModelBase
 {
-    // Windows Pointer Speed multiplier table — index 0 = speed 1, index 19 = speed 20
-    private static readonly double[] WinMultipliers =
-    {
-        0.03125, 0.0625, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0,
-        1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25, 3.5
-    };
-
     private readonly TemplateService  _templateService;
     private readonly ProfileService   _profileService;
     private readonly IWindowService   _windowService;
@@ -78,8 +71,15 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     // ── Derived display ─────────────────────────────────────────────────────
     /// <summary>
-    /// Displays (CurrentEffective / GlobalDefaultEffective) x 100 as a percentage.
-    /// 100.00% means the compensation is exact.
+    /// Win-speed-only proof: (Sens × WinMult) / Effective(GlobalDefault) × 100.
+    /// Shows how close Raw Accel + WinPointerSpeed alone gets you, before the registry bridge.
+    /// </summary>
+    [ObservableProperty]
+    private string winSpeedMatchAccuracy = "N/A";
+
+    /// <summary>
+    /// Full proof: (Sens × WinMult × RegCurve) / Effective(GlobalDefault) × 100.
+    /// 100.00% = exact compensation across all three factors.
     /// </summary>
     [ObservableProperty]
     private string matchAccuracy = "N/A";
@@ -291,15 +291,17 @@ public partial class ProfileEditorViewModel : ViewModelBase
     // ── Math Engine ─────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Returns the SensMultiplier of the Global Default profile (fallback: 1.0).
-    /// Used so that auto-sync formulas are relative to S_base, not hardcoded 1.0.
+    /// Returns the full effective sensitivity of the Global Default profile
+    /// (Sens × WinMult × RegCurve), falling back to 1.0 if unavailable or zero.
+    /// This is the correct base for all compensation calculations.
     /// </summary>
-    private double GetBaseSensMultiplier()
+    private double GetBaseEffective()
     {
         var baseProfile = _profileService.Profiles.FirstOrDefault(p => p.IsGlobalDefault)
                        ?? _profileService.Profiles.FirstOrDefault();
-        var sBase = baseProfile?.SensMultiplier ?? 1.0;
-        return sBase == 0 ? 1.0 : sBase;
+        if (baseProfile == null) return 1.0;
+        var eff = _profileService.GetEffectiveSensitivity(baseProfile);
+        return eff == 0 ? 1.0 : eff;
     }
 
     /// <summary>
@@ -311,25 +313,19 @@ public partial class ProfileEditorViewModel : ViewModelBase
     {
         if (UseAutoOSSync)
         {
-            var sBase   = GetBaseSensMultiplier();
+            // Target for WinMult: Effective(base) / S_target
+            // so that S_target × WinMult × RegCurve == Effective(base) at 100% accuracy.
+            var baseEffective = GetBaseEffective();
             var sTarget = Sensitivity ?? 1.0;
             if (sTarget == 0) sTarget = 1.0;
-
-            // x = S_target / S_base  →  target = 1/x = S_base / S_target
-            var x      = sTarget / sBase;
-            if (x == 0) x = 1.0;
-            var target = 1.0 / x;
+            var target = baseEffective / sTarget;
 
             int bestIndex = 0;
             double minDiff = double.MaxValue;
-            for (int i = 0; i < WinMultipliers.Length; i++)
+            for (int i = 0; i < ProfileService.WinMultipliers.Length; i++)
             {
-                double diff = Math.Abs(WinMultipliers[i] - target);
-                if (diff < minDiff)
-                {
-                    minDiff   = diff;
-                    bestIndex = i;
-                }
+                double diff = Math.Abs(ProfileService.WinMultipliers[i] - target);
+                if (diff < minDiff) { minDiff = diff; bestIndex = i; }
             }
 
             _isSyncing = true;
@@ -349,16 +345,14 @@ public partial class ProfileEditorViewModel : ViewModelBase
     {
         if (UseAutoRegSync)
         {
-            var sBase   = GetBaseSensMultiplier();
+            // Same target: Effective(base) / S_target
+            var baseEffective = GetBaseEffective();
             var sTarget = Sensitivity ?? 1.0;
             if (sTarget == 0) sTarget = 1.0;
+            var targetMultiplier = baseEffective / sTarget;
 
-            var x = sTarget / sBase;
-            if (x == 0) x = 1.0;
-            var targetMultiplier = 1.0 / x; // S_base / S_target
-
-            var winIndex  = Math.Clamp((WinPointerSpeed ?? 10) - 1, 0, WinMultipliers.Length - 1);
-            var winMult   = WinMultipliers[winIndex];
+            var winIndex  = Math.Clamp((WinPointerSpeed ?? 10) - 1, 0, ProfileService.WinMultipliers.Length - 1);
+            var winMult   = ProfileService.WinMultipliers[winIndex];
             var remainder = winMult == 0 ? 1.0 : targetMultiplier / winMult;
 
             _isSyncing = true;
@@ -381,26 +375,29 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         if (baseProfile == null)
         {
-            MatchAccuracy = "N/A";
+            WinSpeedMatchAccuracy = "N/A";
+            MatchAccuracy         = "N/A";
             return;
         }
 
         double baseEffective = _profileService.GetEffectiveSensitivity(baseProfile);
         if (baseEffective == 0)
         {
-            MatchAccuracy = "N/A";
+            WinSpeedMatchAccuracy = "N/A";
+            MatchAccuracy         = "N/A";
             return;
         }
 
-        // Build total effective from the editor's current values (all three factors)
-        var curSens      = Sensitivity ?? 1.0;
-        var curWinIndex  = Math.Clamp((WinPointerSpeed ?? 10) - 1, 0, WinMultipliers.Length - 1);
-        var curWinMult   = WinMultipliers[curWinIndex];
-        var curRegCurve  = RegistryCurveOverride ?? 1.0;
-        var curEffective = curSens * curWinMult * curRegCurve;
+        var curSens     = Sensitivity ?? 1.0;
+        var curWinIndex = Math.Clamp((WinPointerSpeed ?? 10) - 1, 0, ProfileService.WinMultipliers.Length - 1);
+        var curWinMult  = ProfileService.WinMultipliers[curWinIndex];
+        var curRegCurve = RegistryCurveOverride ?? 1.0;
 
-        var accuracy = (curEffective / baseEffective) * 100.0;
-        MatchAccuracy = accuracy.ToString("0.00", CultureInfo.InvariantCulture) + "%";
+        var winOnlyEffective = curSens * curWinMult;
+        var fullEffective    = winOnlyEffective * curRegCurve;
+
+        WinSpeedMatchAccuracy = ((winOnlyEffective / baseEffective) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
+        MatchAccuracy         = ((fullEffective    / baseEffective) * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
     }
 
     // ── Auto-Persist ────────────────────────────────────────────────────────
