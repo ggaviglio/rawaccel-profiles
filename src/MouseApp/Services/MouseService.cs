@@ -9,11 +9,6 @@ using Microsoft.Win32;
 
 namespace MouseApp.Services;
 
-public interface IMouseService
-{
-    Task ApplyProfileAsync(MouseProfile profile);
-}
-
 public class MouseService : IMouseService
 {
     private readonly ProfileService _profileService;
