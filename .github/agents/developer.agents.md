@@ -21,3 +21,32 @@ description: 'Feature builder specializing in Avalonia XAML and C#'
 - All new `MouseProfile` fields must be nullable (e.g., `int?`, `double?`, `bool?`). Null means "inherit from Global Default."
 - New ViewModel properties use CommunityToolkit `[ObservableProperty]` + manual `partial void On*Changed` callbacks.
 - Follow the existing null-coalescing fallback pattern: `profile.Field ?? globalDefault.Field ?? hardcodedFallback`.
+
+---
+
+## Pending Task — Remove Admin Status from Settings UI
+
+### What to remove
+
+**`src/MouseApp/Views/SettingsView.axaml`** — delete these two elements:
+
+1. `<TextBlock Text="{Binding AdminStatus}" />`
+2. The "Refresh Admin Status" `<Button>` inside the bottom `<StackPanel>`. After removal the row should contain only the Save button — collapse the wrapping `<StackPanel Orientation="Horizontal" Spacing="8">` to a bare `<Button Content="Save" Command="{Binding SaveCommand}" />`.
+
+**`src/MouseApp/ViewModels/SettingsViewModel.cs`** — delete all of the following:
+
+- `RefreshAdminStatus();` call in the constructor
+- `RefreshAdminStatusCommand = new RelayCommand(...)` assignment in the constructor
+- `public bool IsAdmin { get; private set; }` property
+- `public string AdminStatus => ...` computed property
+- `public IRelayCommand RefreshAdminStatusCommand { get; } = new RelayCommand(() => { });` declaration
+- `private Task RefreshAdminStatusAsync()` method + body
+- `private void RefreshAdminStatus()` method + body
+- Any `using` directives that become unused as a result (check `System.Security.Principal`)
+
+### What NOT to touch
+- `MouseService.cs` has its own `IsRunningAsAdministrator()` static helper and `RestartElevated()` — **do not touch those**.
+- All other settings rows (directory paths, registry bridge toggle, run at startup) stay exactly as-is.
+
+### Verification
+`dotnet build src/MouseApp/MouseApp.csproj -c Debug` — 0 errors. The 8 pre-existing CA1416 warnings in `MouseRegistryBridge.cs` are acceptable.

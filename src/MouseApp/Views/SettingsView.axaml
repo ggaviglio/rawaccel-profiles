@@ -31,12 +31,7 @@
       <TextBlock Text="Run At Startup" VerticalAlignment="Center" />
     </StackPanel>
 
-    <TextBlock Text="{Binding AdminStatus}" />
-
-    <StackPanel Orientation="Horizontal" Spacing="8">
-      <Button Content="Save" Command="{Binding SaveCommand}" />
-      <Button Content="Refresh Admin Status" Command="{Binding RefreshAdminStatusCommand}" />
-    </StackPanel>
+    <Button Content="Save" Command="{Binding SaveCommand}" />
   </StackPanel>
 
 </UserControl>

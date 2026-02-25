@@ -58,7 +58,6 @@ public partial class SettingsViewModel : ViewModelBase
             }
         }
 
-        RefreshAdminStatus();
         // Commands
         SaveCommand = new AsyncRelayCommand(SaveAsync);
         BrowseRawAccelDirCommand = new AsyncRelayCommand(async () =>
@@ -80,7 +79,7 @@ public partial class SettingsViewModel : ViewModelBase
                 _settingsService?.Save();
             }
         });
-        RefreshAdminStatusCommand = new RelayCommand(() => RefreshAdminStatus());
+        
 
         // Listen for external changes
         _settingsService.SettingsChanged += (_, __) => OnExternalSettingsChanged();
@@ -143,10 +142,6 @@ public partial class SettingsViewModel : ViewModelBase
         }
     }
 
-    public bool IsAdmin { get; private set; }
-
-    public string AdminStatus => IsAdmin ? "Running as Admin: Yes" : "Running as Admin: No";
-
     public IAsyncRelayCommand BrowseRawAccelDirCommand { get; } = new AsyncRelayCommand(() => Task.CompletedTask);
 
     public IAsyncRelayCommand BrowseTemplatesDirCommand { get; } = new AsyncRelayCommand(() => Task.CompletedTask);
@@ -165,36 +160,7 @@ public partial class SettingsViewModel : ViewModelBase
         return Task.CompletedTask;
     }
 
-    public IRelayCommand RefreshAdminStatusCommand { get; } = new RelayCommand(() => { });
     
-    private Task RefreshAdminStatusAsync()
-    {
-        RefreshAdminStatus();
-        return Task.CompletedTask;
-    }
-
-    private void RefreshAdminStatus()
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            IsAdmin = false;
-        }
-        else
-        {
-            try
-            {
-                var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
-                var principal = new System.Security.Principal.WindowsPrincipal(identity);
-                IsAdmin = principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
-            }
-            catch
-            {
-                IsAdmin = false;
-            }
-        }
-        OnPropertyChanged(nameof(IsAdmin));
-        OnPropertyChanged(nameof(AdminStatus));
-    }
 
     private void OnExternalSettingsChanged()
     {
