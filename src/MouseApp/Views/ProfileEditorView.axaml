@@ -46,10 +46,12 @@
           <ComboBox ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate, Mode=TwoWay}" Width="220" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <CheckBox IsChecked="{Binding UseAutoRawSync, Mode=TwoWay}"
+          <TextBlock Text="Raw Sens Sync:" VerticalAlignment="Center" Width="110" />
+          <ComboBox ItemsSource="{Binding SyncModeOptions}"
+                    SelectedItem="{Binding RawSyncMode, Mode=TwoWay}"
                     IsEnabled="{Binding IsAutoSyncAvailable}"
-                    Content="Auto Sensitivity"
-                    ToolTip.Tip="Automatically sets raw sensitivity so the Raw Accel Only row equals 100%, compensating for environment changes (screen resolution + DPI)" />
+                    Width="110"
+                    ToolTip.Tip="Auto = computed to keep Raw Accel Only at 100% across env changes; Manual = user-controlled; Skip = inherit from Global Default" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <TextBlock Text="Sensitivity:" VerticalAlignment="Center" />
@@ -60,10 +62,14 @@
       <!-- Windows OS Section -->
       <StackPanel>
         <TextBlock Text="Windows OS" FontSize="14" Opacity="0.8" />
-        <CheckBox IsChecked="{Binding UseAutoOSSync, Mode=TwoWay}"
-                  IsEnabled="{Binding IsAutoSyncAvailable}"
-                  Content="Auto Win Pointer Speed"
-                  ToolTip.Tip="Not available on the Global Default — its Win Pointer Speed is a user-controlled baseline setting" />
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Text="Win Speed Sync:" VerticalAlignment="Center" Width="110" />
+          <ComboBox ItemsSource="{Binding SyncModeOptions}"
+                    SelectedItem="{Binding OSSyncMode, Mode=TwoWay}"
+                    IsEnabled="{Binding IsAutoSyncAvailable}"
+                    Width="110"
+                    ToolTip.Tip="Auto = best-fit Win Pointer Speed to compensate env delta; Manual = user-controlled; Skip = inherit from Global Default" />
+        </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <TextBlock Text="Win Pointer Speed:" VerticalAlignment="Center" />
           <ComboBox ItemsSource="{Binding WinPointerOptions}" SelectedItem="{Binding WinPointerSpeed, Mode=TwoWay}" Width="120" />
@@ -74,10 +80,12 @@
       <StackPanel>
         <TextBlock Text="High-Precision Bridge" FontSize="14" Opacity="0.8" />
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <CheckBox IsChecked="{Binding UseAutoRegSync, Mode=TwoWay}"
+          <TextBlock Text="Reg Bridge Sync:" VerticalAlignment="Center" Width="110" />
+          <ComboBox ItemsSource="{Binding SyncModeOptions}"
+                    SelectedItem="{Binding RegSyncMode, Mode=TwoWay}"
                     IsEnabled="{Binding IsAutoSyncAvailable}"
-                    Content="Auto Registry Bridge"
-                    ToolTip.Tip="Not available on the Global Default" />
+                    Width="110"
+                    ToolTip.Tip="Auto = registry fine-tunes the exact remainder gap; Manual = user-controlled; Skip = inherit from Global Default" />
           <TextBlock Text="Curve Override:" VerticalAlignment="Center" />
           <TextBox Text="{Binding RegistryCurveString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120" Watermark="leave empty to skip" />
         </StackPanel>
@@ -88,13 +96,19 @@
         <TextBlock Text="Environment" FontSize="14" Opacity="0.8" />
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <TextBlock Text="Screen Width:" VerticalAlignment="Center" Width="110" />
-          <TextBox Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                   Width="120" Watermark="e.g. 1920 (leave empty to inherit)" />
+          <ComboBox IsEditable="True"
+                    Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    ItemsSource="{Binding ScreenWidthPresets}"
+                    Width="140"
+                    ToolTip.Tip="Target screen width in pixels. Leave empty to inherit from Global Default." />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <TextBlock Text="Logical DPI:" VerticalAlignment="Center" Width="110" />
-          <TextBox Text="{Binding TargetLogicalDpiString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                   Width="120" Watermark="e.g. 96, 120, 144 (inherit)" />
+          <ComboBox IsEditable="True"
+                    Text="{Binding TargetLogicalDpiString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    ItemsSource="{Binding DpiPresets}"
+                    Width="140"
+                    ToolTip.Tip="Logical DPI (96=100%, 120=125%, 144=150%, 192=200%). Leave empty to inherit from Global Default." />
         </StackPanel>
         <CheckBox IsThreeState="True"
                   IsChecked="{Binding EppOverride, Mode=TwoWay}"

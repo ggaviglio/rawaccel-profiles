@@ -27,7 +27,10 @@ public class RawAccelDriverProvider
         try
         {
             var rawAccelDir = _settingsService.Settings.RawAccelDirectory ?? string.Empty;
-            var writerExePath = _settingsService.Settings.WriterExePath ?? string.Empty;
+            // writer.exe is always derived from the Raw Accel install directory.
+            var writerExePath = string.IsNullOrEmpty(rawAccelDir)
+                ? string.Empty
+                : Path.Combine(rawAccelDir, "writer.exe");
 
             if (!Directory.Exists(rawAccelDir))
                 Directory.CreateDirectory(rawAccelDir);

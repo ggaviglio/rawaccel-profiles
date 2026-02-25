@@ -26,6 +26,14 @@ public sealed class TargetAssociation
     };
 }
 
+/// <summary>
+/// Sync behaviour for a hardware setting (raw sens, Win Pointer Speed, Registry Bridge).
+/// Auto   = value is computed automatically from environment compensation math.
+/// Manual = value is set explicitly by the user.
+/// Skip   = field is left null; the Global Default's value is inherited at apply-time.
+/// </summary>
+public enum SyncMode { Auto, Manual, Skip }
+
 public partial class MouseProfile : ObservableObject
 {
     [ObservableProperty]
@@ -38,16 +46,16 @@ public partial class MouseProfile : ObservableObject
     public partial double? SensMultiplier { get; set; }
 
     [ObservableProperty]
-    public partial bool UseAutoRawSync { get; set; }
+    public partial SyncMode RawSyncMode { get; set; }
 
     [ObservableProperty]
-    public partial bool UseAutoOSSync { get; set; }
+    public partial SyncMode OSSyncMode { get; set; }
 
     [ObservableProperty]
     public partial int? WinPointerSpeed { get; set; }
 
     [ObservableProperty]
-    public partial bool UseAutoRegSync { get; set; }
+    public partial SyncMode RegSyncMode { get; set; }
 
     [ObservableProperty]
     public partial double? RegistryCurveOverride { get; set; }

@@ -80,6 +80,11 @@ public partial class App : Application
                 });
             });
 
+            // Suppress Last-Man-Standing revert during system logoff/shutdown.
+            // ShutdownRequested fires on WM_QUERYENDSESSION — before any other apps are killed.
+            var watcher = _processWatcher;
+            desktop.ShutdownRequested += (_, _) => watcher.NotifySessionEnding();
+
             if (settingsService.Settings?.StartMinimized == true)
             {
                 // Keep app alive independently of window state so the tray icon works.

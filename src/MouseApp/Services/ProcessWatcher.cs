@@ -20,6 +20,13 @@ public interface IProcessWatcher : IDisposable
     /// affects matching (e.g. <see cref="MouseProfile.AutoSwitchEnabled"/>).
     /// </summary>
     void RebuildIndex();
+
+    /// <summary>
+    /// Suppresses Last-Man-Standing reverts for the remainder of the process lifetime.
+    /// Call when the application is shutting down (logoff, reboot, or normal exit) so that
+    /// matched apps closing before MouseApp does not revert registry settings to Global Default.
+    /// </summary>
+    void NotifySessionEnding();
 }
 
 /// <summary>
@@ -48,6 +55,19 @@ public sealed class ProcessWatcher : IProcessWatcher
     private IntPtr _hook = IntPtr.Zero;
 
     private MouseProfile? _currentProfile;
+    /// <summary>Set to true when Windows signals a logoff/shutdown — suppresses Last-Man-Standing revert.</summary>
+    private bool _sessionEnding;
+
+    /// <summary>
+    /// Call this when the application is shutting down (logoff, reboot, or normal exit).
+    /// Prevents Last-Man-Standing from reverting registry settings to the Global Default
+    /// just because a matched app closes before MouseApp does during system shutdown.
+    /// </summary>
+    public void NotifySessionEnding()
+    {
+        _sessionEnding = true;
+        Debug.WriteLine("[ProcessWatcher] NotifySessionEnding — Last-Man-Standing revert suppressed.");
+    }
     /// <summary>
     /// HWNDs that have fired a foreground-match event for the current profile.
     /// Only destroy events for HWNDs in this set trigger the Last-Man-Standing scan,
@@ -233,6 +253,10 @@ public sealed class ProcessWatcher : IProcessWatcher
 
     private void HandleDestroy(IntPtr hwnd)
     {
+        // Suppress during logoff/shutdown — we don't want to revert registry settings
+        // to the Global Default just because a matched app closes before MouseApp does.
+        if (_sessionEnding) return;
+
         // Only process destroy for HWNDs we actually saw as a foreground window.
         // This filters IME windows, MSCTFIME UI, CicMarshalWnd, and other auxiliary
         // child HWNDs that share the process exe but are never the foreground window.
@@ -331,9 +355,10 @@ public sealed class ProcessWatcher : IProcessWatcher
     /// </summary>
     private void OnProfilePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MouseProfile.AutoSwitchEnabled))
+        if (e.PropertyName == nameof(MouseProfile.AutoSwitchEnabled) ||
+            e.PropertyName == nameof(MouseProfile.TargetAssociations))
         {
-            Debug.WriteLine($"[ProcessWatcher] AutoSwitchEnabled changed on '{(sender as MouseProfile)?.ProfileName}' \u2014 rebuilding index.");
+            Debug.WriteLine($"[ProcessWatcher] {e.PropertyName} changed on '{(sender as MouseProfile)?.ProfileName}' — rebuilding index.");
             RebuildIndex();
         }
     }

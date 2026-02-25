@@ -52,8 +52,8 @@ public class ProfileService
             {
                 ProfileName        = "Global Default",
                 SensMultiplier     = 1.0,
-                UseAutoOSSync      = false, // Global Default is the reference — auto-sync has no meaning here
-                UseAutoRegSync     = false,
+                OSSyncMode         = SyncMode.Skip, // Global Default is the reference — auto-sync has no meaning here
+                RegSyncMode        = SyncMode.Skip,
                 IsGlobalDefault    = true,
                 TargetAssociations = new()
             };
@@ -73,8 +73,8 @@ public class ProfileService
             {
                 ProfileName        = "Global Default",
                 SensMultiplier     = 1.0,
-                UseAutoOSSync      = false,
-                UseAutoRegSync     = false,
+                OSSyncMode         = SyncMode.Skip,
+                RegSyncMode        = SyncMode.Skip,
                 IsGlobalDefault    = true,
                 TargetAssociations = new()
             });
@@ -134,18 +134,18 @@ public class ProfileService
             g.IsGlobalDefault = false;
 
         // The Global Default must never have auto-computed OS compensation values.
-        // If UseAutoOSSync/UseAutoRegSync were previously true, they may have written
+        // If OSSyncMode/RegSyncMode were previously Auto, they may have written
         // a non-neutral WinPointerSpeed or RegistryCurveOverride into the stored profile,
         // poisoning Effective(base) for all proof-of-match calculations on other profiles.
         var gd = globals[0];
-        if (gd.UseAutoOSSync)
+        if (gd.OSSyncMode == SyncMode.Auto)
         {
-            gd.UseAutoOSSync   = false;
+            gd.OSSyncMode      = SyncMode.Skip;
             gd.WinPointerSpeed = null; // reset to neutral (10 = 1.0×)
         }
-        if (gd.UseAutoRegSync)
+        if (gd.RegSyncMode == SyncMode.Auto)
         {
-            gd.UseAutoRegSync        = false;
+            gd.RegSyncMode           = SyncMode.Skip;
             gd.RegistryCurveOverride = null; // reset to neutral (1.0×)
         }
     }
@@ -239,7 +239,7 @@ public class ProfileService
         double? regResult = activeProfile.RegistryCurveOverride;
 
         // STEP 1: Choose best Windows Pointer Speed
-        if (activeProfile.UseAutoOSSync)
+        if (activeProfile.OSSyncMode == SyncMode.Auto)
         {
             int bestIndex  = 0;
             double minDiff = double.MaxValue;
@@ -257,7 +257,7 @@ public class ProfileService
 
         // STEP 2: RegCurve = Effective(base) / (S_target × WinMult_chosen)
         // so that S_target × WinMult × RegCurve == Effective(base) exactly.
-        if (activeProfile.UseAutoRegSync)
+        if (activeProfile.RegSyncMode == SyncMode.Auto)
         {
             var currentWinMult = WinMultipliers[Math.Clamp((winSpeedResult ?? 10) - 1, 0, WinMultipliers.Length - 1)];
             var raw = (sTarget * currentWinMult) == 0 ? 1.0 : baseEffectiveSens / (sTarget * currentWinMult);

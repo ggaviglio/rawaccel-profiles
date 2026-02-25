@@ -71,12 +71,12 @@ public partial class SettingsViewModel : ViewModelBase
             }
         });
 
-        BrowseWriterExeCommand = new AsyncRelayCommand(async () =>
+        BrowseTemplatesDirCommand = new AsyncRelayCommand(async () =>
         {
-            var path = await (_storageService?.PickFileAsync("Select writer.exe") ?? Task.FromResult<string?>(null));
+            var path = await (_storageService?.PickFolderAsync() ?? Task.FromResult<string?>(null));
             if (!string.IsNullOrEmpty(path))
             {
-                WriterExePath = path;
+                TemplatesDirectory = path;
                 _settingsService?.Save();
             }
         });
@@ -99,14 +99,14 @@ public partial class SettingsViewModel : ViewModelBase
         }
     }
 
-    public string WriterExePath
+    public string TemplatesDirectory
     {
-        get => Settings.WriterExePath ?? string.Empty;
+        get => Settings.TemplatesDirectory ?? string.Empty;
         set
         {
-            if (value == Settings.WriterExePath) return;
-            Settings.WriterExePath = value ?? string.Empty;
-            OnPropertyChanged(nameof(WriterExePath));
+            if (value == Settings.TemplatesDirectory) return;
+            Settings.TemplatesDirectory = value ?? string.Empty;
+            OnPropertyChanged(nameof(TemplatesDirectory));
         }
     }
 
@@ -149,7 +149,7 @@ public partial class SettingsViewModel : ViewModelBase
 
     public IAsyncRelayCommand BrowseRawAccelDirCommand { get; } = new AsyncRelayCommand(() => Task.CompletedTask);
 
-    public IAsyncRelayCommand BrowseWriterExeCommand { get; } = new AsyncRelayCommand(() => Task.CompletedTask);
+    public IAsyncRelayCommand BrowseTemplatesDirCommand { get; } = new AsyncRelayCommand(() => Task.CompletedTask);
 
     public IAsyncRelayCommand SaveCommand { get; } = new AsyncRelayCommand(() => Task.CompletedTask);
 
@@ -201,12 +201,12 @@ public partial class SettingsViewModel : ViewModelBase
         var s = _settingsService?.Settings;
         if (s == null) return;
         Settings.RawAccelDirectory = s.RawAccelDirectory;
-        Settings.WriterExePath = s.WriterExePath;
+        Settings.TemplatesDirectory = s.TemplatesDirectory;
         Settings.EnableRegistryBridge = s.EnableRegistryBridge;
         Settings.RunAtStartup = s.RunAtStartup;
         Settings.StartMinimized = s.StartMinimized;
         OnPropertyChanged(nameof(RawAccelDirectory));
-        OnPropertyChanged(nameof(WriterExePath));
+        OnPropertyChanged(nameof(TemplatesDirectory));
         OnPropertyChanged(nameof(EnableRegistryBridge));
         OnPropertyChanged(nameof(RunAtStartup));
         OnPropertyChanged(nameof(StartMinimized));

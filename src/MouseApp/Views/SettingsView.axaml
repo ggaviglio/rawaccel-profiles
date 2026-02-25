@@ -17,8 +17,8 @@
     </StackPanel>
 
     <StackPanel Orientation="Horizontal" Spacing="6">
-      <TextBox Width="420" Text="{Binding WriterExePath, Mode=TwoWay}" />
-      <Button Content="Browse" Command="{Binding BrowseWriterExeCommand}" />
+      <TextBox Width="420" Watermark="Curves folder (default: curves\ next to app)" Text="{Binding TemplatesDirectory, Mode=TwoWay}" />
+      <Button Content="Browse" Command="{Binding BrowseTemplatesDirCommand}" />
     </StackPanel>
 
     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">

@@ -33,6 +33,15 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>Null entry allows a sparse (unset) selection at the top of the list.</summary>
     public ObservableCollection<int?> WinPointerOptions { get; } = new();
 
+    /// <summary>Options list for all three sync-mode ComboBoxes.</summary>
+    public SyncMode[] SyncModeOptions { get; } = { SyncMode.Auto, SyncMode.Manual, SyncMode.Skip };
+
+    /// <summary>Preset numeric DPI values for the editable LogicalDpi ComboBox.</summary>
+    public string[] DpiPresets { get; } = { "96", "120", "144", "168", "192", "240", "288" };
+
+    /// <summary>Common screen widths for the editable ScreenWidth ComboBox.</summary>
+    public string[] ScreenWidthPresets { get; } = { "1280", "1366", "1440", "1600", "1920", "2560", "3440", "3840", "5120", "7680" };
+
     // ── Profile fields ──────────────────────────────────────────────────────
     [ObservableProperty]
     private string profileName = string.Empty;
@@ -47,19 +56,18 @@ public partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     private string sensitivityString = string.Empty;
 
+    // Three-way sync modes: Auto, Manual, Skip
     [ObservableProperty]
-    private bool useAutoRawSync;
+    private SyncMode rawSyncMode;
 
-    // OS-level auto-sync toggle
     [ObservableProperty]
-    private bool useAutoOSSync;
+    private SyncMode oSSyncMode;
 
     [ObservableProperty]
     private int? winPointerSpeed;
 
-    // Registry Bridge auto-sync toggle
     [ObservableProperty]
-    private bool useAutoRegSync;
+    private SyncMode regSyncMode;
 
     [ObservableProperty]
     private double? registryCurveOverride;
@@ -171,10 +179,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
             SelectedTemplate      = profile.RawAccelTemplate;
             Sensitivity           = profile.SensMultiplier;
             SensitivityString     = profile.SensMultiplier?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
-            UseAutoRawSync        = profile.UseAutoRawSync;
-            UseAutoOSSync         = profile.UseAutoOSSync;
+            RawSyncMode           = profile.RawSyncMode;
+            OSSyncMode            = profile.OSSyncMode;
             WinPointerSpeed       = profile.WinPointerSpeed;
-            UseAutoRegSync        = profile.UseAutoRegSync;
+            RegSyncMode           = profile.RegSyncMode;
             RegistryCurveOverride = profile.RegistryCurveOverride;
             RegistryCurveString   = profile.RegistryCurveOverride?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             TargetScreenWidth       = profile.TargetScreenWidth;
@@ -238,9 +246,15 @@ public partial class ProfileEditorViewModel : ViewModelBase
         RecalculateMatchAccuracy();
     }
 
-    partial void OnUseAutoOSSyncChanged(bool oldValue, bool newValue)
+    partial void OnOSSyncModeChanged(SyncMode oldValue, SyncMode newValue)
     {
         if (_isSyncing) return;
+        if (newValue == SyncMode.Skip)
+        {
+            _isSyncing = true;
+            WinPointerSpeed = null;
+            _isSyncing = false;
+        }
         ApplyAutoOSSync();
         AutoPersist();
         RecalculateMatchAccuracy();
@@ -251,7 +265,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         if (_isSyncing) return;
 
         // Manual speed edit while AutoOSSync is on -> honour auto, ignore manual input
-        if (UseAutoOSSync)
+        if (OSSyncMode == SyncMode.Auto)
         {
             ApplyAutoOSSync();
             AutoPersist();
@@ -264,9 +278,16 @@ public partial class ProfileEditorViewModel : ViewModelBase
         RecalculateMatchAccuracy();
     }
 
-    partial void OnUseAutoRegSyncChanged(bool oldValue, bool newValue)
+    partial void OnRegSyncModeChanged(SyncMode oldValue, SyncMode newValue)
     {
         if (_isSyncing) return;
+        if (newValue == SyncMode.Skip)
+        {
+            _isSyncing = true;
+            RegistryCurveOverride = null;
+            RegistryCurveString   = string.Empty;
+            _isSyncing = false;
+        }
         ApplyAutoRegSync();
         AutoPersist();
         RecalculateMatchAccuracy();
@@ -378,9 +399,16 @@ public partial class ProfileEditorViewModel : ViewModelBase
         RecalculateMatchAccuracy();
     }
 
-    partial void OnUseAutoRawSyncChanged(bool oldValue, bool newValue)
+    partial void OnRawSyncModeChanged(SyncMode oldValue, SyncMode newValue)
     {
         if (_isSyncing) return;
+        if (newValue == SyncMode.Skip)
+        {
+            _isSyncing = true;
+            Sensitivity       = null;
+            SensitivityString = string.Empty;
+            _isSyncing = false;
+        }
         ApplyAutoOSSync();
         AutoPersist();
         RecalculateMatchAccuracy();
@@ -458,7 +486,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// </summary>
     private void ApplyAutoRawSync()
     {
-        if (IsGlobalDefault || !UseAutoRawSync) return;
+        if (IsGlobalDefault || RawSyncMode != SyncMode.Auto) return;
 
         var sBase  = GetBaseSens();
         var bp     = GetBaseProfile();
@@ -496,7 +524,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         ApplyAutoRawSync(); // runs first — updates Sensitivity before Win Speed target is computed
 
-        if (UseAutoOSSync)
+        if (OSSyncMode == SyncMode.Auto)
         {
             var bp      = GetBaseProfile();
             var baseEff = bp != null ? _profileService.GetEffectiveSensitivity(bp) : GetBaseSens();
@@ -545,7 +573,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     {
         if (IsGlobalDefault) return;
 
-        if (UseAutoRegSync)
+        if (RegSyncMode == SyncMode.Auto)
         {
             var bp      = GetBaseProfile();
             var baseEff = bp != null ? _profileService.GetEffectiveSensitivity(bp) : 1.0;
@@ -661,10 +689,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
         _editingProfile.ProfileName           = ProfileName;
         _editingProfile.RawAccelTemplate      = SelectedTemplate;
         _editingProfile.SensMultiplier        = Sensitivity;
-        _editingProfile.UseAutoRawSync        = UseAutoRawSync;
-        _editingProfile.UseAutoOSSync         = UseAutoOSSync;
+        _editingProfile.RawSyncMode           = RawSyncMode;
+        _editingProfile.OSSyncMode            = OSSyncMode;
         _editingProfile.WinPointerSpeed       = WinPointerSpeed;
-        _editingProfile.UseAutoRegSync        = UseAutoRegSync;
+        _editingProfile.RegSyncMode           = RegSyncMode;
         _editingProfile.RegistryCurveOverride = RegistryCurveOverride;
         _editingProfile.TargetScreenWidth             = TargetScreenWidth;
         _editingProfile.TargetLogicalDpi              = TargetLogicalDpi;
@@ -732,9 +760,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
                 ProfileName           = ProfileName,
                 RawAccelTemplate      = SelectedTemplate,
                 SensMultiplier        = Sensitivity,
-                UseAutoOSSync         = UseAutoOSSync,
+                OSSyncMode            = OSSyncMode,
                 WinPointerSpeed       = WinPointerSpeed,
-                UseAutoRegSync        = UseAutoRegSync,
+                RegSyncMode           = RegSyncMode,
                 RegistryCurveOverride = RegistryCurveOverride,
                 IsGlobalDefault       = false, // new profiles are never the default on creation
                 TargetAssociations    = new()
