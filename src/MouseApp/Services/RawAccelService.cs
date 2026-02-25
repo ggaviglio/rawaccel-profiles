@@ -5,11 +5,11 @@ using System.Threading.Tasks;
 
 namespace MouseApp.Services;
 
-public class RawAccelDriverProvider
+public class RawAccelService
 {
     private readonly SettingsService _settingsService;
 
-    public RawAccelDriverProvider(SettingsService settingsService)
+    public RawAccelService(SettingsService settingsService)
     {
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
     }
@@ -54,7 +54,7 @@ public class RawAccelDriverProvider
 
                 if (sensMultiplier.HasValue)
                 {
-                    // Target profiles[0].sensitivity — the path Raw Accel actually reads
+                    // Target profiles[0]."Sensitivity multiplier" — the path Raw Accel actually reads
                     try
                     {
                         var json = await File.ReadAllTextAsync(dest).ConfigureAwait(false);
@@ -120,8 +120,8 @@ public class RawAccelDriverProvider
 
     /// <summary>
     /// Mirrors <c>TemplateService.ResolveTemplatesDirectory()</c>.
-    /// Returns the configured templates path or the portable default (<AppDir>\curves).
-    /// Kept local so <see cref="RawAccelDriverProvider"/> has no dependency on TemplateService.
+    /// Returns the configured templates path or the portable default (&lt;AppDir&gt;\curves).
+    /// Kept local so <see cref="RawAccelService"/> has no dependency on TemplateService.
     /// </summary>
     private string ResolveTemplatesDirectory()
     {

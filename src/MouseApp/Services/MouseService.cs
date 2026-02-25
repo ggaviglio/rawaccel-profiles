@@ -12,11 +12,11 @@ namespace MouseApp.Services;
 public class MouseService : IMouseService
 {
     private readonly ProfileService _profileService;
-    private readonly RawAccelDriverProvider _rawAccelProvider;
+    private readonly RawAccelService _rawAccelProvider;
     /// <summary>Last hardware state written — prevents redundant registry/SPI writes when nothing has changed.</summary>
     private (int? winSpeed, double? regResult, string? template, double? sens, bool? epp) _lastAppliedState;
 
-    public MouseService(ProfileService profileService, RawAccelDriverProvider rawAccelProvider)
+    public MouseService(ProfileService profileService, RawAccelService rawAccelProvider)
     {
         _profileService = profileService ?? throw new ArgumentNullException(nameof(profileService));
         _rawAccelProvider = rawAccelProvider ?? throw new ArgumentNullException(nameof(rawAccelProvider));

@@ -51,7 +51,7 @@ public partial class App : Application
             var mainVm = new ViewModels.MainWindowViewModel(navigationService, profileEditorVm, settingsVm, profileService);
 
             // Hardware apply service
-            var rawAccelProvider = new Services.RawAccelDriverProvider(settingsService);
+            var rawAccelProvider = new Services.RawAccelService(settingsService);
             _mouseService = new Services.MouseService(profileService, rawAccelProvider);
             var mouseService = _mouseService;
 
