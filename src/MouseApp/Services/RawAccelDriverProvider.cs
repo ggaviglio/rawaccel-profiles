@@ -37,10 +37,20 @@ public class RawAccelDriverProvider
 
             var dest = Path.Combine(rawAccelDir, "settings.json");
 
-            if (!string.IsNullOrEmpty(templatePath) && File.Exists(templatePath))
+            // Resolve bare filename → full path under TemplatesDirectory.
+            // profile.RawAccelTemplate stores only the filename, never a rooted path.
+            string? resolvedTemplatePath = null;
+            if (!string.IsNullOrEmpty(templatePath))
+            {
+                resolvedTemplatePath = Path.IsPathRooted(templatePath)
+                    ? templatePath
+                    : Path.Combine(ResolveTemplatesDirectory(), templatePath);
+            }
+
+            if (!string.IsNullOrEmpty(resolvedTemplatePath) && File.Exists(resolvedTemplatePath))
             {
                 // Copy template to destination
-                File.Copy(templatePath, dest, true);
+                File.Copy(resolvedTemplatePath, dest, overwrite: true);
 
                 if (sensMultiplier.HasValue)
                 {
@@ -52,7 +62,7 @@ public class RawAccelDriverProvider
                         var profiles = root?["profiles"]?.AsArray();
                         if (profiles != null && profiles.Count > 0)
                         {
-                            profiles[0]!["sensitivity"] = System.Text.Json.Nodes.JsonValue.Create(sensMultiplier.Value);
+                            profiles[0]!["Sensitivity multiplier"] = System.Text.Json.Nodes.JsonValue.Create(sensMultiplier.Value);
                         }
                         var outJson = root?.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }) ?? json;
                         await File.WriteAllTextAsync(dest, outJson).ConfigureAwait(false);
@@ -61,6 +71,26 @@ public class RawAccelDriverProvider
                     {
                         // swallow any patch errors and continue
                     }
+                }
+            }
+            else if (sensMultiplier.HasValue && File.Exists(dest))
+            {
+                // No template swap — just patch sensitivity into the existing settings.json.
+                try
+                {
+                    var json = await File.ReadAllTextAsync(dest).ConfigureAwait(false);
+                    var root = System.Text.Json.Nodes.JsonNode.Parse(json);
+                    var profiles = root?["profiles"]?.AsArray();
+                    if (profiles != null && profiles.Count > 0)
+                    {
+                        profiles[0]!["Sensitivity multiplier"] = System.Text.Json.Nodes.JsonValue.Create(sensMultiplier.Value);
+                    }
+                    var outJson = root?.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }) ?? json;
+                    await File.WriteAllTextAsync(dest, outJson).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // swallow any patch errors and continue
                 }
             }
 
@@ -86,5 +116,18 @@ public class RawAccelDriverProvider
         {
             // best-effort: do not crash the app
         }
+    }
+
+    /// <summary>
+    /// Mirrors <c>TemplateService.ResolveTemplatesDirectory()</c>.
+    /// Returns the configured templates path or the portable default (<AppDir>\curves).
+    /// Kept local so <see cref="RawAccelDriverProvider"/> has no dependency on TemplateService.
+    /// </summary>
+    private string ResolveTemplatesDirectory()
+    {
+        var configured = _settingsService.Settings?.TemplatesDirectory;
+        return !string.IsNullOrWhiteSpace(configured)
+            ? configured
+            : Path.Combine(AppContext.BaseDirectory, "curves");
     }
 }

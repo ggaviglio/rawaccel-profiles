@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -17,6 +18,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     private readonly TemplateService  _templateService;
     private readonly ProfileService   _profileService;
     private readonly IWindowService   _windowService;
+    private readonly SettingsService  _settingsService;
 
     /// <summary>Injected after construction via <see cref="WireMouseService"/>. Null until wired.</summary>
     private IMouseService? _mouseService;
@@ -26,6 +28,17 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     /// <summary>Guards against circular property-changed cascades during auto-sync.</summary>
     private bool _isSyncing;
+
+    // ── Template management panel state ───────────────────────────────────
+    [ObservableProperty] private bool   isImportPanelVisible;
+    [ObservableProperty] private bool   isDuplicatePanelVisible;
+    [ObservableProperty] private string pendingTemplateName = string.Empty;
+
+    partial void OnPendingTemplateNameChanged(string value)
+    {
+        ConfirmImportCommand.NotifyCanExecuteChanged();
+        ConfirmDuplicateCommand.NotifyCanExecuteChanged();
+    }
 
     // ── Collections exposed to the View ────────────────────────────────────
     public ObservableCollection<string> Templates { get; } = new();
@@ -144,9 +157,18 @@ public partial class ProfileEditorViewModel : ViewModelBase
     public IAsyncRelayCommand ApplyCommand             { get; }
     public IAsyncRelayCommand OpenTargetManagerCommand { get; }
 
+    // Template management quick-actions
+    public IRelayCommand ImportCurrentSettingsCommand { get; }
+    public IRelayCommand ConfirmImportCommand         { get; }
+    public IRelayCommand DuplicateTemplateCommand     { get; }
+    public IRelayCommand ConfirmDuplicateCommand      { get; }
+    public IRelayCommand DeleteTemplateCommand        { get; }
+    public IRelayCommand CancelTemplateActionCommand  { get; }
+
     // ── Constructor ─────────────────────────────────────────────────────────
-    public ProfileEditorViewModel(TemplateService templateService, ProfileService profileService, IWindowService windowService)
+    public ProfileEditorViewModel(SettingsService settingsService, TemplateService templateService, ProfileService profileService, IWindowService windowService)
     {
+        _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
         _templateService = templateService ?? throw new ArgumentNullException(nameof(templateService));
         _profileService  = profileService  ?? throw new ArgumentNullException(nameof(profileService));
         _windowService   = windowService   ?? throw new ArgumentNullException(nameof(windowService));
@@ -163,6 +185,13 @@ public partial class ProfileEditorViewModel : ViewModelBase
         ApplyCommand             = new AsyncRelayCommand(ExecuteApplyAsync, () => _editingProfile != null);
         OpenTargetManagerCommand = new AsyncRelayCommand(ExecuteOpenTargetManagerAsync,
                                        () => _editingProfile != null && !IsGlobalDefault);
+
+        ImportCurrentSettingsCommand = new RelayCommand(ExecuteImportCurrentSettings);
+        ConfirmImportCommand         = new RelayCommand(ExecuteConfirmImport,    () => !string.IsNullOrWhiteSpace(PendingTemplateName));
+        DuplicateTemplateCommand     = new RelayCommand(ExecuteDuplicateTemplate, () => SelectedTemplate != null);
+        ConfirmDuplicateCommand      = new RelayCommand(ExecuteConfirmDuplicate,  () => !string.IsNullOrWhiteSpace(PendingTemplateName));
+        DeleteTemplateCommand        = new RelayCommand(ExecuteDeleteTemplate,    () => SelectedTemplate != null);
+        CancelTemplateActionCommand  = new RelayCommand(() => { IsImportPanelVisible = false; IsDuplicatePanelVisible = false; });
     }
 
     // ── Profile loading ─────────────────────────────────────────────────────
@@ -417,6 +446,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
     partial void OnSelectedTemplateChanged(string? oldValue, string? newValue)
     {
         AutoPersist();
+        DuplicateTemplateCommand.NotifyCanExecuteChanged();
+        DeleteTemplateCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnIsGlobalDefaultChanged(bool oldValue, bool newValue)
@@ -773,6 +804,54 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         AutoPersist();
         await Task.CompletedTask;
+    }
+
+    // ── Template management execute methods ─────────────────────────────────
+
+    private void ExecuteImportCurrentSettings()
+    {
+        PendingTemplateName     = "settings";
+        IsImportPanelVisible    = true;
+        IsDuplicatePanelVisible = false;
+    }
+
+    private void ExecuteConfirmImport()
+    {
+        var rawAccelDir = _settingsService.Settings?.RawAccelDirectory;
+        if (string.IsNullOrEmpty(rawAccelDir)) return;
+        var sourcePath = Path.Combine(rawAccelDir, "settings.json");
+        _templateService.ImportTemplate(sourcePath, PendingTemplateName);
+        IsImportPanelVisible = false;
+        PendingTemplateName  = string.Empty;
+    }
+
+    private void ExecuteDuplicateTemplate()
+    {
+        var baseName = SelectedTemplate?.Replace(".json", string.Empty,
+                           StringComparison.OrdinalIgnoreCase) ?? "template";
+        PendingTemplateName     = baseName + " - copy";
+        IsDuplicatePanelVisible = true;
+        IsImportPanelVisible    = false;
+    }
+
+    private void ExecuteConfirmDuplicate()
+    {
+        if (SelectedTemplate == null) return;
+        var result = _templateService.DuplicateTemplate(SelectedTemplate, PendingTemplateName);
+        if (result != null)
+            SelectedTemplate = result;
+        IsDuplicatePanelVisible = false;
+        PendingTemplateName     = string.Empty;
+    }
+
+    private void ExecuteDeleteTemplate()
+    {
+        if (SelectedTemplate == null) return;
+        var toDelete = SelectedTemplate;
+        _templateService.DeleteTemplate(toDelete);
+        // RefreshTemplates fires via TemplatesChanged; clear selection if it still references deleted item
+        if (SelectedTemplate == toDelete)
+            SelectedTemplate = null;
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

@@ -45,7 +45,7 @@ public partial class App : Application
 
             // Create feature view-models
             var settingsVm      = new ViewModels.SettingsViewModel(settingsService, storageService);
-            var profileEditorVm = new ViewModels.ProfileEditorViewModel(templateService, profileService, windowService);
+            var profileEditorVm = new ViewModels.ProfileEditorViewModel(settingsService, templateService, profileService, windowService);
 
             // Main VM wired to navigation
             var mainVm = new ViewModels.MainWindowViewModel(navigationService, profileEditorVm, settingsVm, profileService);

@@ -41,9 +41,34 @@
       <!-- Raw Accel Section -->
       <StackPanel>
         <TextBlock Text="Raw Accel" FontSize="14" Opacity="0.8" />
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <!-- Template row + quick-action buttons -->
+        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
           <TextBlock Text="Template:" VerticalAlignment="Center" />
-          <ComboBox ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate, Mode=TwoWay}" Width="220" />
+          <ComboBox ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate, Mode=TwoWay}" Width="200" />
+          <Button Content="📥" Padding="6,2" Command="{Binding ImportCurrentSettingsCommand}"
+                  ToolTip.Tip="Import current Raw Accel settings.json into template library" />
+          <Button Content="⧉"  Padding="6,2" Command="{Binding DuplicateTemplateCommand}"
+                  ToolTip.Tip="Duplicate selected template under a new name" />
+          <Button Content="🗑"  Padding="6,2" Command="{Binding DeleteTemplateCommand}"
+                  ToolTip.Tip="Delete selected template from library" />
+        </StackPanel>
+        <!-- Import name entry (visible when ImportCurrentSettingsCommand is in progress) -->
+        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0"
+                    IsVisible="{Binding IsImportPanelVisible}">
+          <TextBlock Text="Save as:" VerticalAlignment="Center" Width="60" />
+          <TextBox Text="{Binding PendingTemplateName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                   Width="180" Watermark="template name" />
+          <Button Content="Save" Padding="8,2" Command="{Binding ConfirmImportCommand}" />
+          <Button Content="✕"    Padding="8,2" Command="{Binding CancelTemplateActionCommand}" />
+        </StackPanel>
+        <!-- Duplicate name entry -->
+        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0"
+                    IsVisible="{Binding IsDuplicatePanelVisible}">
+          <TextBlock Text="New name:" VerticalAlignment="Center" Width="60" />
+          <TextBox Text="{Binding PendingTemplateName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                   Width="180" Watermark="new template name" />
+          <Button Content="Save" Padding="8,2" Command="{Binding ConfirmDuplicateCommand}" />
+          <Button Content="✕"    Padding="8,2" Command="{Binding CancelTemplateActionCommand}" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <TextBlock Text="Raw Sens Sync:" VerticalAlignment="Center" Width="110" />
