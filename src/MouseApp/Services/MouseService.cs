@@ -94,7 +94,31 @@ public class MouseService : IMouseService
         _lastAppliedState = newState;
         Debug.WriteLine($"[MouseService] Applying profile '{profile.ProfileName}' to hardware.");
 
-        // Apply registry bridge (fine-tune) if available
+        // Apply discrete Windows pointer speed (coarse) FIRST so that ApplyRegistryBridge reads
+        // the correct live value from the registry when it divides out the pointer speed multiplier.
+        // If winSpeed is null (profile skips it), the user's existing registry value is preserved
+        // and the bridge will correctly cancel whatever speed is currently active.
+        if (winSpeed.HasValue)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    // SPI_SETMOUSESPEED: speed goes in pvParam as an integer value, uiParam is ignored.
+                    var speed = Math.Clamp(winSpeed.Value, 1, 20);
+                    Debug.WriteLine($"[MouseService] Setting WinPointerSpeed = {speed}");
+                    bool ok = SystemParametersInfo(SPI_SETMOUSESPEED, 0, new IntPtr(speed), SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+                    Debug.WriteLine($"[MouseService] SPI_SETMOUSESPEED result = {ok}");
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+        }
+
+        // Apply registry bridge (fine-tune) — runs after pointer speed is committed so the live
+        // registry value it reads is already the correct one for this profile.
         if (regResult.HasValue && !double.IsNaN(regResult.Value) && !double.IsInfinity(regResult.Value))
         {
             if (OperatingSystem.IsWindows())
@@ -113,26 +137,6 @@ public class MouseService : IMouseService
         else
         {
             Debug.WriteLine($"[MouseService] Registry bridge skipped — regResult={regResult}");
-        }
-
-        // Apply discrete Windows pointer speed (coarse) if available
-        if (winSpeed.HasValue)
-        {
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    // SPI_SETMOUSESPEED: speed goes in pvParam as an integer value, uiParam is ignored.
-                    var speed = Math.Clamp(winSpeed.Value, 1, 20);
-                    Debug.WriteLine($"[MouseService] Setting WinPointerSpeed = {speed}");
-                    bool ok = SystemParametersInfo(SPI_SETMOUSESPEED, 0, new IntPtr(speed), SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
-                    Debug.WriteLine($"[MouseService] SPI_SETMOUSESPEED result = {ok}");
-                }
-                catch
-                {
-                    // ignore
-                }
-            }
         }
 
         // Apply Raw Accel template and sensitivity

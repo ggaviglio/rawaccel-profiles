@@ -677,8 +677,6 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var rawRegCurve = RegistryCurveOverride ?? 1.0;
         var curRegCurve = MouseRegistryBridge.EncodeRegCurve(rawRegCurve);
 
-        if (useEpp == false) curRegCurve = 1.0;
-
         // Screen width env ratio for Win Speed and Full Match rows.
         double envScreenRatio = 1.0;
         var baseW    = GetBaseScreenWidth();
@@ -688,6 +686,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         // DPI ratio — reverses Windows' logicalDpi/96 amplification.
         double envDpiRatio = (useEpp != false) ? (96.0 / logicalDpi) : 1.0;
+
+        if (useEpp == false) curRegCurve = 1.0;
 
         var rawEff  = curSens;
         var winEff  = rawEff  * curWinMult * envScreenRatio * envDpiRatio;

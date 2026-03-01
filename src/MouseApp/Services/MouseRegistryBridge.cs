@@ -8,17 +8,34 @@ namespace MouseApp.Services;
 
 public static class MouseRegistryBridge
 {
-    // TODO: Replace with correct MarkC XCurve and YCurve values per DPI level.
-    // Research required: decode the actual .reg files from the MarkC Windows 10+8+7 fix ZIP
-    // (donewmouseaccel.blogspot.com) for 100% (96 DPI), 125% (120 DPI), 150% (144 DPI).
-    // XCurve: the 5 X-axis breakpoint values (counts/tick) — always forced to MarkC values.
-    // YCurve base: the 5 Y-axis values at regResult=1.0 — must match MarkC exactly so 1.0 = 1:1.
-    // At runtime: YCurve[i] = MarkCYBase[i] * regResult.
-    // Determine whether the MarkC builder uses a simple Y/X ratio, a DPI formula, or a lookup.
+    // MarkC Windows 7/8/10 no-acceleration curve — X-axis speed breakpoints.
+    // Input-speed nodes (mouse counts/polling-tick) for the 5-segment piecewise-linear
+    // SmoothMouse curve. Values are exact in 16.16 fixed-point and span the typical range 0–8.
     //
-    // PLACEHOLDER — values below are WRONG, do not ship:
-    private static readonly double[] MarkCXCurve_TODO = { 0.0, 0.0, 0.0, 0.0, 0.0 }; // WRONG
-    private static readonly double[] MarkCYBase_TODO  = { 0.0, 0.0, 0.0, 0.0, 0.0 }; // WRONG
+    // For exact 1:1 pointer response at 6/11 speed on Windows 7/8/10 (confirmed by Mark Cranness):
+    //   Windows multiplies output by (DPI/150), so to cancel it and get 1:1:
+    //   SmoothMouseY[i] / SmoothMouseX[i]  =  150 / DesktopDPI
+    // Source: https://donewmouseaccel.blogspot.com/2010/03/markc-windows-7-mouse-acceleration-fix.html
+    //
+    // YCurve is derived at runtime:  Y[i] = X[i] * (150.0 / dpi) * regResult
+    //   regResult = 1.0  →  exact 1:1 (identical to the standard MarkC fix)
+    //   regResult = 2.0  →  2× the MarkC baseline sensitivity
+    // XCurve is DPI-independent and written unchanged to the registry.
+    private static readonly double[] MarkCXCurve =
+    {
+        0.0,
+        0.375,   // 24576  / 65536  (exact in 16.16 fixed-point)
+        1.25,    // 81920  / 65536  (exact in 16.16 fixed-point)
+        2.5,     // 163840 / 65536  (exact in 16.16 fixed-point)
+        8.0      // 524288 / 65536  (exact in 16.16 fixed-point)
+    };
+
+    // Windows Pointer Speed multiplier table — index 0 = speed 1, index 9 = speed 10 (1.0×), index 19 = speed 20.
+    private static readonly double[] WinSpeedMultipliers =
+    {
+        0.03125, 0.0625, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0,
+        1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25, 3.5
+    };
 
     // Win32 constants
     private const uint SPI_SETMOUSE = 0x0004;
@@ -44,23 +61,25 @@ public static class MouseRegistryBridge
         if (!OperatingSystem.IsWindows())
             return; // No-op on non-Windows platforms
 
-        // TODO: Replace this block once correct MarkC values are researched.
-        // 1. Look up the correct MarkCXCurve and MarkCYBase for the current DPI (GetCurrentLogicalDpi()).
-        // 2. XCurve = MarkCXCurve (forced, unchanged).
-        // 3. YCurve[i] = MarkCYBase[i] * regResult.
-        //    regResult=1.0 → identical to MarkC fix (1:1 movement).
-        //    regResult=2.0 → 2× faster than MarkC baseline.
-        // PLACEHOLDER — throws so the feature is clearly broken rather than silently wrong:
-        throw new NotImplementedException(
-            "[RegistryBridge] MarkC curve values not yet implemented. See TODO in MouseRegistryBridge.cs.");
-        #pragma warning disable CS0162
         int dpi = GetCurrentLogicalDpi();
         Debug.WriteLine($"[RegistryBridge] ApplyRegistryBridge regResult={regResult:G10} dpi={dpi}");
-        double[] xCurve = MarkCXCurve_TODO;
-        var yCurve = new double[MarkCXCurve_TODO.Length];
-        for (int i = 0; i < MarkCXCurve_TODO.Length; i++)
-            yCurve[i] = MarkCYBase_TODO[i] * regResult;
-        #pragma warning restore CS0162
+
+        // Win7/8/10 formula (Mark Cranness): Windows internally multiplies cursor movement by
+        // (DPI/150) and also by the pointer speed multiplier (WinSpeedMult).
+        // To get exact 1:1 output for regResult=1.0, both must be cancelled:
+        //   PointerMovement = MouseInput × (Y/X) × (DPI/150) × WinSpeedMult
+        //   Set Y/X = (150/DPI) / WinSpeedMult  →  PointerMovement = MouseInput × regResult
+        // WinSpeedMult is read live from the registry — MouseService writes the profile's pointer
+        // speed BEFORE calling this, so the value here is already correct for this profile.
+        // Clamp regResult to a small positive floor so the curve is never zeroed (a zero Y curve
+        // stops the pointer dead when EPP is ON).
+        double winSpeedMult = ReadWindowsPointerSpeedMultiplier();
+        double scale = Math.Max(regResult, 0.01) * (150.0 / dpi) / winSpeedMult;
+        Debug.WriteLine($"[RegistryBridge] winSpeedMult={winSpeedMult:G6} scale={scale:G10}");
+        double[] xCurve = MarkCXCurve;
+        var yCurve = new double[MarkCXCurve.Length];
+        for (int i = 0; i < MarkCXCurve.Length; i++)
+            yCurve[i] = MarkCXCurve[i] * scale;
 
         // Convert curve to registry binary (64-bit 16.16 fixed-point per entry)
         static byte[] CurveToBinary(double[] curve)
@@ -109,13 +128,34 @@ public static class MouseRegistryBridge
     /// </summary>
     public static double EncodeRegCurve(double regResult)
     {
-        // TODO: Update once correct MarkC YBase values are known.
-        // Precision step = 1 / (MarkCYBase[1] × 65536).
-        // PLACEHOLDER — returns regResult unchanged until real values are filled in.
-        return regResult;
+        // Quantise regResult to the smallest step representable in 16.16 fixed-point for Y[1].
+        // Y[1] base (at regResult=1.0) = MarkCXCurve[1] * (dpi / 150.0).
+        //   DPI=96  (100%): Y[1] = 0.375 × (150/96)  = 0.58594  → step ≈ 2.61e-5
+        //   DPI=120 (125%): Y[1] = 0.375 × (150/120) = 0.46875  → step ≈ 3.26e-5
+        //   DPI=144 (150%): Y[1] = 0.375 × (150/144) = 0.39063  → step ≈ 3.91e-5
+        // GetCurrentLogicalDpi() is called so this always matches what ApplyRegistryBridge writes.
+        int dpi = GetCurrentLogicalDpi();
+        double yBase1 = MarkCXCurve[1] * (150.0 / dpi);
+        double step = 1.0 / (yBase1 * 65536.0);
+        return Math.Round(regResult / step) * step;
     }
 
     // ── Environment Awareness helpers ────────────────────────────────────────
+
+    /// <summary>
+    /// Reads the current Windows Pointer Speed multiplier from HKCU\Control Panel\Mouse\MouseSensitivity.
+    /// The stored value is 1–20 (default 10 = 1.0×). Falls back to 1.0 if the key is missing or invalid.
+    /// </summary>
+    public static double ReadWindowsPointerSpeedMultiplier()
+    {
+        if (!OperatingSystem.IsWindows()) return 1.0;
+        using var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Mouse", writable: false);
+        if (key == null) return 1.0;
+        var val = key.GetValue("MouseSensitivity") as string;
+        if (val == null || !int.TryParse(val, out int speed)) return 1.0;
+        int index = Math.Clamp(speed - 1, 0, WinSpeedMultipliers.Length - 1);
+        return WinSpeedMultipliers[index];
+    }
 
     private const int LOGPIXELSX = 88;
 

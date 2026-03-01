@@ -1,12 +1,9 @@
 # TODO LIST / SCRATCHPAD FOR BRAINSTORMING
 
 ## 🟢 ACTIVE / NEXT STEPS
+- default to grabbing screendpi if skipped? instead of defaulting to 96/or global profile? or wait maybe not? this could be weird with other apps that set dpi/res. maybe just make dpi value in profile know how to grab autofill/grab?
 - wildcard matching for target associations
-- **FIX REGISTRY BRIDGE**: Research correct MarkC XCurve + YCurve values per DPI (100%/125%/150%).
-  Decode the actual .reg files from the MarkC fix ZIP (donewmouseaccel.blogspot.com).
-  Determine YCurve formula so regResult=1.0 = exact MarkC feel, regResult=2.0 = 2× faster.
-  Update `MarkCXCurve_TODO` / `MarkCYBase_TODO` in `MouseRegistryBridge.cs` and remove the
-  `NotImplementedException` placeholder. See also: `EncodeRegCurve` needs same update.
+
 
 ## 🟡 BRAINSTORMING / BACKLOG
 -what is "inherite system setting" for epp?
