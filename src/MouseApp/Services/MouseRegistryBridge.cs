@@ -9,18 +9,34 @@ namespace MouseApp.Services;
 public static class MouseRegistryBridge
 {
     // MarkC Windows 7/8/10 no-acceleration curve — X-axis speed breakpoints.
-    // Input-speed nodes (mouse counts/polling-tick) for the 5-segment piecewise-linear
-    // SmoothMouse curve. Values are exact in 16.16 fixed-point and span the typical range 0–8.
     //
-    // For exact 1:1 pointer response at 6/11 speed on Windows 7/8/10 (confirmed by Mark Cranness):
-    //   Windows multiplies output by (DPI/150), so to cancel it and get 1:1:
-    //   SmoothMouseY[i] / SmoothMouseX[i]  =  150 / DesktopDPI
+    // The SmoothMouseXCurve and SmoothMouseYCurve registry values define a 5-node piecewise-linear
+    // lookup table. When EPP (Enhance Pointer Precision) is enabled, Windows maps raw mouse input
+    // through this curve to produce cursor movement. Each node is stored as a 64-bit little-endian
+    // value in 16.16 fixed-point format (i.e. multiply by 65536 to get the integer representation).
+    //
+    // Windows applies three multipliers on top of the curve output:
+    //   1. The Y/X slope of the curve itself (what we control)
+    //   2. DPI/150  — Windows internally scales by the logical DPI divided by 150
+    //   3. WinSpeedMult — the Windows Pointer Speed slider (Control Panel → Mouse)
+    //
+    // Full formula:
+    //   CursorMovement = RawInput × (Y/X) × (DPI/150) × WinSpeedMult
+    //
+    // MarkC fix (Mark Cranness, 2010): set Y/X = 150/DPI so factors 1 and 2 cancel:
+    //   CursorMovement = RawInput × (150/DPI) × (DPI/150) × WinSpeedMult
+    //                  = RawInput × WinSpeedMult
     // Source: https://donewmouseaccel.blogspot.com/2010/03/markc-windows-7-mouse-acceleration-fix.html
     //
-    // YCurve is derived at runtime:  Y[i] = X[i] * (150.0 / dpi) * regResult
-    //   regResult = 1.0  →  exact 1:1 (identical to the standard MarkC fix)
-    //   regResult = 2.0  →  2× the MarkC baseline sensitivity
-    // XCurve is DPI-independent and written unchanged to the registry.
+    // Our extension: also cancel WinSpeedMult by dividing it out of Y/X:
+    //   CursorMovement = RawInput × (150/DPI/WinSpeedMult) × (DPI/150) × WinSpeedMult × regResult
+    //                  = RawInput × regResult
+    //
+    // So regResult=1.0 is exact 1:1 raw input regardless of DPI or pointer speed setting.
+    // regResult=2.0 is exactly 2× raw input. WinSpeedMult is read live at apply-time.
+    //
+    // XCurve is the fixed MarkC breakpoint table (DPI-independent, always written as-is).
+    // YCurve is computed at runtime: Y[i] = X[i] × (150.0 / DPI) / WinSpeedMult × regResult
     private static readonly double[] MarkCXCurve =
     {
         0.0,
@@ -122,20 +138,25 @@ public static class MouseRegistryBridge
 
     /// <summary>
     /// Returns the regResult value that Windows will actually apply after 16.16 fixed-point
-    /// encoding and decoding.  The tightest anchor is 2.5 (step = 1/163840 ≈ 6.1e-6).
-    /// Use this in the proof-of-match display so it reflects real-world precision rather
+    /// encoding and decoding, accounting for the current DPI and pointer speed.
+    /// Use this in match-accuracy display so it reflects real-world precision rather
     /// than the idealised double value.
     /// </summary>
     public static double EncodeRegCurve(double regResult)
     {
-        // Quantise regResult to the smallest step representable in 16.16 fixed-point for Y[1].
-        // Y[1] base (at regResult=1.0) = MarkCXCurve[1] * (dpi / 150.0).
-        //   DPI=96  (100%): Y[1] = 0.375 × (150/96)  = 0.58594  → step ≈ 2.61e-5
-        //   DPI=120 (125%): Y[1] = 0.375 × (150/120) = 0.46875  → step ≈ 3.26e-5
-        //   DPI=144 (150%): Y[1] = 0.375 × (150/144) = 0.39063  → step ≈ 3.91e-5
-        // GetCurrentLogicalDpi() is called so this always matches what ApplyRegistryBridge writes.
+        // The smallest distinguishable step in regResult is determined by the precision of Y[1]
+        // in 16.16 fixed-point. Y[1] is the tightest anchor (smallest non-zero node):
+        //   Y[1] = MarkCXCurve[1] × (150.0 / DPI) / WinSpeedMult × regResult
+        // Stored as fixedY1 = round(Y[1] × 65536), so the step in regResult units is:
+        //   step = 1 / (MarkCXCurve[1] × (150.0 / DPI) / WinSpeedMult × 65536)
+        //
+        // Example at DPI=96, WinSpeedMult=1.0 (speed 10):
+        //   Y[1] = 0.375 × (150/96) / 1.0 = 0.58594  →  step ≈ 2.61e-5
+        // Example at DPI=96, WinSpeedMult=0.5 (speed 6):
+        //   Y[1] = 0.375 × (150/96) / 0.5 = 1.17188  →  step ≈ 1.30e-5
         int dpi = GetCurrentLogicalDpi();
-        double yBase1 = MarkCXCurve[1] * (150.0 / dpi);
+        double winSpeedMult = ReadWindowsPointerSpeedMultiplier();
+        double yBase1 = MarkCXCurve[1] * (150.0 / dpi) / winSpeedMult;
         double step = 1.0 / (yBase1 * 65536.0);
         return Math.Round(regResult / step) * step;
     }

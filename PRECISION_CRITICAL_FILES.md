@@ -3,8 +3,8 @@
 ### 🔴 Highest Risk — Core Math
 
 **Services/MouseRegistryBridge.cs**
-- `EncodeRegCurve()` — the 16.16 round-trip model. If the anchor (`2.5`) or the formula changes, every match accuracy display and every compensation calculation silently breaks.
-- `ApplyRegistryBridge()` → `CurveToBinary()` — the actual registry write. Must stay identical in formula to `EncodeRegCurve` or the model stops predicting reality.
+- `EncodeRegCurve()` — the 16.16 round-trip model. Formula is `yBase1 = MarkCXCurve[1] × (150/DPI) / winSpeedMult`. If the anchor, the DPI factor, or the winSpeedMult division changes, every match accuracy display and every compensation calculation silently breaks.
+- `ApplyRegistryBridge()` → `CurveToBinary()` — the actual registry write. Formula is `Y[i] = X[i] × (150/DPI) / winSpeedMult × regResult`. Must stay identical in formula to `EncodeRegCurve` or the model stops predicting reality. `winSpeedMult` is read live from the registry immediately before this call (MouseService writes pointer speed first to ensure the live value is already correct for the profile).
 
 **Services/ProfileService.cs**
 - `WinMultipliers[]` — the 20-entry table is the single source of truth for all Win Speed math. Wrong value = wrong compensation applied to hardware.

@@ -3,6 +3,7 @@
 ## 🟢 ACTIVE / NEXT STEPS
 - default to grabbing screendpi if skipped? instead of defaulting to 96/or global profile? or wait maybe not? this could be weird with other apps that set dpi/res. maybe just make dpi value in profile know how to grab autofill/grab?
 - wildcard matching for target associations
+-confirm data templates used and mvvm pattern is used
 
 
 ## 🟡 BRAINSTORMING / BACKLOG
