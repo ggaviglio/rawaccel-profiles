@@ -7,6 +7,11 @@
 
 
 ## 🟡 BRAINSTORMING / BACKLOG
+- sidebar: profile reordering (drag-to-reorder)
+- sidebar: collapsible sidebar (icons-only mode)
+- settings: promote to dialog/flyout (revisit when settings grows)
+- settings: feature visibility toggles (show/hide Registry Bridge, Environment, Sync modes in profile editor)
+- settings: theme selection, hotkey config
 -what is "inherite system setting" for epp?
 target manager
 - make target manager close if app fully closes.
