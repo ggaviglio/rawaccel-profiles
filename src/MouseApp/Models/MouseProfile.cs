@@ -82,4 +82,14 @@ public partial class MouseProfile : ObservableObject
 
     [ObservableProperty]
     public partial List<TargetAssociation> TargetAssociations { get; set; } = new();
+
+    /// <summary>Runtime-only: true when this profile is currently applied to hardware.</summary>
+    [ObservableProperty]
+    [property: System.Text.Json.Serialization.JsonIgnore]
+    public partial bool IsActive { get; set; }
+
+    /// <summary>Runtime-only: true when this profile's name is being edited inline.</summary>
+    [ObservableProperty]
+    [property: System.Text.Json.Serialization.JsonIgnore]
+    public partial bool IsEditing { get; set; }
 }

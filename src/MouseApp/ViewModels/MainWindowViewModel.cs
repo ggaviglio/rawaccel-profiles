@@ -11,6 +11,7 @@ public partial class MainWindowViewModel : ViewModelBase
 {
     private ViewModelBase? _currentView;
     private MouseProfile? _selectedProfile;
+    private MouseProfile? _activeProfile;
     private readonly NavigationService? _navigation;
     private readonly ProfileEditorViewModel? _profileEditor;
     private readonly SettingsViewModel? _settingsVm;
@@ -47,6 +48,23 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// The profile currently applied to hardware by ProcessWatcher.
+    /// Null means no profile has been applied yet this session.
+    /// </summary>
+    public MouseProfile? ActiveProfile
+    {
+        get => _activeProfile;
+        set
+        {
+            if (value == _activeProfile) return;
+            if (_activeProfile != null) _activeProfile.IsActive = false;
+            _activeProfile = value;
+            if (_activeProfile != null) _activeProfile.IsActive = true;
+            OnPropertyChanged(nameof(ActiveProfile));
+        }
+    }
+
     public System.Collections.ObjectModel.ObservableCollection<MouseProfile> Profiles { get; private set; }
 
     public System.Windows.Input.ICommand OpenSettingsCommand { get; }
@@ -59,7 +77,7 @@ public partial class MainWindowViewModel : ViewModelBase
         Profiles = new() { new MouseProfile { ProfileName = "Global Default", IsGlobalDefault = true } };
         SelectedProfile = Profiles[0];
 
-        OpenSettingsCommand = new RelayCommand(() => _navigation?.Navigate(_settingsVm));
+        OpenSettingsCommand = new RelayCommand(() => { SelectedProfile = null; _navigation?.Navigate(_settingsVm); });
         OpenProfilesCommand = new RelayCommand(() => _navigation?.Navigate(_profileEditor));
         AddProfileCommand = new RelayCommand(ExecuteAddProfile);
         DeleteProfileCommand = new RelayCommand(ExecuteDeleteProfile, CanDeleteProfile);
@@ -83,6 +101,10 @@ public partial class MainWindowViewModel : ViewModelBase
         // LoadAsync has already run before this ctor is called (see App.axaml.cs);
         // select the first profile (Global Default) so the editor is never blank.
         SelectedProfile = Profiles.FirstOrDefault();
+
+        // "Apply Now" in ProfileEditor should light the active indicator.
+        profileEditor.ProfileManuallyApplied += profile =>
+            Dispatcher.UIThread.Post(() => ActiveProfile = profile);
     }
 
     /// <summary>
@@ -92,7 +114,11 @@ public partial class MainWindowViewModel : ViewModelBase
     /// </summary>
     public void OnExternalProfileActivated(MouseProfile profile)
     {
-        Dispatcher.UIThread.Post(() => SelectedProfile = profile);
+        Dispatcher.UIThread.Post(() =>
+        {
+            ActiveProfile = profile;
+            SelectedProfile = profile;
+        });
     }
 
     private bool CanDeleteProfile() =>
@@ -109,6 +135,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         Profiles.Add(newProfile);
         SelectedProfile = newProfile;
+        newProfile.IsEditing = true;
 
         if (_profileService != null)
             await _profileService.SaveAsync().ConfigureAwait(false);

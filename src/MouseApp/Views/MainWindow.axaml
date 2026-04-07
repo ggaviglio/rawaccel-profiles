@@ -17,42 +17,67 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220" />
+            <ColumnDefinition Width="0.22*" MinWidth="180" MaxWidth="280" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <!-- Sidebar -->
-        <Border Grid.Column="0" Background="#1E1E1E" Padding="8">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="48" />
-                </Grid.RowDefinitions>
+        <Border Grid.Column="0" Background="{DynamicResource SystemControlBackgroundChromeLowBrush}" Padding="8">
+            <Grid RowDefinitions="*,Auto">
 
-                <!-- Top: Profiles list -->
-                <ListBox Grid.Row="0" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}">
+                <!-- Row 0: All profiles -->
+                <ListBox Grid.Row="0"
+                         ItemsSource="{Binding Profiles}"
+                         SelectedItem="{Binding SelectedProfile, Mode=TwoWay}">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="models:MouseProfile">
-                            <Grid ColumnDefinitions="Auto,*" Margin="2,0">
-                                <CheckBox Grid.Column="0"
+                            <Grid ColumnDefinitions="Auto,Auto,*" Margin="2,0">
+                                <!-- Active indicator dot -->
+                                <Ellipse Grid.Column="0"
+                                         Width="8" Height="8"
+                                         Fill="{DynamicResource MatchIndicatorBrush}"
+                                         Margin="0,0,6,0"
+                                         VerticalAlignment="Center"
+                                         IsVisible="{Binding IsActive}" />
+                                <CheckBox Grid.Column="1"
                                           IsChecked="{Binding AutoSwitchEnabled, Mode=TwoWay}"
                                           VerticalAlignment="Center"
                                           ToolTip.Tip="Enable automatic profile switching for this profile"
                                           Margin="0,0,6,0" />
-                                <TextBlock Grid.Column="1"
+                                <TextBlock Grid.Column="2"
                                            Text="{Binding ProfileName}"
-                                           Foreground="White"
                                            VerticalAlignment="Center"
-                                           Padding="0,6" />
+                                           HorizontalAlignment="Stretch"
+                                           Background="Transparent"
+                                           MinHeight="24"
+                                           Padding="0,6"
+                                           IsVisible="{Binding !IsEditing}"
+                                           DoubleTapped="ProfileName_DoubleTapped">
+                                    <TextBlock.FontWeight>
+                                        <Binding Path="IsGlobalDefault">
+                                            <Binding.Converter>
+                                                <vm:BoolToFontWeightConverter />
+                                            </Binding.Converter>
+                                        </Binding>
+                                    </TextBlock.FontWeight>
+                                </TextBlock>
+                                <TextBox Grid.Column="2"
+                                         Text="{Binding ProfileName, Mode=TwoWay}"
+                                         IsVisible="{Binding IsEditing}"
+                                         Padding="2,4"
+                                         VerticalContentAlignment="Center"
+                                         VerticalAlignment="Center"
+                                         Loaded="ProfileNameEdit_Loaded"
+                                         KeyDown="ProfileNameEdit_KeyDown"
+                                         LostFocus="ProfileNameEdit_LostFocus" />
                             </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
 
-                <!-- Middle: Add / Delete action bar -->
-                <Border Grid.Row="1" Background="#2A2A2A" Padding="4,2">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
+                <!-- Row 1: Action bar — add/delete + settings gear -->
+                <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
                         <Button Content="+"
                                 Width="32" Height="28"
                                 FontSize="16" FontWeight="Bold"
@@ -70,11 +95,17 @@
                                 ToolTip.Tip="Delete selected profile"
                                 Command="{Binding DeleteProfileCommand}" />
                     </StackPanel>
-                </Border>
-
-                <!-- Bottom: Global Settings button -->
-                <Button Grid.Row="2" HorizontalAlignment="Stretch" VerticalAlignment="Center" Content="Global Settings" Margin="0,4,0,0"
-                    Command="{Binding OpenSettingsCommand}" />
+                    <Button Grid.Column="1"
+                            Width="32" Height="28"
+                            Padding="0"
+                            ToolTip.Tip="Global Settings"
+                            Command="{Binding OpenSettingsCommand}">
+                        <TextBlock Text="⚙" FontSize="16"
+                                   Width="32"
+                                   TextAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Button>
+                </Grid>
             </Grid>
         </Border>
 

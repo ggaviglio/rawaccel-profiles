@@ -15,7 +15,7 @@
       <TextBlock Text="Profile Editor" FontSize="20" FontWeight="SemiBold" />
 
       <!-- ═══ Action bar: Apply Now + Default revert toggle ═══ -->
-      <Border Background="#2A2A2A" CornerRadius="4" Padding="10,8">
+      <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" CornerRadius="4" Padding="10,8">
         <Grid ColumnDefinitions="*,Auto">
           <CheckBox Grid.Column="0"
                     IsChecked="{Binding IsGlobalDefault, Mode=TwoWay}"
@@ -180,7 +180,7 @@
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="models:TargetAssociation">
               <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2">
-                <Border Background="#3C3C3C" CornerRadius="3" Padding="5,1">
+                <Border Background="{DynamicResource SystemControlBackgroundBaseMediumLowBrush}" CornerRadius="3" Padding="5,1">
                   <TextBlock Text="{Binding TypeLabel}" FontSize="10" FontWeight="Bold" />
                 </Border>
                 <TextBlock Text="{Binding Value}" VerticalAlignment="Center" Opacity="0.8" />

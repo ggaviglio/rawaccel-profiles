@@ -36,7 +36,7 @@
               <Grid ColumnDefinitions="6,*">
                 <!-- Green match bar — only visible after Test Match -->
                 <Border Grid.Column="0"
-                        Background="#4CAF50"
+                        Background="{DynamicResource MatchIndicatorBrush}"
                         IsVisible="{Binding IsMatched}"
                         Margin="0,2,5,2"
                         CornerRadius="2" />
@@ -89,7 +89,7 @@
               <Grid ColumnDefinitions="Auto,*,Auto" Margin="2,2">
                 <!-- Type badge -->
                 <Border Grid.Column="0"
-                        Background="#3C3C3C"
+                        Background="{DynamicResource SystemControlBackgroundBaseMediumLowBrush}"
                         CornerRadius="3"
                         Padding="5,2"
                         Margin="0,0,6,0"

@@ -23,6 +23,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>Injected after construction via <see cref="WireMouseService"/>. Null until wired.</summary>
     private IMouseService? _mouseService;
 
+    /// <summary>Raised after a profile is manually applied to hardware via Apply Now.</summary>
+    public event Action<MouseProfile>? ProfileManuallyApplied;
+
     /// <summary>The profile currently loaded into the editor. Null when no profile is selected.</summary>
     private MouseProfile? _editingProfile;
 
@@ -767,6 +770,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         System.Diagnostics.Debug.WriteLine($"[ProfileEditor] Manual apply: '{_editingProfile.ProfileName}'");
         await _mouseService.ApplyProfileAsync(_editingProfile).ConfigureAwait(false);
+        ProfileManuallyApplied?.Invoke(_editingProfile);
     }
 
     /// <summary>
