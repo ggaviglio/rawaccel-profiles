@@ -15,9 +15,13 @@
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
+    <Window.Resources>
+        <vm:BoolToFontWeightConverter x:Key="BoolToFontWeightConverter" />
+    </Window.Resources>
+
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="0.22*" MinWidth="180" MaxWidth="280" />
+            <ColumnDefinition Width="300" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
@@ -26,12 +30,26 @@
             <Grid RowDefinitions="*,Auto">
 
                 <!-- Row 0: All profiles -->
-                <ListBox Grid.Row="0"
-                         ItemsSource="{Binding Profiles}"
-                         SelectedItem="{Binding SelectedProfile, Mode=TwoWay}">
-                    <ListBox.ItemTemplate>
+                <Border Grid.Row="0"
+                        Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                        CornerRadius="8"
+                        ClipToBounds="True"
+                        Padding="0">
+                    <ListBox ItemsSource="{Binding Profiles}"
+                             SelectedItem="{Binding SelectedProfile, Mode=TwoWay}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Padding="0">
+                        <ListBox.Styles>
+                            <Style Selector="ListBoxItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="CornerRadius" Value="6" />
+                                <Setter Property="Margin" Value="3,2" />
+                            </Style>
+                        </ListBox.Styles>
+                        <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="models:MouseProfile">
-                            <Grid ColumnDefinitions="Auto,Auto,*" Margin="2,0">
+                            <Grid ColumnDefinitions="Auto,Auto,*" Margin="0">
                                 <!-- Active indicator dot -->
                                 <Ellipse Grid.Column="0"
                                          Width="8" Height="8"
@@ -46,21 +64,14 @@
                                           Margin="0,0,6,0" />
                                 <TextBlock Grid.Column="2"
                                            Text="{Binding ProfileName}"
+                                           FontWeight="{Binding IsGlobalDefault, Converter={StaticResource BoolToFontWeightConverter}}"
                                            VerticalAlignment="Center"
                                            HorizontalAlignment="Stretch"
                                            Background="Transparent"
                                            MinHeight="24"
                                            Padding="0,6"
                                            IsVisible="{Binding !IsEditing}"
-                                           DoubleTapped="ProfileName_DoubleTapped">
-                                    <TextBlock.FontWeight>
-                                        <Binding Path="IsGlobalDefault">
-                                            <Binding.Converter>
-                                                <vm:BoolToFontWeightConverter />
-                                            </Binding.Converter>
-                                        </Binding>
-                                    </TextBlock.FontWeight>
-                                </TextBlock>
+                                           DoubleTapped="ProfileName_DoubleTapped" />
                                 <TextBox Grid.Column="2"
                                          Text="{Binding ProfileName, Mode=TwoWay}"
                                          IsVisible="{Binding IsEditing}"
@@ -74,30 +85,85 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+                </Border>
 
-                <!-- Row 1: Action bar — add/delete + settings gear -->
-                <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,4,0,0">
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
-                        <Button Content="+"
-                                Width="32" Height="28"
-                                FontSize="16" FontWeight="Bold"
-                                Padding="0"
-                                HorizontalContentAlignment="Center"
-                                VerticalContentAlignment="Center"
-                                ToolTip.Tip="Add profile"
-                                Command="{Binding AddProfileCommand}" />
-                        <Button Content="−"
-                                Width="32" Height="28"
-                                FontSize="16" FontWeight="Bold"
-                                Padding="0"
-                                HorizontalContentAlignment="Center"
-                                VerticalContentAlignment="Center"
-                                ToolTip.Tip="Delete selected profile"
-                                Command="{Binding DeleteProfileCommand}" />
-                    </StackPanel>
-                    <Button Grid.Column="1"
-                            Width="32" Height="28"
+                <!-- Row 1: Action bar -->
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="4" Margin="0,4,0,0">
+                    <Button Width="32" Height="28"
                             Padding="0"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            ToolTip.Tip="Apply selected profile"
+                            Command="{Binding ApplySelectedCommand}">
+                        <TextBlock Text="▶" FontSize="12"
+                                   Width="32"
+                                   TextAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Button>
+                    <Button Width="32" Height="28"
+                            Padding="0"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            ToolTip.Tip="Set as Global Default"
+                            Command="{Binding SetAsDefaultCommand}">
+                        <TextBlock Text="🏠" FontSize="14"
+                                   Width="32"
+                                   TextAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Button>
+                    <Button Width="32" Height="28"
+                            Padding="0"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            ToolTip.Tip="Clone selected profile"
+                            Command="{Binding CloneProfileCommand}">
+                        <TextBlock Text="⧉" FontSize="14"
+                                   Width="32"
+                                   TextAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Button>
+                    <Button Content="+"
+                            Width="32" Height="28"
+                            FontSize="16" FontWeight="Bold"
+                            Padding="0"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            ToolTip.Tip="Add profile"
+                            Command="{Binding AddProfileCommand}" />
+                    <Button Content="−"
+                            Width="32" Height="28"
+                            FontSize="16" FontWeight="Bold"
+                            Padding="0"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            ToolTip.Tip="Delete selected profile"
+                            Command="{Binding DeleteProfileCommand}" />
+                    <Button Width="32" Height="28"
+                            Padding="0"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            ToolTip.Tip="Move selected profile up"
+                            Command="{Binding MoveProfileUpCommand}">
+                        <TextBlock Text="↑" FontSize="14"
+                                   Width="32"
+                                   TextAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Button>
+                    <Button Width="32" Height="28"
+                            Padding="0"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            ToolTip.Tip="Move selected profile down"
+                            Command="{Binding MoveProfileDownCommand}">
+                        <TextBlock Text="↓" FontSize="14"
+                                   Width="32"
+                                   TextAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Button>
+                    <Button Width="32" Height="28"
+                            Padding="0"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
                             ToolTip.Tip="Global Settings"
                             Command="{Binding OpenSettingsCommand}">
                         <TextBlock Text="⚙" FontSize="16"
@@ -105,12 +171,12 @@
                                    TextAlignment="Center"
                                    VerticalAlignment="Center" />
                     </Button>
-                </Grid>
+                </StackPanel>
             </Grid>
         </Border>
 
         <!-- Main Content -->
-        <Border Grid.Column="1" Padding="12">
+        <Border Grid.Column="1" Padding="8">
             <ContentControl Content="{Binding CurrentView}" />
         </Border>
     </Grid>

@@ -7,14 +7,20 @@
 
 
 ## 🟡 BRAINSTORMING / BACKLOG
-- sidebar: play button next to add/delete. replaces play button in profile editor?
+- make sure it is clear with some description how the matching works and how registry override requires EPP
+- hiding the auto button can cause the windows pointer sense to get stuck greyed out (is now default profile but cant change pointer speed)
+- profile: no way to deselect raw accel template
+- lookup raw accel sense decimal precision and enforce in gui (might already be used in app?)
+- make sure "manual" mode is used for default when "auto" option is hidden, even if it was selected before being made the default
+- sidebar: buttons with icons get uncentered when changing windows theme. button in profile editor doesnt do that. this seems like an old leftover fix that shouldnt be there or something.
+- profileeditor: button has centering bug. jsut one of them though? make buttons uniform size?
 - sidebar: hitting enter/esc doesnt make profile focused, therfore, pressing down arrow skips down to the plus button instead of going down the list
 - sidebar: profile reordering (drag-to-reorder, or up/down buttons) 
 - sidebar: collapsible sidebar (icons-only mode). or maybe collapse profile editor instead?
 - settings: promote to dialog/flyout (revisit when settings grows)
 - settings: feature visibility toggles (show/hide Registry Bridge, Environment, Sync modes in profile editor)
 - settings: theme selection, hotkey config
-- profile editor: can not deselect global default. checkbox doesnt make sense for this. unless deselecting global default should be possible? im not sure if the app logic currently supports this or if it would break without a default. currently, deleting default is blocked in gui
+
 -what is "inherite system setting" for epp?
 target manager
 - make target manager close if app fully closes.

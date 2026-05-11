@@ -49,8 +49,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>Null entry allows a sparse (unset) selection at the top of the list.</summary>
     public ObservableCollection<int?> WinPointerOptions { get; } = new();
 
-    /// <summary>Options list for all three sync-mode ComboBoxes.</summary>
-    public SyncMode[] SyncModeOptions { get; } = { SyncMode.Auto, SyncMode.Manual, SyncMode.Skip };
+
 
     /// <summary>Preset numeric DPI values for the editable LogicalDpi ComboBox.</summary>
     public string[] DpiPresets { get; } = { "96", "120", "144", "168", "192", "240", "288" };
@@ -112,9 +111,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     private bool? eppOverride;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsTargetManagerEnabled))]
     [NotifyPropertyChangedFor(nameof(IsAutoSyncAvailable))]
-    [NotifyCanExecuteChangedFor(nameof(OpenTargetManagerCommand))]
     private bool isGlobalDefault;
 
     // ── Derived display ─────────────────────────────────────────────────────
@@ -143,14 +140,53 @@ public partial class ProfileEditorViewModel : ViewModelBase
     // ── Target Manager (read-only summary shown in the editor) ──────────────
     public ObservableCollection<TargetAssociation> TargetAssociationsSummary { get; } = new();
 
-    /// <summary>True when Target Manager is interactive (not Global Default).</summary>
-    public bool IsTargetManagerEnabled => !IsGlobalDefault;
+    /// <summary>True when Target Manager is interactive.</summary>
+    public bool IsTargetManagerEnabled => true;
 
     /// <summary>
     /// Auto-sync only makes sense on non-Global-Default profiles.
     /// The Global Default IS the reference — there is nothing to compensate relative to itself.
     /// </summary>
     public bool IsAutoSyncAvailable => !IsGlobalDefault;
+
+    public bool IsRawAutoSync
+    {
+        get => RawSyncMode == SyncMode.Auto;
+        set
+        {
+            if (value)
+                RawSyncMode = SyncMode.Auto;
+            else
+                RawSyncMode = Sensitivity.HasValue ? SyncMode.Manual : SyncMode.Skip;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsOSAutoSync
+    {
+        get => OSSyncMode == SyncMode.Auto;
+        set
+        {
+            if (value)
+                OSSyncMode = SyncMode.Auto;
+            else
+                OSSyncMode = WinPointerSpeed.HasValue ? SyncMode.Manual : SyncMode.Skip;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsRegAutoSync
+    {
+        get => RegSyncMode == SyncMode.Auto;
+        set
+        {
+            if (value)
+                RegSyncMode = SyncMode.Auto;
+            else
+                RegSyncMode = RegistryCurveOverride.HasValue ? SyncMode.Manual : SyncMode.Skip;
+            OnPropertyChanged();
+        }
+    }
 
     /// <summary>True when the current profile has no target associations.</summary>
     public bool IsTargetAssociationsEmpty => TargetAssociationsSummary.Count == 0;
@@ -187,7 +223,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         SaveCommand              = new AsyncRelayCommand(ExecuteSaveAsync);
         ApplyCommand             = new AsyncRelayCommand(ExecuteApplyAsync, () => _editingProfile != null);
         OpenTargetManagerCommand = new AsyncRelayCommand(ExecuteOpenTargetManagerAsync,
-                                       () => _editingProfile != null && !IsGlobalDefault);
+                                       () => _editingProfile != null);
 
         ImportCurrentSettingsCommand = new RelayCommand(ExecuteImportCurrentSettings);
         ConfirmImportCommand         = new RelayCommand(ExecuteConfirmImport,    () => !string.IsNullOrWhiteSpace(PendingTemplateName));
@@ -262,6 +298,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(newValue))
         {
             Sensitivity = null;
+            if (RawSyncMode != SyncMode.Auto)
+                RawSyncMode = SyncMode.Skip;
             return;
         }
 
@@ -272,6 +310,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
             Sensitivity = parsed;
             _isSyncing = false;
         }
+
+        if (RawSyncMode == SyncMode.Skip)
+            RawSyncMode = SyncMode.Manual;
 
         ApplyAutoOSSync();
         AutoPersist();
@@ -290,6 +331,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         ApplyAutoOSSync();
         AutoPersist();
         RecalculateMatchAccuracy();
+        OnPropertyChanged(nameof(IsOSAutoSync));
     }
 
     partial void OnWinPointerSpeedChanged(int? oldValue, int? newValue)
@@ -304,6 +346,11 @@ public partial class ProfileEditorViewModel : ViewModelBase
             RecalculateMatchAccuracy();
             return;
         }
+
+        if (newValue == null && OSSyncMode != SyncMode.Auto)
+            OSSyncMode = SyncMode.Skip;
+        else if (newValue != null && OSSyncMode == SyncMode.Skip)
+            OSSyncMode = SyncMode.Manual;
 
         ApplyAutoRegSync();
         AutoPersist();
@@ -323,6 +370,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         ApplyAutoRegSync();
         AutoPersist();
         RecalculateMatchAccuracy();
+        OnPropertyChanged(nameof(IsRegAutoSync));
     }
 
     partial void OnRegistryCurveOverrideChanged(double? oldValue, double? newValue)
@@ -342,6 +390,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(newValue))
         {
             RegistryCurveOverride = null;
+            if (RegSyncMode != SyncMode.Auto)
+                RegSyncMode = SyncMode.Skip;
             return;
         }
 
@@ -352,6 +402,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
             RegistryCurveOverride = parsed;
             _isSyncing = false;
         }
+
+        if (RegSyncMode == SyncMode.Skip)
+            RegSyncMode = SyncMode.Manual;
 
         AutoPersist();
         RecalculateMatchAccuracy();
@@ -441,6 +494,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             SensitivityString = string.Empty;
             _isSyncing = false;
         }
+        OnPropertyChanged(nameof(IsRawAutoSync));
         ApplyAutoOSSync();
         AutoPersist();
         RecalculateMatchAccuracy();
@@ -479,8 +533,6 @@ public partial class ProfileEditorViewModel : ViewModelBase
             _editingProfile.IsGlobalDefault = false;
             _ = _profileService.SaveAsync();
         }
-
-        OpenTargetManagerCommand.NotifyCanExecuteChanged();
     }
 
     // ── Math Engine ─────────────────────────────────────────────────────────

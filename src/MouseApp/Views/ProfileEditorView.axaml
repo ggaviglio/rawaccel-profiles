@@ -10,189 +10,175 @@
              mc:Ignorable="d"
              x:Class="MouseApp.Views.ProfileEditorView">
 
-  <ScrollViewer Margin="12" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-    <StackPanel Spacing="12">
-      <TextBlock Text="Profile Editor" FontSize="20" FontWeight="SemiBold" />
+  <ScrollViewer Margin="0" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="8">
 
-      <!-- ═══ Action bar: Apply Now + Default revert toggle ═══ -->
-      <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" CornerRadius="4" Padding="10,8">
-        <Grid ColumnDefinitions="*,Auto">
-          <CheckBox Grid.Column="0"
-                    IsChecked="{Binding IsGlobalDefault, Mode=TwoWay}"
-                    Content="Default revert profile"
-                    VerticalAlignment="Center"
-                    ToolTip.Tip="When a matched app closes, the system reverts to this profile" />
-          <Button Grid.Column="1"
-                  Content="▶  Apply Now"
-                  Command="{Binding ApplyCommand}"
-                  Padding="14,6"
-                  FontWeight="SemiBold"
-                  ToolTip.Tip="Push this profile to hardware immediately, bypassing auto-switch" />
+      <!-- ═══ Card 1: Environment ═══ -->
+      <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+              CornerRadius="6" Padding="14,10">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
+          <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
+                     Text="Environment" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Screen Width:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <ComboBox Grid.Row="1" Grid.Column="1" IsEditable="True"
+                    Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    ItemsSource="{Binding ScreenWidthPresets}"
+                    Width="140" HorizontalAlignment="Left" Margin="0,0,0,6"
+                    ToolTip.Tip="Target screen width in pixels. Leave empty to inherit from Global Default." />
+
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="Logical DPI:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <ComboBox Grid.Row="2" Grid.Column="1" IsEditable="True"
+                    Text="{Binding TargetLogicalDpiString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    ItemsSource="{Binding DpiPresets}"
+                    Width="140" HorizontalAlignment="Left" Margin="0,0,0,6"
+                    ToolTip.Tip="Logical DPI (96=100%, 120=125%, 144=150%, 192=200%). Leave empty to inherit from Global Default." />
         </Grid>
       </Border>
 
-      <!-- Profile Name -->
-      <StackPanel Spacing="4">
-        <TextBlock Text="Profile Name" FontSize="14" Opacity="0.8" />
-        <TextBox Text="{Binding ProfileName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                 Width="220" HorizontalAlignment="Left" />
-      </StackPanel>
+      <!-- ═══ Card 2: Raw Accel ═══ -->
+      <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+              CornerRadius="6" Padding="14,10">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+          <!-- Header -->
+          <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
+                     Text="Raw Accel" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
 
-      <!-- Raw Accel Section -->
-      <StackPanel>
-        <TextBlock Text="Raw Accel" FontSize="14" Opacity="0.8" />
-        <!-- Template row + quick-action buttons -->
-        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-          <TextBlock Text="Template:" VerticalAlignment="Center" />
-          <ComboBox ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate, Mode=TwoWay}" Width="200" />
-          <Button Content="📥" Padding="6,2" Command="{Binding ImportCurrentSettingsCommand}"
-                  ToolTip.Tip="Import current Raw Accel settings.json into template library" />
-          <Button Content="⧉"  Padding="6,2" Command="{Binding DuplicateTemplateCommand}"
-                  ToolTip.Tip="Duplicate selected template under a new name" />
-          <Button Content="🗑"  Padding="6,2" Command="{Binding DeleteTemplateCommand}"
-                  ToolTip.Tip="Delete selected template from library" />
-        </StackPanel>
-        <!-- Import name entry (visible when ImportCurrentSettingsCommand is in progress) -->
-        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0"
-                    IsVisible="{Binding IsImportPanelVisible}">
-          <TextBlock Text="Save as:" VerticalAlignment="Center" Width="60" />
-          <TextBox Text="{Binding PendingTemplateName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                   Width="180" Watermark="template name" />
-          <Button Content="Save" Padding="8,2" Command="{Binding ConfirmImportCommand}" />
-          <Button Content="✕"    Padding="8,2" Command="{Binding CancelTemplateActionCommand}" />
-        </StackPanel>
-        <!-- Duplicate name entry -->
-        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0"
-                    IsVisible="{Binding IsDuplicatePanelVisible}">
-          <TextBlock Text="New name:" VerticalAlignment="Center" Width="60" />
-          <TextBox Text="{Binding PendingTemplateName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                   Width="180" Watermark="new template name" />
-          <Button Content="Save" Padding="8,2" Command="{Binding ConfirmDuplicateCommand}" />
-          <Button Content="✕"    Padding="8,2" Command="{Binding CancelTemplateActionCommand}" />
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <TextBlock Text="Raw Sens Sync:" VerticalAlignment="Center" Width="110" />
-          <ComboBox ItemsSource="{Binding SyncModeOptions}"
-                    SelectedItem="{Binding RawSyncMode, Mode=TwoWay}"
-                    IsEnabled="{Binding IsAutoSyncAvailable}"
-                    Width="110"
-                    ToolTip.Tip="Auto = computed to keep Raw Accel Only at 100% across env changes; Manual = user-controlled; Skip = inherit from Global Default" />
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <TextBlock Text="Sensitivity:" VerticalAlignment="Center" />
-          <TextBox Text="{Binding SensitivityString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120" Watermark="leave empty to skip" />
-        </StackPanel>
-      </StackPanel>
+          <!-- Template row -->
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Template:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
+            <ComboBox ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate, Mode=TwoWay}" Width="200" />
+            <Button Content="📥" Padding="6,2" Command="{Binding ImportCurrentSettingsCommand}"
+                    ToolTip.Tip="Import current Raw Accel settings.json into template library" />
+            <Button Content="⧉"  Padding="6,2" Command="{Binding DuplicateTemplateCommand}"
+                    ToolTip.Tip="Duplicate selected template under a new name" />
+            <Button Content="🗑"  Padding="6,2" Command="{Binding DeleteTemplateCommand}"
+                    ToolTip.Tip="Delete selected template from library" />
+          </StackPanel>
 
-      <!-- Windows OS Section -->
-      <StackPanel>
-        <TextBlock Text="Windows OS" FontSize="14" Opacity="0.8" />
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <TextBlock Text="Win Speed Sync:" VerticalAlignment="Center" Width="110" />
-          <ComboBox ItemsSource="{Binding SyncModeOptions}"
-                    SelectedItem="{Binding OSSyncMode, Mode=TwoWay}"
-                    IsEnabled="{Binding IsAutoSyncAvailable}"
-                    Width="110"
-                    ToolTip.Tip="Auto = best-fit Win Pointer Speed to compensate env delta; Manual = user-controlled; Skip = inherit from Global Default" />
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <TextBlock Text="Win Pointer Speed:" VerticalAlignment="Center" />
-          <ComboBox ItemsSource="{Binding WinPointerOptions}" SelectedItem="{Binding WinPointerSpeed, Mode=TwoWay}" Width="120" />
-        </StackPanel>
-      </StackPanel>
+          <!-- Import panel (spans both columns) -->
+          <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="6" Margin="0,0,0,4"
+                      IsVisible="{Binding IsImportPanelVisible}">
+            <TextBlock Text="Save as:" VerticalAlignment="Center" Width="60" />
+            <TextBox Text="{Binding PendingTemplateName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     Width="180" Watermark="template name" />
+            <Button Content="Save" Padding="8,2" Command="{Binding ConfirmImportCommand}" />
+            <Button Content="✕"    Padding="8,2" Command="{Binding CancelTemplateActionCommand}" />
+          </StackPanel>
 
-      <!-- High-Precision Bridge Section -->
-      <StackPanel>
-        <TextBlock Text="High-Precision Bridge" FontSize="14" Opacity="0.8" />
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <TextBlock Text="Reg Bridge Sync:" VerticalAlignment="Center" Width="110" />
-          <ComboBox ItemsSource="{Binding SyncModeOptions}"
-                    SelectedItem="{Binding RegSyncMode, Mode=TwoWay}"
-                    IsEnabled="{Binding IsAutoSyncAvailable}"
-                    Width="110"
-                    ToolTip.Tip="Auto = registry fine-tunes the exact remainder gap; Manual = user-controlled; Skip = inherit from Global Default" />
-          <TextBlock Text="Curve Override:" VerticalAlignment="Center" />
-          <TextBox Text="{Binding RegistryCurveString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120" Watermark="leave empty to skip" />
-        </StackPanel>
-      </StackPanel>
+          <!-- Duplicate panel (spans both columns) -->
+          <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="6" Margin="0,0,0,4"
+                      IsVisible="{Binding IsDuplicatePanelVisible}">
+            <TextBlock Text="New name:" VerticalAlignment="Center" Width="60" />
+            <TextBox Text="{Binding PendingTemplateName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     Width="180" Watermark="new template name" />
+            <Button Content="Save" Padding="8,2" Command="{Binding ConfirmDuplicateCommand}" />
+            <Button Content="✕"    Padding="8,2" Command="{Binding CancelTemplateActionCommand}" />
+          </StackPanel>
 
-      <!-- Environment Section -->
-      <StackPanel Spacing="4">
-        <TextBlock Text="Environment" FontSize="14" Opacity="0.8" />
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <TextBlock Text="Screen Width:" VerticalAlignment="Center" Width="110" />
-          <ComboBox IsEditable="True"
-                    Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                    ItemsSource="{Binding ScreenWidthPresets}"
-                    Width="140"
-                    ToolTip.Tip="Target screen width in pixels. Leave empty to inherit from Global Default." />
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <TextBlock Text="Logical DPI:" VerticalAlignment="Center" Width="110" />
-          <ComboBox IsEditable="True"
-                    Text="{Binding TargetLogicalDpiString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                    ItemsSource="{Binding DpiPresets}"
-                    Width="140"
-                    ToolTip.Tip="Logical DPI (96=100%, 120=125%, 144=150%, 192=200%). Leave empty to inherit from Global Default." />
-        </StackPanel>
-        <CheckBox IsThreeState="True"
-                  IsChecked="{Binding EppOverride, Mode=TwoWay}"
-                  Content="Enhance Pointer Precision"
-                  ToolTip.Tip="Checked = force on, Unchecked = force off, Indeterminate = inherit system setting" />
-      </StackPanel>
+          <!-- Sensitivity + Sync Mode on same row -->
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="Sensitivity:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
+            <TextBox Text="{Binding SensitivityString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     Width="120" Watermark="leave empty to skip"
+                     IsReadOnly="{Binding IsRawAutoSync}" />
+            <ToggleButton IsChecked="{Binding IsRawAutoSync, Mode=TwoWay}"
+                          Content="Auto" Padding="8,2"
+                          IsVisible="{Binding IsAutoSyncAvailable}"
+                          ToolTip.Tip="Auto-compute sensitivity to match Global Default" />
+          </StackPanel>
 
-      <!-- Proof of Match -->
-      <StackPanel Spacing="3">
-        <TextBlock Text="Proof of Match" FontSize="14" Opacity="0.8" />
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <TextBlock Text="Raw Accel Only:" FontWeight="SemiBold" VerticalAlignment="Center" Width="110"
-                     ToolTip.Tip="(Sens × screenWidthRatio × dpiRatio) ÷ S_base — how well raw accel alone offsets the full environmental delta (screen resolution + DPI) before Win Speed or Registry Bridge contribute" />
-          <TextBlock Text="{Binding RawAccelMatchAccuracy}" VerticalAlignment="Center" />
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <TextBlock Text="Win Speed Only:" FontWeight="SemiBold" VerticalAlignment="Center" Width="110"
-                     ToolTip.Tip="(Sens × WinMult) ÷ Effective(GlobalDefault) — shows how close Raw Accel + Win Pointer Speed alone gets you before the registry bridge" />
-          <TextBlock Text="{Binding WinSpeedMatchAccuracy}" VerticalAlignment="Center" />
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <TextBlock Text="Full Match:" FontWeight="SemiBold" VerticalAlignment="Center" Width="110"
-                     ToolTip.Tip="(Sens × WinMult × RegCurve) ÷ Effective(GlobalDefault) — 100.00% = exact compensation across all three factors" />
-          <TextBlock Text="{Binding MatchAccuracy}" VerticalAlignment="Center" />
-        </StackPanel>
-      </StackPanel>
+          <!-- Inline match -->
+          <TextBlock Grid.Row="4" Grid.Column="0" Text="Match:" Opacity="0.6" VerticalAlignment="Center" Margin="0,0,10,0" />
+          <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding RawAccelMatchAccuracy}" VerticalAlignment="Center"
+                     ToolTip.Tip="How well raw accel sensitivity alone offsets the environmental delta before Win Speed or Registry Bridge contribute" />
+        </Grid>
+      </Border>
 
-      <!-- ═══ Target Manager (hidden for Global Default) ═══ -->
-      <StackPanel Spacing="6" IsVisible="{Binding IsTargetManagerEnabled}">
-        <Separator />
+      <!-- ═══ Card 3: Windows Pointer ═══ -->
+      <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+              CornerRadius="6" Padding="14,10">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
+          <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
+                     Text="Windows Pointer" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
 
-        <!-- Header + launcher button -->
-        <StackPanel Orientation="Horizontal" Spacing="10">
-          <TextBlock Text="Target Associations"
-                     FontSize="14" FontWeight="SemiBold" Opacity="0.8"
-                     VerticalAlignment="Center" />
-          <Button Content="Manage Targets…"
-                  Command="{Binding OpenTargetManagerCommand}"
-                  Padding="10,4" />
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Pointer Speed:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
+            <ComboBox ItemsSource="{Binding WinPointerOptions}" SelectedItem="{Binding WinPointerSpeed, Mode=TwoWay}"
+                      Width="120" IsEnabled="{Binding !IsOSAutoSync}" />
+            <ToggleButton IsChecked="{Binding IsOSAutoSync, Mode=TwoWay}"
+                          Content="Auto" Padding="8,2"
+                          IsVisible="{Binding IsAutoSyncAvailable}"
+                          ToolTip.Tip="Auto-compute Win Pointer Speed to compensate environment delta" />
+          </StackPanel>
+
+          <CheckBox Grid.Row="2" Grid.ColumnSpan="2" IsThreeState="True"
+                    IsChecked="{Binding EppOverride, Mode=TwoWay}"
+                    Content="Enhance Pointer Precision"
+                    Margin="0,2,0,6"
+                    ToolTip.Tip="Checked = force on, Unchecked = force off, Indeterminate = inherit system setting" />
+
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="Match:" Opacity="0.6" VerticalAlignment="Center" />
+          <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding WinSpeedMatchAccuracy}" VerticalAlignment="Center"
+                     ToolTip.Tip="How close Raw Accel + Win Pointer Speed gets you before the registry bridge" />
+        </Grid>
+      </Border>
+
+      <!-- ═══ Card 4: Registry Bridge ═══ -->
+      <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+              CornerRadius="6" Padding="14,10">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
+          <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
+                     Text="Registry Bridge" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Curve Override:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
+            <TextBox Text="{Binding RegistryCurveString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     Width="120" Watermark="leave empty to skip"
+                     IsReadOnly="{Binding IsRegAutoSync}" />
+            <ToggleButton IsChecked="{Binding IsRegAutoSync, Mode=TwoWay}"
+                          Content="Auto" Padding="8,2"
+                          IsVisible="{Binding IsAutoSyncAvailable}"
+                          ToolTip.Tip="Auto-compute registry curve to cover exact remainder gap" />
+          </StackPanel>
+
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="Full Match:" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding MatchAccuracy}" VerticalAlignment="Center"
+                     ToolTip.Tip="Final accuracy after all three compensation layers. 100.00% = exact match with Global Default." />
+        </Grid>
+      </Border>
+
+      <!-- ═══ Card 5: Target Associations (hidden for Global Default) ═══ -->
+      <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+              CornerRadius="6" Padding="14,10">
+        <StackPanel Spacing="6">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <TextBlock Text="Target Associations"
+                       FontSize="14" FontWeight="SemiBold"
+                       VerticalAlignment="Center" />
+            <Button Content="Manage Targets…"
+                    Command="{Binding OpenTargetManagerCommand}"
+                    Padding="10,4" />
+          </StackPanel>
+
+          <ItemsControl ItemsSource="{Binding TargetAssociationsSummary}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="models:TargetAssociation">
+                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2">
+                  <Border Background="{DynamicResource SystemControlBackgroundBaseMediumLowBrush}" CornerRadius="3" Padding="5,1">
+                    <TextBlock Text="{Binding TypeLabel}" FontSize="10" FontWeight="Bold" />
+                  </Border>
+                  <TextBlock Text="{Binding Value}" VerticalAlignment="Center" Opacity="0.8" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBlock Text="(no targets — activates on any window)"
+                     FontStyle="Italic" Opacity="0.45" FontSize="12"
+                     IsVisible="{Binding IsTargetAssociationsEmpty}" />
         </StackPanel>
-
-        <!-- Read-only summary list -->
-        <ItemsControl ItemsSource="{Binding TargetAssociationsSummary}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="models:TargetAssociation">
-              <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2">
-                <Border Background="{DynamicResource SystemControlBackgroundBaseMediumLowBrush}" CornerRadius="3" Padding="5,1">
-                  <TextBlock Text="{Binding TypeLabel}" FontSize="10" FontWeight="Bold" />
-                </Border>
-                <TextBlock Text="{Binding Value}" VerticalAlignment="Center" Opacity="0.8" />
-              </StackPanel>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-        <TextBlock Text="(no targets — activates on any window)"
-                   FontStyle="Italic" Opacity="0.45" FontSize="12"
-                   IsVisible="{Binding IsTargetAssociationsEmpty}" />
-      </StackPanel>
+      </Border>
 
     </StackPanel>
   </ScrollViewer>

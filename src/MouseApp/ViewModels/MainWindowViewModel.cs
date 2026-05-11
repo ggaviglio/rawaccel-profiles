@@ -40,11 +40,37 @@ public partial class MainWindowViewModel : ViewModelBase
             _selectedProfile = value;
             OnPropertyChanged(nameof(SelectedProfile));
             DeleteProfileCommand?.NotifyCanExecuteChanged();
+            CloneProfileCommand?.NotifyCanExecuteChanged();
+            MoveProfileUpCommand?.NotifyCanExecuteChanged();
+            MoveProfileDownCommand?.NotifyCanExecuteChanged();
+            ApplySelectedCommand?.NotifyCanExecuteChanged();
+            SetAsDefaultCommand?.NotifyCanExecuteChanged();
             if (value != null)
             {
                 _profileEditor?.LoadProfile(value);
                 _navigation?.Navigate(_profileEditor);
             }
+        }
+    }
+
+    private void RestoreSelectedProfile(MouseProfile? profile)
+    {
+        if (profile == null) return;
+        if (!Profiles.Contains(profile)) return;
+
+        if (ReferenceEquals(_selectedProfile, profile))
+        {
+            OnPropertyChanged(nameof(SelectedProfile));
+            DeleteProfileCommand?.NotifyCanExecuteChanged();
+            CloneProfileCommand?.NotifyCanExecuteChanged();
+            MoveProfileUpCommand?.NotifyCanExecuteChanged();
+            MoveProfileDownCommand?.NotifyCanExecuteChanged();
+            ApplySelectedCommand?.NotifyCanExecuteChanged();
+            SetAsDefaultCommand?.NotifyCanExecuteChanged();
+        }
+        else
+        {
+            SelectedProfile = profile;
         }
     }
 
@@ -71,6 +97,11 @@ public partial class MainWindowViewModel : ViewModelBase
     public System.Windows.Input.ICommand OpenProfilesCommand { get; }
     public RelayCommand AddProfileCommand { get; }
     public RelayCommand DeleteProfileCommand { get; }
+    public RelayCommand CloneProfileCommand { get; }
+    public RelayCommand MoveProfileUpCommand { get; }
+    public RelayCommand MoveProfileDownCommand { get; }
+    public RelayCommand ApplySelectedCommand { get; }
+    public RelayCommand SetAsDefaultCommand { get; }
 
     public MainWindowViewModel()
     {
@@ -81,6 +112,11 @@ public partial class MainWindowViewModel : ViewModelBase
         OpenProfilesCommand = new RelayCommand(() => _navigation?.Navigate(_profileEditor));
         AddProfileCommand = new RelayCommand(ExecuteAddProfile);
         DeleteProfileCommand = new RelayCommand(ExecuteDeleteProfile, CanDeleteProfile);
+        CloneProfileCommand = new RelayCommand(ExecuteCloneProfile, CanCloneProfile);
+        MoveProfileUpCommand = new RelayCommand(ExecuteMoveProfileUp, CanMoveProfileUp);
+        MoveProfileDownCommand = new RelayCommand(ExecuteMoveProfileDown, CanMoveProfileDown);
+        ApplySelectedCommand = new RelayCommand(ExecuteApplySelected, CanApplySelected);
+        SetAsDefaultCommand = new RelayCommand(ExecuteSetAsDefault, CanSetAsDefault);
     }
 
     public MainWindowViewModel(NavigationService navigation, ProfileEditorViewModel profileEditor, SettingsViewModel settings, ProfileService profileService)
@@ -119,6 +155,103 @@ public partial class MainWindowViewModel : ViewModelBase
             ActiveProfile = profile;
             SelectedProfile = profile;
         });
+    }
+
+    private bool CanApplySelected() => _selectedProfile != null;
+
+    private void ExecuteApplySelected()
+    {
+        if (_profileEditor?.ApplyCommand is { } cmd && cmd.CanExecute(null))
+            cmd.Execute(null);
+    }
+
+    private bool CanSetAsDefault() =>
+        _selectedProfile != null && !_selectedProfile.IsGlobalDefault;
+
+    private async void ExecuteSetAsDefault()
+    {
+        if (_selectedProfile == null || _profileService == null) return;
+        await _profileService.SetGlobalDefaultAsync(_selectedProfile);
+        _profileEditor?.LoadProfile(_selectedProfile);
+        SetAsDefaultCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanCloneProfile() => _selectedProfile != null;
+
+    private async void ExecuteCloneProfile()
+    {
+        if (_selectedProfile == null || _profileService == null) return;
+
+        var baseName = _selectedProfile.ProfileName;
+        var cloneName = $"{baseName} Copy";
+        var suffix = 1;
+        while (Profiles.Any(p => p.ProfileName == cloneName))
+            cloneName = $"{baseName} Copy {suffix++}";
+
+        var clone = new MouseProfile
+        {
+            ProfileName            = cloneName,
+            RawAccelTemplate       = _selectedProfile.RawAccelTemplate,
+            SensMultiplier         = _selectedProfile.SensMultiplier,
+            RawSyncMode            = _selectedProfile.RawSyncMode,
+            OSSyncMode             = _selectedProfile.OSSyncMode,
+            WinPointerSpeed        = _selectedProfile.WinPointerSpeed,
+            RegSyncMode            = _selectedProfile.RegSyncMode,
+            RegistryCurveOverride  = _selectedProfile.RegistryCurveOverride,
+            TargetScreenWidth      = _selectedProfile.TargetScreenWidth,
+            TargetLogicalDpi       = _selectedProfile.TargetLogicalDpi,
+            UseEnhancePointerPrecision = _selectedProfile.UseEnhancePointerPrecision,
+            AutoSwitchEnabled      = _selectedProfile.AutoSwitchEnabled,
+            TargetAssociations     = _selectedProfile.TargetAssociations
+                .Select(t => new TargetAssociation { MatchType = t.MatchType, Value = t.Value })
+                .ToList(),
+            IsEditing              = true
+        };
+
+        var index = Profiles.IndexOf(_selectedProfile);
+        Profiles.Insert(index + 1, clone);
+        SelectedProfile = clone;
+
+        await _profileService.SaveAsync().ConfigureAwait(false);
+    }
+
+    private bool CanMoveProfileUp()
+    {
+        if (_selectedProfile == null) return false;
+        var index = Profiles.IndexOf(_selectedProfile);
+        return index > 0 && !(_selectedProfile.IsGlobalDefault && index == 0);
+    }
+
+    private async void ExecuteMoveProfileUp()
+    {
+        var current = _selectedProfile;
+        if (current == null || _profileService == null) return;
+        var index = Profiles.IndexOf(current);
+        if (index <= 0) return;
+        if (index == 1 && Profiles[0].IsGlobalDefault) return;
+
+        Profiles.Move(index, index - 1);
+        RestoreSelectedProfile(current);
+        await _profileService.SaveAsync().ConfigureAwait(false);
+    }
+
+    private bool CanMoveProfileDown()
+    {
+        if (_selectedProfile == null) return false;
+        var index = Profiles.IndexOf(_selectedProfile);
+        return index >= 0 && index < Profiles.Count - 1;
+    }
+
+    private async void ExecuteMoveProfileDown()
+    {
+        var current = _selectedProfile;
+        if (current == null || _profileService == null) return;
+        var index = Profiles.IndexOf(current);
+        if (index < 0 || index >= Profiles.Count - 1) return;
+
+        Profiles.Move(index, index + 1);
+        RestoreSelectedProfile(current);
+        await _profileService.SaveAsync().ConfigureAwait(false);
     }
 
     private bool CanDeleteProfile() =>
