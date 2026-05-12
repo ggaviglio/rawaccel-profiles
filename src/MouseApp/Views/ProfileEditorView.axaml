@@ -13,30 +13,7 @@
   <ScrollViewer Margin="0" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
     <StackPanel Spacing="8">
 
-      <!-- ═══ Card 1: Environment ═══ -->
-      <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-              CornerRadius="6" Padding="14,10">
-        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
-          <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
-                     Text="Environment" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
-
-          <TextBlock Grid.Row="1" Grid.Column="0" Text="Screen Width:" VerticalAlignment="Center" Margin="0,0,10,6" />
-          <ComboBox Grid.Row="1" Grid.Column="1" IsEditable="True"
-                    Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                    ItemsSource="{Binding ScreenWidthPresets}"
-                    Width="140" HorizontalAlignment="Left" Margin="0,0,0,6"
-                    ToolTip.Tip="Target screen width in pixels. Leave empty to inherit from Global Default." />
-
-          <TextBlock Grid.Row="2" Grid.Column="0" Text="Logical DPI:" VerticalAlignment="Center" Margin="0,0,10,6" />
-          <ComboBox Grid.Row="2" Grid.Column="1" IsEditable="True"
-                    Text="{Binding TargetLogicalDpiString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                    ItemsSource="{Binding DpiPresets}"
-                    Width="140" HorizontalAlignment="Left" Margin="0,0,0,6"
-                    ToolTip.Tip="Logical DPI (96=100%, 120=125%, 144=150%, 192=200%). Leave empty to inherit from Global Default." />
-        </Grid>
-      </Border>
-
-      <!-- ═══ Card 2: Raw Accel ═══ -->
+      <!-- ═══ Card 1: Raw Accel ═══ -->
       <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
               CornerRadius="6" Padding="14,10">
         <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
@@ -148,9 +125,33 @@
         </Grid>
       </Border>
 
-      <!-- ═══ Card 5: Target Associations (hidden for Global Default) ═══ -->
+      <!-- ═══ Card 4: Auto-Match Environment ═══ -->
       <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-              CornerRadius="6" Padding="14,10">
+              CornerRadius="6" Padding="14,10"
+              ToolTip.Tip="These values are used only to select and compensate profiles automatically. MouseApp does not change your Windows resolution or DPI.">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
+          <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
+                     Text="Auto-Match Environment" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Screen Width:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <ComboBox Grid.Row="1" Grid.Column="1" IsEditable="True"
+                    Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    ItemsSource="{Binding ScreenWidthPresets}"
+                    Width="140" HorizontalAlignment="Left" Margin="0,0,0,6"
+                    ToolTip.Tip="Target screen width in pixels. Leave empty to inherit from Global Default." />
+
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="Logical DPI:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <ComboBox Grid.Row="2" Grid.Column="1" IsEditable="True"
+                    Text="{Binding TargetLogicalDpiString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    ItemsSource="{Binding DpiPresets}"
+                    Width="140" HorizontalAlignment="Left" Margin="0,0,0,6"
+                    ToolTip.Tip="Logical DPI (96=100%, 120=125%, 144=150%, 192=200%). Leave empty to inherit from Global Default." />
+        </Grid>
+      </Border>
+
+      <!-- ═══ Card 5: Target Associations (hidden for Global Default) ═══ -->
+                  <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                    CornerRadius="6" Padding="14,10" MinHeight="64">
         <StackPanel Spacing="6">
           <StackPanel Orientation="Horizontal" Spacing="10">
             <TextBlock Text="Target Associations"
