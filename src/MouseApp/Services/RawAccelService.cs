@@ -7,11 +7,11 @@ namespace MouseApp.Services;
 
 public class RawAccelService
 {
-    private readonly SettingsService _settingsService;
+    private readonly ProfileService _profileService;
 
-    public RawAccelService(SettingsService settingsService)
+    public RawAccelService(ProfileService profileService)
     {
-        _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+        _profileService = profileService ?? throw new ArgumentNullException(nameof(profileService));
     }
 
     /// <summary>
@@ -26,7 +26,7 @@ public class RawAccelService
 
         try
         {
-            var rawAccelDir = _settingsService.Settings.RawAccelDirectory ?? string.Empty;
+            var rawAccelDir = _profileService.Settings.RawAccelDirectory ?? string.Empty;
             // writer.exe is always derived from the Raw Accel install directory.
             var writerExePath = string.IsNullOrEmpty(rawAccelDir)
                 ? string.Empty
@@ -125,7 +125,7 @@ public class RawAccelService
     /// </summary>
     private string ResolveTemplatesDirectory()
     {
-        var configured = _settingsService.Settings?.TemplatesDirectory;
+        var configured = _profileService.Settings?.TemplatesDirectory;
         return !string.IsNullOrWhiteSpace(configured)
             ? configured
             : AppContext.BaseDirectory;

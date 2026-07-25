@@ -18,7 +18,6 @@ public partial class ProfileEditorViewModel : ViewModelBase
     private readonly TemplateService  _templateService;
     private readonly ProfileService   _profileService;
     private readonly IWindowService   _windowService;
-    private readonly SettingsService  _settingsService;
 
     /// <summary>Injected after construction via <see cref="WireMouseService"/>. Null until wired.</summary>
     private IMouseService? _mouseService;
@@ -200,9 +199,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
     public IRelayCommand      OpenRawAccelGuiCommand       { get; }
 
     // ── Constructor ─────────────────────────────────────────────────────────
-    public ProfileEditorViewModel(SettingsService settingsService, TemplateService templateService, ProfileService profileService, IWindowService windowService)
+    public ProfileEditorViewModel(TemplateService templateService, ProfileService profileService, IWindowService windowService)
     {
-        _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
         _templateService = templateService ?? throw new ArgumentNullException(nameof(templateService));
         _profileService  = profileService  ?? throw new ArgumentNullException(nameof(profileService));
         _windowService   = windowService   ?? throw new ArgumentNullException(nameof(windowService));
@@ -871,7 +869,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     {
         if (!OperatingSystem.IsWindows()) return;
 
-        var rawAccelDir = _settingsService.Settings?.RawAccelDirectory;
+        var rawAccelDir = _profileService.Settings?.RawAccelDirectory;
         if (string.IsNullOrEmpty(rawAccelDir)) return;
 
         var exePath = Path.Combine(rawAccelDir, "rawaccel.exe");
@@ -893,7 +891,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     private async Task ExecuteImportCurrentSettingsAsync()
     {
-        var rawAccelDir = _settingsService.Settings?.RawAccelDirectory;
+        var rawAccelDir = _profileService.Settings?.RawAccelDirectory;
         if (string.IsNullOrEmpty(rawAccelDir)) return;
 
         var name = await _windowService.ShowTemplateNameDialogAsync("Save current Raw Accel settings as:", "settings");

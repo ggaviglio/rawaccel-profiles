@@ -21,9 +21,22 @@ public class ProfileService
 
     /// <summary>
     /// Serializes all file writes so concurrent AutoPersist + SetGlobalDefaultAsync calls
-    /// never race on File.Create() and truncate each other's output.
+    /// (and settings saves, since both share this file) never race on File.Create()
+    /// and truncate each other's output.
     /// </summary>
     private readonly System.Threading.SemaphoreSlim _saveLock = new(1, 1);
+
+    private sealed class PersistedData
+    {
+        public AppSettings        Settings { get; set; } = new();
+        public List<MouseProfile> Profiles { get; set; } = new();
+    }
+
+    /// <summary>App-wide settings, persisted in the same file as profiles.</summary>
+    public AppSettings Settings { get; private set; } = new();
+
+    /// <summary>Raised when <see cref="Settings"/> is saved via <see cref="Save"/>.</summary>
+    public event EventHandler? SettingsChanged;
 
     /// <summary>
     /// Windows Pointer Speed (1–20) → effective mouse multiplier.
@@ -60,12 +73,29 @@ public class ProfileService
 
             Profiles.Clear();
             Profiles.Add(global);
+            Settings = new AppSettings();
             await SaveAsync().ConfigureAwait(false);
             return;
         }
 
-        using var fs = File.OpenRead(_dataFile);
-        var list = await JsonSerializer.DeserializeAsync<List<MouseProfile>>(fs, _jsonOptions).ConfigureAwait(false) ?? new List<MouseProfile>();
+        var json = await File.ReadAllTextAsync(_dataFile).ConfigureAwait(false);
+
+        List<MouseProfile> list;
+        using (var doc = JsonDocument.Parse(json))
+        {
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                // Pre-merge format: a bare profiles array with no settings section.
+                list     = JsonSerializer.Deserialize<List<MouseProfile>>(json, _jsonOptions) ?? new List<MouseProfile>();
+                Settings = new AppSettings();
+            }
+            else
+            {
+                var data = JsonSerializer.Deserialize<PersistedData>(json, _jsonOptions) ?? new PersistedData();
+                list     = data.Profiles;
+                Settings = data.Settings;
+            }
+        }
 
         if (!list.Any())
         {
@@ -92,21 +122,57 @@ public class ProfileService
         await _saveLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            var list = Profiles.ToList();
-            NormalizeGlobalDefault(list);
-
-            var dir = Path.GetDirectoryName(_dataFile);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
+            var data = BuildPersistedData();
+            EnsureDirectoryExists();
 
             using var fs = File.Create(_dataFile);
-            await JsonSerializer.SerializeAsync(fs, list, _jsonOptions).ConfigureAwait(false);
+            await JsonSerializer.SerializeAsync(fs, data, _jsonOptions).ConfigureAwait(false);
             await fs.FlushAsync().ConfigureAwait(false);
         }
         finally
         {
             _saveLock.Release();
         }
+    }
+
+    /// <summary>Synchronous save for settings-driven changes (checkbox toggles, folder pickers).</summary>
+    public void Save()
+    {
+        _saveLock.Wait();
+        try
+        {
+            var data = BuildPersistedData();
+            EnsureDirectoryExists();
+
+            File.WriteAllText(_dataFile, JsonSerializer.Serialize(data, _jsonOptions));
+        }
+        finally
+        {
+            _saveLock.Release();
+        }
+
+        try
+        {
+            SettingsChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch
+        {
+            // swallow listener exceptions
+        }
+    }
+
+    private PersistedData BuildPersistedData()
+    {
+        var list = Profiles.ToList();
+        NormalizeGlobalDefault(list);
+        return new PersistedData { Settings = Settings, Profiles = list };
+    }
+
+    private void EnsureDirectoryExists()
+    {
+        var dir = Path.GetDirectoryName(_dataFile);
+        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+            Directory.CreateDirectory(dir);
     }
 
     public async Task SetGlobalDefaultAsync(MouseProfile p)

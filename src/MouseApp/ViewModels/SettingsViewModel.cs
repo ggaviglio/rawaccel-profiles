@@ -15,14 +15,14 @@ namespace MouseApp.ViewModels;
 
 public partial class SettingsViewModel : ViewModelBase
 {
-    private readonly SettingsService? _settingsService = null;
+    private readonly ProfileService? _profileService = null;
     private readonly IStorageService? _storageService = null;
 
-    public SettingsViewModel(SettingsService settingsService, IStorageService storageService)
+    public SettingsViewModel(ProfileService profileService, IStorageService storageService)
     {
-        _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+        _profileService = profileService ?? throw new ArgumentNullException(nameof(profileService));
         _storageService = storageService ?? throw new ArgumentNullException(nameof(storageService));
-        Settings = _settingsService.Settings ?? new AppSettings();
+        Settings = _profileService.Settings ?? new AppSettings();
 
         // Ensure RunAtStartup reflects system state on startup (HKCU Run)
         if (OperatingSystem.IsWindows())
@@ -66,7 +66,7 @@ public partial class SettingsViewModel : ViewModelBase
             if (!string.IsNullOrEmpty(path))
             {
                 RawAccelDirectory = path;
-                _settingsService?.Save();
+                _profileService?.Save();
             }
         });
 
@@ -76,13 +76,13 @@ public partial class SettingsViewModel : ViewModelBase
             if (!string.IsNullOrEmpty(path))
             {
                 TemplatesDirectory = path;
-                _settingsService?.Save();
+                _profileService?.Save();
             }
         });
         
 
         // Listen for external changes
-        _settingsService.SettingsChanged += (_, __) => OnExternalSettingsChanged();
+        _profileService.SettingsChanged += (_, __) => OnExternalSettingsChanged();
     }
 
     public AppSettings Settings { get; } = new AppSettings();
@@ -117,7 +117,7 @@ public partial class SettingsViewModel : ViewModelBase
             if (value == Settings.EnableRegistryBridge) return;
             Settings.EnableRegistryBridge = value;
             OnPropertyChanged(nameof(EnableRegistryBridge));
-            _settingsService?.Save();
+            _profileService?.Save();
         }
     }
 
@@ -129,7 +129,7 @@ public partial class SettingsViewModel : ViewModelBase
             if (value == Settings.RunAtStartup) return;
             Settings.RunAtStartup = value;
             OnPropertyChanged(nameof(RunAtStartup));
-            _settingsService?.Save();
+            _profileService?.Save();
             if (OperatingSystem.IsWindows())
                 try { ApplyRunAtStartup(value); } catch { }
         }
@@ -143,7 +143,7 @@ public partial class SettingsViewModel : ViewModelBase
             if (value == Settings.StartMinimized) return;
             Settings.StartMinimized = value;
             OnPropertyChanged(nameof(StartMinimized));
-            _settingsService?.Save();
+            _profileService?.Save();
         }
     }
 
@@ -155,7 +155,7 @@ public partial class SettingsViewModel : ViewModelBase
             if (value == Settings.CloseToTray) return;
             Settings.CloseToTray = value;
             OnPropertyChanged(nameof(CloseToTray));
-            _settingsService?.Save();
+            _profileService?.Save();
         }
     }
 
@@ -167,7 +167,7 @@ public partial class SettingsViewModel : ViewModelBase
 
     private Task SaveAsync()
     {
-        _settingsService?.Save();
+        _profileService?.Save();
 
         if (OperatingSystem.IsWindows())
         {
@@ -181,7 +181,7 @@ public partial class SettingsViewModel : ViewModelBase
 
     private void OnExternalSettingsChanged()
     {
-        var s = _settingsService?.Settings;
+        var s = _profileService?.Settings;
         if (s == null) return;
         Settings.RawAccelDirectory = s.RawAccelDirectory;
         Settings.TemplatesDirectory = s.TemplatesDirectory;

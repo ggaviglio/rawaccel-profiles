@@ -24,16 +24,16 @@ public class TemplateService
         StringComparer.OrdinalIgnoreCase
     );
 
-    private readonly SettingsService _settingsService;
+    private readonly ProfileService _profileService;
 
     public event EventHandler? TemplatesChanged;
 
     public List<string> Templates { get; private set; } = new();
 
-    public TemplateService(SettingsService settingsService)
+    public TemplateService(ProfileService profileService)
     {
-        _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
-        _settingsService.SettingsChanged += (_, __) => Refresh();
+        _profileService = profileService ?? throw new ArgumentNullException(nameof(profileService));
+        _profileService.SettingsChanged += (_, __) => Refresh();
         Refresh();
     }
 
@@ -43,7 +43,7 @@ public class TemplateService
     /// </summary>
     public string ResolveTemplatesDirectory()
     {
-        var configured = _settingsService.Settings?.TemplatesDirectory;
+        var configured = _profileService.Settings?.TemplatesDirectory;
         if (!string.IsNullOrWhiteSpace(configured))
             return configured;
         return AppContext.BaseDirectory;

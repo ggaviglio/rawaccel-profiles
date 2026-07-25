@@ -33,25 +33,25 @@ public partial class App : Application
             DisableAvaloniaDataAnnotationValidation();
 
             // Initialize core services
-            var settingsService   = new Services.SettingsService();
-            var storageService    = new Services.AvaloniaStorageService();
-            var templateService   = new Services.TemplateService(settingsService);
-            var navigationService = new Services.NavigationService();
             var profileService    = new Services.ProfileService();
-            var windowService     = new Services.AvaloniaWindowService();
 
-            // Populate profiles from disk before any ViewModel touches the collection.
+            // Populate profiles + settings from disk before any service/ViewModel touches them.
             profileService.LoadAsync().GetAwaiter().GetResult();
 
+            var storageService    = new Services.AvaloniaStorageService();
+            var templateService   = new Services.TemplateService(profileService);
+            var navigationService = new Services.NavigationService();
+            var windowService     = new Services.AvaloniaWindowService();
+
             // Create feature view-models
-            var settingsVm      = new ViewModels.SettingsViewModel(settingsService, storageService);
-            var profileEditorVm = new ViewModels.ProfileEditorViewModel(settingsService, templateService, profileService, windowService);
+            var settingsVm      = new ViewModels.SettingsViewModel(profileService, storageService);
+            var profileEditorVm = new ViewModels.ProfileEditorViewModel(templateService, profileService, windowService);
 
             // Main VM wired to navigation
             var mainVm = new ViewModels.MainWindowViewModel(navigationService, profileEditorVm, settingsVm, profileService);
 
             // Hardware apply service
-            var rawAccelProvider = new Services.RawAccelService(settingsService);
+            var rawAccelProvider = new Services.RawAccelService(profileService);
             _mouseService = new Services.MouseService(profileService, rawAccelProvider);
             var mouseService = _mouseService;
 
@@ -108,7 +108,7 @@ public partial class App : Application
             {
                 if (shuttingDown) return;
 
-                if (settingsService.Settings?.CloseToTray == true)
+                if (profileService.Settings?.CloseToTray == true)
                 {
                     e.Cancel = true;
                     mainWindow.Hide();
@@ -152,7 +152,7 @@ public partial class App : Application
             desktop.Exit += (_, _) => tray.IsVisible = false;
 
             // StartMinimized: don't show the window on launch.
-            if (settingsService.Settings?.StartMinimized != true)
+            if (profileService.Settings?.StartMinimized != true)
                 ShowMainWindow();
         }
 
