@@ -43,11 +43,11 @@ public partial class App : Application
             var windowService     = new Services.AvaloniaWindowService();
 
             // Create feature view-models
-            var settingsVm      = new ViewModels.SettingsViewModel(profileService, storageService);
             var profileEditorVm = new ViewModels.ProfileEditorViewModel(templateService, profileService, windowService);
 
-            // Main VM — Settings is opened via windowService as a modal popup, not in-place navigation.
-            var mainVm = new ViewModels.MainWindowViewModel(profileEditorVm, settingsVm, profileService, windowService);
+            // Main VM — Settings is opened via windowService as a modal popup (fresh view-model
+            // per open), not in-place navigation.
+            var mainVm = new ViewModels.MainWindowViewModel(profileEditorVm, profileService, windowService, storageService);
 
             // Hardware apply service
             var rawAccelProvider = new Services.RawAccelService(profileService);

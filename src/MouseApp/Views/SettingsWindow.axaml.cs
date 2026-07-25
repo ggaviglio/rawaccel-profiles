@@ -13,5 +13,6 @@ public partial class SettingsWindow : Window
     public SettingsWindow(SettingsViewModel vm) : this()
     {
         DataContext = vm;
+        vm.RequestClose += Close;
     }
 }

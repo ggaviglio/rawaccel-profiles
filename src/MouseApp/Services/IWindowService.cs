@@ -1,6 +1,5 @@
 using System.Threading.Tasks;
 using MouseApp.Models;
-using MouseApp.ViewModels;
 
 namespace MouseApp.Services;
 
@@ -22,8 +21,9 @@ public interface IWindowService
     Task<string?> ShowTemplateNameDialogAsync(string title, string defaultName);
 
     /// <summary>
-    /// Opens the Settings window modally against the main window.
+    /// Opens the Settings window modally against the main window with a fresh
+    /// view-model reflecting the currently-committed settings.
     /// The returned Task completes when the window is closed.
     /// </summary>
-    Task ShowSettingsAsync(SettingsViewModel settingsViewModel);
+    Task ShowSettingsAsync(ProfileService profileService, IStorageService storageService);
 }

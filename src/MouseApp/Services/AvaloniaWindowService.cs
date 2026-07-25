@@ -56,9 +56,10 @@ public sealed class AvaloniaWindowService : IWindowService
         return tcs.Task;
     }
 
-    public Task ShowSettingsAsync(SettingsViewModel settingsViewModel)
+    public Task ShowSettingsAsync(ProfileService profileService, IStorageService storageService)
     {
-        var win = new SettingsWindow(settingsViewModel);
+        var vm  = new SettingsViewModel(profileService, storageService);
+        var win = new SettingsWindow(vm);
 
         var tcs = new TaskCompletionSource();
         win.Closed += (_, _) => tcs.TrySetResult();

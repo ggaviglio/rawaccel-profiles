@@ -95,6 +95,11 @@ public partial class TargetManagerViewModel : ViewModelBase
     public IRelayCommand                    AddAsClassCommand     { get; }
     public IRelayCommand                    AddManualCommand      { get; }
     public IRelayCommand<TargetAssociation> RemoveCommand         { get; }
+    public IRelayCommand                    SaveCommand           { get; }
+    public IRelayCommand                    CancelCommand         { get; }
+
+    /// <summary>Raised after Save or Cancel so the window can close itself.</summary>
+    public event Action? RequestClose;
 
     /// <summary>Summary line shown below the Active Windows list after a Test Match run.</summary>
     [ObservableProperty]
@@ -118,6 +123,8 @@ public partial class TargetManagerViewModel : ViewModelBase
         AddAsClassCommand     = new RelayCommand(ExecuteAddAsClass, () => SelectedWindow is not null && !string.IsNullOrEmpty(SelectedWindow.ClassName));
         AddManualCommand      = new RelayCommand(ExecuteAddManual,  () => !string.IsNullOrWhiteSpace(ManualValue));
         RemoveCommand         = new RelayCommand<TargetAssociation>(ExecuteRemove);
+        SaveCommand           = new RelayCommand(ExecuteSave);
+        CancelCommand         = new RelayCommand(() => RequestClose?.Invoke());
 
         // Eager discovery load
         ExecuteRefreshWindows();
@@ -193,9 +200,11 @@ public partial class TargetManagerViewModel : ViewModelBase
     /// </summary>
     private void ExecuteTestMatch()
     {
-        var associations = _profile.TargetAssociations;
+        // Test against what's currently in the list, including unsaved edits —
+        // not the last-committed state on the profile.
+        var associations = Associations.ToList();
 
-        if (associations == null || associations.Count == 0)
+        if (associations.Count == 0)
         {
             foreach (var e in ActiveWindows) e.IsMatched = false;
             MatchSummary = "No associations defined — add targets first.";
@@ -264,7 +273,7 @@ public partial class TargetManagerViewModel : ViewModelBase
     private void ExecuteAddAsExe()
     {
         if (SelectedWindow is null) return;
-        AddAndPersist(new TargetAssociation
+        AddAssociation(new TargetAssociation
         {
             MatchType = TargetMatchType.ExeName,
             Value     = SelectedWindow.ExeName
@@ -274,7 +283,7 @@ public partial class TargetManagerViewModel : ViewModelBase
     private void ExecuteAddAsPath()
     {
         if (SelectedWindow is null || string.IsNullOrEmpty(SelectedWindow.FullPath)) return;
-        AddAndPersist(new TargetAssociation
+        AddAssociation(new TargetAssociation
         {
             MatchType = TargetMatchType.FullPath,
             Value     = SelectedWindow.FullPath
@@ -284,7 +293,7 @@ public partial class TargetManagerViewModel : ViewModelBase
     private void ExecuteAddAsTitle()
     {
         if (SelectedWindow is null || string.IsNullOrEmpty(SelectedWindow.Title)) return;
-        AddAndPersist(new TargetAssociation
+        AddAssociation(new TargetAssociation
         {
             MatchType = TargetMatchType.WindowTitle,
             Value     = SelectedWindow.Title
@@ -294,7 +303,7 @@ public partial class TargetManagerViewModel : ViewModelBase
     private void ExecuteAddAsClass()
     {
         if (SelectedWindow is null || string.IsNullOrEmpty(SelectedWindow.ClassName)) return;
-        AddAndPersist(new TargetAssociation
+        AddAssociation(new TargetAssociation
         {
             MatchType = TargetMatchType.WindowClass,
             Value     = SelectedWindow.ClassName
@@ -304,7 +313,7 @@ public partial class TargetManagerViewModel : ViewModelBase
     private void ExecuteAddManual()
     {
         if (string.IsNullOrWhiteSpace(ManualValue)) return;
-        AddAndPersist(new TargetAssociation
+        AddAssociation(new TargetAssociation
         {
             MatchType = SelectedManualType,
             Value     = ManualValue.Trim()
@@ -316,12 +325,18 @@ public partial class TargetManagerViewModel : ViewModelBase
     {
         if (assoc is null) return;
         Associations.Remove(assoc);
-        SyncAndSave();
+    }
+
+    private void ExecuteSave()
+    {
+        _profile.TargetAssociations = Associations.ToList();
+        _ = _profileService.SaveAsync();
+        RequestClose?.Invoke();
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private void AddAndPersist(TargetAssociation assoc)
+    private void AddAssociation(TargetAssociation assoc)
     {
         // Duplicate guard — same MatchType + Value (case-insensitive) already present
         bool duplicate = Associations.Any(a =>
@@ -331,12 +346,5 @@ public partial class TargetManagerViewModel : ViewModelBase
         if (duplicate) return;
 
         Associations.Add(assoc);
-        SyncAndSave();
-    }
-
-    private void SyncAndSave()
-    {
-        _profile.TargetAssociations = Associations.ToList();
-        _ = _profileService.SaveAsync();
     }
 }

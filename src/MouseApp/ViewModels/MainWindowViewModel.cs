@@ -12,9 +12,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private MouseProfile? _selectedProfile;
     private MouseProfile? _activeProfile;
     private readonly ProfileEditorViewModel? _profileEditor;
-    private readonly SettingsViewModel? _settingsVm;
     private readonly ProfileService? _profileService;
     private readonly IWindowService? _windowService;
+    private readonly IStorageService? _storageService;
 
     /// <summary>The Profile Editor, always shown in the main content area.</summary>
     public ProfileEditorViewModel? ProfileEditor => _profileEditor;
@@ -115,8 +115,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
         OpenSettingsCommand = new AsyncRelayCommand(async () =>
         {
-            if (_windowService != null && _settingsVm != null)
-                await _windowService.ShowSettingsAsync(_settingsVm);
+            if (_windowService != null && _profileService != null && _storageService != null)
+                await _windowService.ShowSettingsAsync(_profileService, _storageService);
         });
         AddProfileCommand = new RelayCommand(ExecuteAddProfile);
         DeleteProfileCommand = new RelayCommand(ExecuteDeleteProfile, CanDeleteProfile);
@@ -127,13 +127,13 @@ public partial class MainWindowViewModel : ViewModelBase
         SetAsDefaultCommand = new RelayCommand(ExecuteSetAsDefault, CanSetAsDefault);
     }
 
-    public MainWindowViewModel(ProfileEditorViewModel profileEditor, SettingsViewModel settings, ProfileService profileService, IWindowService windowService)
+    public MainWindowViewModel(ProfileEditorViewModel profileEditor, ProfileService profileService, IWindowService windowService, IStorageService storageService)
         : this()
     {
         _profileEditor = profileEditor;
-        _settingsVm = settings;
         _profileService = profileService;
         _windowService = windowService;
+        _storageService = storageService;
 
         // Use the service's collection directly — single source of truth, no duplication.
         Profiles = profileService.Profiles;

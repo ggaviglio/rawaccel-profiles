@@ -44,7 +44,10 @@
       <TextBlock Text="Start Minimized to Tray" VerticalAlignment="Center" />
     </StackPanel>
 
-    <Button Content="Save" Command="{Binding SaveCommand}" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="Cancel" Command="{Binding CancelCommand}" />
+      <Button Content="Save" Command="{Binding SaveCommand}" IsDefault="True" />
+    </StackPanel>
   </StackPanel>
 
 </Window>

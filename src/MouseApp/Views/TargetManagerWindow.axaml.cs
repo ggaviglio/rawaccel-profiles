@@ -13,5 +13,6 @@ public partial class TargetManagerWindow : Window
     public TargetManagerWindow(TargetManagerViewModel vm) : this()
     {
         DataContext = vm;
+        vm.RequestClose += Close;
     }
 }
