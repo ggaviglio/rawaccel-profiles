@@ -68,15 +68,9 @@ computed against. `ProfileService.NormalizeGlobalDefault` enforces invariants
 on it (e.g. it can never carry `Auto`-computed OS/Registry values) on every
 load/save.
 
-### The math engine (compensation pipeline)
+### The math engine (compensation pipeline) — precision-critical
 
-This is the most fragile part of the codebase. The exact do-not-touch
-functions, fields, and invariants are maintained in a dedicated file, imported
-here so it's always in context:
-
-@PRECISION_CRITICAL_FILES.md
-
-High-level pipeline, end to end:
+This is the most fragile part of the codebase. High-level pipeline, end to end:
 
 1. `ProfileService.GetEffectiveSensitivity(profile)` computes a single
    dimensionless "effective sensitivity" number for a profile: sensitivity
@@ -105,10 +99,48 @@ High-level pipeline, end to end:
    `CurveToBinary`/`ApplyRegistryBridge` (used for the actual write) must stay
    formula-identical or the match-accuracy display stops predicting reality.
 
-Treat any change here as a precision-critical edit: read the imported file in
-full first, and preserve the `_isSyncing`/`wasSyncing` reentrancy guards and
-the `AutoPersist()`-before-`RecalculateMatchAccuracy()` callback ordering in
-`ProfileEditorViewModel`.
+**Do not modify the following without an explicit, scoped instruction to do so:**
+
+- **`Services/MouseRegistryBridge.cs`**
+  - `EncodeRegCurve()` — the 16.16 round-trip model:
+    `yBase1 = MarkCXCurve[1] × (150/DPI) / winSpeedMult`. Changing the anchor,
+    the DPI factor, or the `winSpeedMult` division silently breaks every match
+    accuracy display and every compensation calculation.
+  - `ApplyRegistryBridge()` → `CurveToBinary()` — the actual registry write:
+    `Y[i] = X[i] × (150/DPI) / winSpeedMult × regResult`. Must stay
+    formula-identical to `EncodeRegCurve` or the model stops predicting
+    reality. `winSpeedMult` is read live from the registry immediately before
+    this call (pointer speed is written first so the live value is already
+    correct for the profile).
+- **`Services/ProfileService.cs`**
+  - `WinMultipliers[]` — the 20-entry table is the single source of truth for
+    all Win Speed math. A wrong value means wrong compensation applied to
+    hardware.
+  - `GetEffectiveSensitivity()` — uses `EncodeRegCurve`, feeds every
+    comparison. Removing the encode call here is a silent precision regression.
+  - `CalculateCompensations()` — the apply-time math. Must stay in sync with
+    `ProfileEditorViewModel`'s `ApplyAutoOSSync`/`ApplyAutoRegSync`.
+- **`ViewModels/ProfileEditorViewModel.cs`** (Math Engine section, ~lines 305–440)
+  - `ApplyAutoOSSync()` — Win Speed selection formula: target is
+    `Effective(base) / S_target`.
+  - `ApplyAutoRegSync()` — Registry remainder formula: target is
+    `Effective(base) / (S_target × WinMult)`.
+  - `RecalculateMatchAccuracy()` — display math; uses `EncodeRegCurve` on the
+    reg curve value.
+  - `On*Changed` callback **ordering** matters: `AutoPersist()` must come
+    before `RecalculateMatchAccuracy()` everywhere. Swapping them causes stale
+    model reads.
+  - The `_isSyncing` guard + `wasSyncing` save/restore pattern in
+    `ApplyAutoOSSync`/`ApplyAutoRegSync`. Removing any guard causes reentrancy
+    corruption on profile load.
+- **`Services/MouseService.cs`** — the dedup check in `ApplyProfileAsync`
+  compares computed `(winSpeed, regResult, template, sens, epp)` values, not
+  object identity. Reverting to `ReferenceEquals` means Global Default changes
+  won't propagate to already-active profiles.
+- **`Models/MouseProfile.cs`** — field types for `SensMultiplier` (`double?`),
+  `WinPointerSpeed` (`int?`), `RegistryCurveOverride` (`double?`). If these
+  change type, the null-fallback logic throughout the math engine silently
+  misbehaves.
 
 ### Foreground-window profile switching
 
