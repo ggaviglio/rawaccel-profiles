@@ -6,7 +6,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="600"
-        SizeToContent="Width"
+        Width="1000"
         Height="625"
         MinHeight="480"
         x:Class="MouseApp.Views.MainWindow"
@@ -24,12 +24,12 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="280" />
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="*" MinWidth="220" />
+            <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
 
         <!-- Sidebar -->
-        <Border Grid.Column="0" Background="{DynamicResource SystemControlBackgroundChromeLowBrush}" Padding="8,8,4,8">
+        <Border x:Name="SidebarHost" Grid.Column="0" Background="{DynamicResource SystemControlBackgroundChromeLowBrush}" Padding="8,8,4,8">
             <Grid RowDefinitions="*,Auto">
 
                 <!-- Row 0: All profiles -->
@@ -100,12 +100,13 @@
                 </Border>
 
                 <!-- Row 1: Action bar -->
-                <Grid Grid.Row="1" Margin="0,8,0,0"
+                <Grid x:Name="ActionBar" Grid.Row="1" Margin="0,8,0,0"
                       ColumnDefinitions="*,*,*,*,*,*,*,*">
                     <Grid.Styles>
                         <Style Selector="Button">
                             <Setter Property="HorizontalAlignment" Value="Stretch" />
                             <Setter Property="Height" Value="28" />
+                            <Setter Property="MinWidth" Value="28" />
                             <Setter Property="Padding" Value="0" />
                             <Setter Property="Margin" Value="1,0" />
                             <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -120,7 +121,7 @@
                                    VerticalAlignment="Center" />
                     </Button>
                     <Button Grid.Column="1"
-                            ToolTip.Tip="Set as Global Default"
+                            ToolTip.Tip="Set as Global Default — the baseline every other profile's Auto-sync compensates against, and the fallback applied when no profile's targets match the active window."
                             Command="{Binding SetAsDefaultCommand}">
                         <TextBlock Text="🏠" FontSize="14"
                                    TextAlignment="Center"
@@ -167,7 +168,7 @@
         </Border>
 
         <!-- Main Content -->
-        <Border Grid.Column="1" Padding="4,8,8,8">
+        <Border x:Name="MainContentHost" Grid.Column="1" Padding="4,8,8,8">
             <views:ProfileEditorView DataContext="{Binding ProfileEditor}" />
         </Border>
     </Grid>

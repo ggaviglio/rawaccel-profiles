@@ -13,6 +13,20 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // The main content column is Auto-sized to its own natural width so growing the
+        // window only widens the sidebar. Floor the window's width at that natural content
+        // width plus the sidebar's own genuine minimum, so it can't be squeezed so far that
+        // either side breaks. The sidebar's action-bar buttons declare MinWidth="28" each
+        // (a real usability floor, not a guess) via their style — measuring that here means
+        // the window's minimum is derived from an actual constraint, not another guess.
+        Opened += (_, _) =>
+        {
+            ActionBar.Measure(Size.Infinity);
+            var sidebarPadding = SidebarHost.Padding.Left + SidebarHost.Padding.Right;
+            var sidebarMinWidth = ActionBar.DesiredSize.Width + sidebarPadding;
+            MinWidth = MainContentHost.Bounds.Width + sidebarMinWidth;
+        };
     }
 
     private void ProfileName_DoubleTapped(object? sender, TappedEventArgs e)
