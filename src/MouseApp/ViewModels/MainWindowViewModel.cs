@@ -9,24 +9,15 @@ namespace MouseApp.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {
-    private ViewModelBase? _currentView;
     private MouseProfile? _selectedProfile;
     private MouseProfile? _activeProfile;
-    private readonly NavigationService? _navigation;
     private readonly ProfileEditorViewModel? _profileEditor;
     private readonly SettingsViewModel? _settingsVm;
     private readonly ProfileService? _profileService;
+    private readonly IWindowService? _windowService;
 
-    public ViewModelBase? CurrentView
-    {
-        get => _currentView;
-        set
-        {
-            if (value == _currentView) return;
-            _currentView = value;
-            OnPropertyChanged(nameof(CurrentView));
-        }
-    }
+    /// <summary>The Profile Editor, always shown in the main content area.</summary>
+    public ProfileEditorViewModel? ProfileEditor => _profileEditor;
 
     /// <summary>
     /// Bound to the sidebar ListBox SelectedItem; navigates to the ProfileEditor on change.
@@ -46,10 +37,7 @@ public partial class MainWindowViewModel : ViewModelBase
             ApplySelectedCommand?.NotifyCanExecuteChanged();
             SetAsDefaultCommand?.NotifyCanExecuteChanged();
             if (value != null)
-            {
                 _profileEditor?.LoadProfile(value);
-                _navigation?.Navigate(_profileEditor);
-            }
         }
     }
 
@@ -112,7 +100,6 @@ public partial class MainWindowViewModel : ViewModelBase
             : Profiles.Where(p => p.ProfileName?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) == true);
 
     public System.Windows.Input.ICommand OpenSettingsCommand { get; }
-    public System.Windows.Input.ICommand OpenProfilesCommand { get; }
     public RelayCommand AddProfileCommand { get; }
     public RelayCommand DeleteProfileCommand { get; }
     public RelayCommand CloneProfileCommand { get; }
@@ -126,8 +113,11 @@ public partial class MainWindowViewModel : ViewModelBase
         Profiles = new() { new MouseProfile { ProfileName = "Global Default", IsGlobalDefault = true } };
         SelectedProfile = Profiles[0];
 
-        OpenSettingsCommand = new RelayCommand(() => { SelectedProfile = null; _navigation?.Navigate(_settingsVm); });
-        OpenProfilesCommand = new RelayCommand(() => _navigation?.Navigate(_profileEditor));
+        OpenSettingsCommand = new AsyncRelayCommand(async () =>
+        {
+            if (_windowService != null && _settingsVm != null)
+                await _windowService.ShowSettingsAsync(_settingsVm);
+        });
         AddProfileCommand = new RelayCommand(ExecuteAddProfile);
         DeleteProfileCommand = new RelayCommand(ExecuteDeleteProfile, CanDeleteProfile);
         CloneProfileCommand = new RelayCommand(ExecuteCloneProfile, CanCloneProfile);
@@ -137,21 +127,18 @@ public partial class MainWindowViewModel : ViewModelBase
         SetAsDefaultCommand = new RelayCommand(ExecuteSetAsDefault, CanSetAsDefault);
     }
 
-    public MainWindowViewModel(NavigationService navigation, ProfileEditorViewModel profileEditor, SettingsViewModel settings, ProfileService profileService)
+    public MainWindowViewModel(ProfileEditorViewModel profileEditor, SettingsViewModel settings, ProfileService profileService, IWindowService windowService)
         : this()
     {
-        _navigation = navigation;
         _profileEditor = profileEditor;
         _settingsVm = settings;
         _profileService = profileService;
+        _windowService = windowService;
 
         // Use the service's collection directly — single source of truth, no duplication.
         Profiles = profileService.Profiles;
         OnPropertyChanged(nameof(Profiles));
         Profiles.CollectionChanged += (_, _) => OnPropertyChanged(nameof(FilteredProfiles));
-
-        navigation.CurrentChanged += vm => CurrentView = vm;
-        CurrentView = profileEditor;
 
         // LoadAsync has already run before this ctor is called (see App.axaml.cs);
         // select the first profile (Global Default) so the editor is never blank.

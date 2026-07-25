@@ -168,7 +168,7 @@
 
         <!-- Main Content -->
         <Border Grid.Column="1" Padding="4,8,8,8">
-            <ContentControl Content="{Binding CurrentView}" />
+            <views:ProfileEditorView DataContext="{Binding ProfileEditor}" />
         </Border>
     </Grid>
 

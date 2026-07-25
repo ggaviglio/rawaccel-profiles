@@ -1,16 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:vm="clr-namespace:MouseApp.ViewModels;assembly=MouseApp"
-             x:DataType="vm:SettingsViewModel"
-             mc:Ignorable="d"
-             x:Class="MouseApp.Views.SettingsView">
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:MouseApp.ViewModels;assembly=MouseApp"
+        mc:Ignorable="d"
+        x:DataType="vm:SettingsViewModel"
+        x:Class="MouseApp.Views.SettingsWindow"
+        Title="Settings"
+        Width="480" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
 
-  <StackPanel Margin="12" Spacing="8">
-    <TextBlock Text="Settings" FontSize="18" />
-
+  <StackPanel Margin="16" Spacing="8">
     <StackPanel Orientation="Horizontal" Spacing="6">
       <TextBox Width="420" Text="{Binding RawAccelDirectory, Mode=TwoWay}" />
       <Button Content="Browse" Command="{Binding BrowseRawAccelDirCommand}" />
@@ -44,4 +47,4 @@
     <Button Content="Save" Command="{Binding SaveCommand}" />
   </StackPanel>
 
-</UserControl>
+</Window>

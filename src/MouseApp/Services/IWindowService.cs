@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using MouseApp.Models;
+using MouseApp.ViewModels;
 
 namespace MouseApp.Services;
 
@@ -19,4 +20,10 @@ public interface IWindowService
     /// Returns the entered name, or null if the user cancelled.
     /// </summary>
     Task<string?> ShowTemplateNameDialogAsync(string title, string defaultName);
+
+    /// <summary>
+    /// Opens the Settings window modally against the main window.
+    /// The returned Task completes when the window is closed.
+    /// </summary>
+    Task ShowSettingsAsync(SettingsViewModel settingsViewModel);
 }

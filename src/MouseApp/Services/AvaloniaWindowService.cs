@@ -55,4 +55,20 @@ public sealed class AvaloniaWindowService : IWindowService
 
         return tcs.Task;
     }
+
+    public Task ShowSettingsAsync(SettingsViewModel settingsViewModel)
+    {
+        var win = new SettingsWindow(settingsViewModel);
+
+        var tcs = new TaskCompletionSource();
+        win.Closed += (_, _) => tcs.TrySetResult();
+
+        var owner = MainWindow;
+        if (owner is not null)
+            win.ShowDialog(owner);
+        else
+            win.Show();
+
+        return tcs.Task;
+    }
 }
