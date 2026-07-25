@@ -33,21 +33,17 @@ public partial class ProfileEditorViewModel : ViewModelBase
     private bool _isSyncing;
 
     // ── Template management panel state ───────────────────────────────────
-    [ObservableProperty] private bool   isImportPanelVisible;
-    [ObservableProperty] private bool   isDuplicatePanelVisible;
-    [ObservableProperty] private string pendingTemplateName = string.Empty;
 
-    partial void OnPendingTemplateNameChanged(string value)
-    {
-        ConfirmImportCommand.NotifyCanExecuteChanged();
-        ConfirmDuplicateCommand.NotifyCanExecuteChanged();
-    }
 
     // ── Collections exposed to the View ────────────────────────────────────
-    public ObservableCollection<string> Templates { get; } = new();
+    /// <summary>Null entry at index 0 allows users to unset/deselect a template.</summary>
+    public ObservableCollection<string?> Templates { get; } = new();
 
     /// <summary>Null entry allows a sparse (unset) selection at the top of the list.</summary>
     public ObservableCollection<int?> WinPointerOptions { get; } = new();
+
+    /// <summary>EPP override options: null = Skip, true = Enable, false = Disable.</summary>
+    public bool?[] EppOptions { get; } = { null, true, false };
 
 
 
@@ -151,7 +147,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     public bool IsRawAutoSync
     {
-        get => RawSyncMode == SyncMode.Auto;
+        get => !IsGlobalDefault && RawSyncMode == SyncMode.Auto;
         set
         {
             if (value)
@@ -164,7 +160,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     public bool IsOSAutoSync
     {
-        get => OSSyncMode == SyncMode.Auto;
+        get => !IsGlobalDefault && OSSyncMode == SyncMode.Auto;
         set
         {
             if (value)
@@ -177,7 +173,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     public bool IsRegAutoSync
     {
-        get => RegSyncMode == SyncMode.Auto;
+        get => !IsGlobalDefault && RegSyncMode == SyncMode.Auto;
         set
         {
             if (value)
@@ -197,12 +193,11 @@ public partial class ProfileEditorViewModel : ViewModelBase
     public IAsyncRelayCommand OpenTargetManagerCommand { get; }
 
     // Template management quick-actions
-    public IRelayCommand ImportCurrentSettingsCommand { get; }
-    public IRelayCommand ConfirmImportCommand         { get; }
-    public IRelayCommand DuplicateTemplateCommand     { get; }
-    public IRelayCommand ConfirmDuplicateCommand      { get; }
-    public IRelayCommand DeleteTemplateCommand        { get; }
-    public IRelayCommand CancelTemplateActionCommand  { get; }
+    public IAsyncRelayCommand ImportCurrentSettingsCommand { get; }
+    public IAsyncRelayCommand DuplicateTemplateCommand     { get; }
+    public IAsyncRelayCommand RenameTemplateCommand        { get; }
+    public IRelayCommand      DeleteTemplateCommand        { get; }
+    public IRelayCommand      OpenRawAccelGuiCommand       { get; }
 
     // ── Constructor ─────────────────────────────────────────────────────────
     public ProfileEditorViewModel(SettingsService settingsService, TemplateService templateService, ProfileService profileService, IWindowService windowService)
@@ -225,12 +220,11 @@ public partial class ProfileEditorViewModel : ViewModelBase
         OpenTargetManagerCommand = new AsyncRelayCommand(ExecuteOpenTargetManagerAsync,
                                        () => _editingProfile != null);
 
-        ImportCurrentSettingsCommand = new RelayCommand(ExecuteImportCurrentSettings);
-        ConfirmImportCommand         = new RelayCommand(ExecuteConfirmImport,    () => !string.IsNullOrWhiteSpace(PendingTemplateName));
-        DuplicateTemplateCommand     = new RelayCommand(ExecuteDuplicateTemplate, () => SelectedTemplate != null);
-        ConfirmDuplicateCommand      = new RelayCommand(ExecuteConfirmDuplicate,  () => !string.IsNullOrWhiteSpace(PendingTemplateName));
+        ImportCurrentSettingsCommand = new AsyncRelayCommand(ExecuteImportCurrentSettingsAsync);
+        DuplicateTemplateCommand     = new AsyncRelayCommand(ExecuteDuplicateTemplateAsync, () => SelectedTemplate != null);
+        RenameTemplateCommand        = new AsyncRelayCommand(ExecuteRenameTemplateAsync,    () => SelectedTemplate != null);
         DeleteTemplateCommand        = new RelayCommand(ExecuteDeleteTemplate,    () => SelectedTemplate != null);
-        CancelTemplateActionCommand  = new RelayCommand(() => { IsImportPanelVisible = false; IsDuplicatePanelVisible = false; });
+        OpenRawAccelGuiCommand       = new RelayCommand(ExecuteOpenRawAccelGui);
     }
 
     // ── Profile loading ─────────────────────────────────────────────────────
@@ -267,6 +261,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         RefreshAssociationsSummary();
         OpenTargetManagerCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(IsRawAutoSync));
+        OnPropertyChanged(nameof(IsOSAutoSync));
+        OnPropertyChanged(nameof(IsRegAutoSync));
         ApplyAutoOSSync();         // re-run with correct IsGlobalDefault + all loaded values
         RecalculateMatchAccuracy();
     }
@@ -504,12 +501,18 @@ public partial class ProfileEditorViewModel : ViewModelBase
     {
         AutoPersist();
         DuplicateTemplateCommand.NotifyCanExecuteChanged();
+        RenameTemplateCommand.NotifyCanExecuteChanged();
         DeleteTemplateCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnIsGlobalDefaultChanged(bool oldValue, bool newValue)
     {
         if (_isSyncing || _editingProfile == null) return;
+
+        OnPropertyChanged(nameof(IsAutoSyncAvailable));
+        OnPropertyChanged(nameof(IsRawAutoSync));
+        OnPropertyChanged(nameof(IsOSAutoSync));
+        OnPropertyChanged(nameof(IsRegAutoSync));
 
         if (newValue)
         {
@@ -864,40 +867,72 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     // ── Template management execute methods ─────────────────────────────────
 
-    private void ExecuteImportCurrentSettings()
+    private void ExecuteOpenRawAccelGui()
     {
-        PendingTemplateName     = "settings";
-        IsImportPanelVisible    = true;
-        IsDuplicatePanelVisible = false;
+        if (!OperatingSystem.IsWindows()) return;
+
+        var rawAccelDir = _settingsService.Settings?.RawAccelDirectory;
+        if (string.IsNullOrEmpty(rawAccelDir)) return;
+
+        var exePath = Path.Combine(rawAccelDir, "rawaccel.exe");
+        if (!File.Exists(exePath)) return;
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exePath)
+            {
+                WorkingDirectory = rawAccelDir,
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            // Best-effort launch; swallow failures (e.g. missing exe, permission issues)
+        }
     }
 
-    private void ExecuteConfirmImport()
+    private async Task ExecuteImportCurrentSettingsAsync()
     {
         var rawAccelDir = _settingsService.Settings?.RawAccelDirectory;
         if (string.IsNullOrEmpty(rawAccelDir)) return;
+
+        var name = await _windowService.ShowTemplateNameDialogAsync("Save current Raw Accel settings as:", "settings");
+        if (string.IsNullOrWhiteSpace(name)) return;
+
         var sourcePath = Path.Combine(rawAccelDir, "settings.json");
-        _templateService.ImportTemplate(sourcePath, PendingTemplateName);
-        IsImportPanelVisible = false;
-        PendingTemplateName  = string.Empty;
+        _templateService.ImportTemplate(sourcePath, name);
     }
 
-    private void ExecuteDuplicateTemplate()
-    {
-        var baseName = SelectedTemplate?.Replace(".json", string.Empty,
-                           StringComparison.OrdinalIgnoreCase) ?? "template";
-        PendingTemplateName     = baseName + " - copy";
-        IsDuplicatePanelVisible = true;
-        IsImportPanelVisible    = false;
-    }
-
-    private void ExecuteConfirmDuplicate()
+    private async Task ExecuteDuplicateTemplateAsync()
     {
         if (SelectedTemplate == null) return;
-        var result = _templateService.DuplicateTemplate(SelectedTemplate, PendingTemplateName);
+        var baseName = SelectedTemplate.Replace(".json", string.Empty,
+                           StringComparison.OrdinalIgnoreCase);
+
+        var name = await _windowService.ShowTemplateNameDialogAsync("Duplicate template as:", baseName + " - copy");
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        var result = _templateService.DuplicateTemplate(SelectedTemplate, name);
         if (result != null)
             SelectedTemplate = result;
-        IsDuplicatePanelVisible = false;
-        PendingTemplateName     = string.Empty;
+    }
+
+    private async Task ExecuteRenameTemplateAsync()
+    {
+        if (SelectedTemplate == null) return;
+        var oldName  = SelectedTemplate;
+        var baseName = oldName.Replace(".json", string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        var name = await _windowService.ShowTemplateNameDialogAsync("Rename template to:", baseName);
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        var result = _templateService.RenameTemplate(oldName, name);
+        if (result == null) return; // rename failed (collision, blacklisted, or missing source)
+
+        // Keep every profile that referenced the old filename pointed at the renamed file.
+        await _profileService.RetargetTemplateReferencesAsync(oldName, result);
+
+        SelectedTemplate = result;
     }
 
     private void ExecuteDeleteTemplate()
@@ -915,6 +950,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     private void RefreshTemplates()
     {
         Templates.Clear();
+        Templates.Add(null); // Blank/unset entry so users can deselect a template
         foreach (var t in _templateService.GetTemplates())
             Templates.Add(t);
     }

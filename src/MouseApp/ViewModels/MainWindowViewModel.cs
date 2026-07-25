@@ -93,6 +93,24 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public System.Collections.ObjectModel.ObservableCollection<MouseProfile> Profiles { get; private set; }
 
+    private string _searchText = string.Empty;
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (value == _searchText) return;
+            _searchText = value ?? string.Empty;
+            OnPropertyChanged(nameof(SearchText));
+            OnPropertyChanged(nameof(FilteredProfiles));
+        }
+    }
+
+    public System.Collections.Generic.IEnumerable<MouseProfile> FilteredProfiles =>
+        string.IsNullOrWhiteSpace(_searchText)
+            ? Profiles
+            : Profiles.Where(p => p.ProfileName?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) == true);
+
     public System.Windows.Input.ICommand OpenSettingsCommand { get; }
     public System.Windows.Input.ICommand OpenProfilesCommand { get; }
     public RelayCommand AddProfileCommand { get; }
@@ -130,6 +148,7 @@ public partial class MainWindowViewModel : ViewModelBase
         // Use the service's collection directly — single source of truth, no duplication.
         Profiles = profileService.Profiles;
         OnPropertyChanged(nameof(Profiles));
+        Profiles.CollectionChanged += (_, _) => OnPropertyChanged(nameof(FilteredProfiles));
 
         navigation.CurrentChanged += vm => CurrentView = vm;
         CurrentView = profileEditor;

@@ -118,6 +118,27 @@ public class ProfileService
         await SaveAsync().ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Updates every profile referencing <paramref name="oldTemplateName"/> as its RawAccelTemplate
+    /// to point at <paramref name="newTemplateName"/> instead, then persists. Call this immediately
+    /// after a successful TemplateService.RenameTemplate to keep profiles in sync with the renamed file.
+    /// </summary>
+    public async Task RetargetTemplateReferencesAsync(string oldTemplateName, string newTemplateName)
+    {
+        bool changed = false;
+        foreach (var p in Profiles)
+        {
+            if (string.Equals(p.RawAccelTemplate, oldTemplateName, StringComparison.OrdinalIgnoreCase))
+            {
+                p.RawAccelTemplate = newTemplateName;
+                changed = true;
+            }
+        }
+
+        if (changed)
+            await SaveAsync().ConfigureAwait(false);
+    }
+
     private static void NormalizeGlobalDefault(List<MouseProfile> list)
     {
         if (list.Count == 0)

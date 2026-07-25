@@ -13,4 +13,10 @@ public interface IWindowService
     /// The returned Task completes when the window is closed.
     /// </summary>
     Task ShowTargetManagerAsync(MouseProfile profile, ProfileService profileService);
+
+    /// <summary>
+    /// Shows a small modal dialog asking the user to enter/confirm a template name.
+    /// Returns the entered name, or null if the user cancelled.
+    /// </summary>
+    Task<string?> ShowTemplateNameDialogAsync(string title, string defaultName);
 }

@@ -17,7 +17,7 @@
     </StackPanel>
 
     <StackPanel Orientation="Horizontal" Spacing="6">
-      <TextBox Width="420" Watermark="Curves folder (default: curves\ next to app)" Text="{Binding TemplatesDirectory, Mode=TwoWay}" />
+      <TextBox Width="420" Watermark="Curves folder (default: app folder)" Text="{Binding TemplatesDirectory, Mode=TwoWay}" />
       <Button Content="Browse" Command="{Binding BrowseTemplatesDirCommand}" />
     </StackPanel>
 
@@ -29,6 +29,16 @@
     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
       <ToggleSwitch IsChecked="{Binding RunAtStartup, Mode=TwoWay}" />
       <TextBlock Text="Run At Startup" VerticalAlignment="Center" />
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+      <ToggleSwitch IsChecked="{Binding CloseToTray, Mode=TwoWay}" />
+      <TextBlock Text="Close to Tray" VerticalAlignment="Center" />
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+      <ToggleSwitch IsChecked="{Binding StartMinimized, Mode=TwoWay}" />
+      <TextBlock Text="Start Minimized to Tray" VerticalAlignment="Center" />
     </StackPanel>
 
     <Button Content="Save" Command="{Binding SaveCommand}" />

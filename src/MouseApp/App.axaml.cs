@@ -85,76 +85,75 @@ public partial class App : Application
             var watcher = _processWatcher;
             desktop.ShutdownRequested += (_, _) => watcher.NotifySessionEnding();
 
-            if (settingsService.Settings?.StartMinimized == true)
+            // Always use OnExplicitShutdown so the app stays alive when the window is hidden.
+            desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+            var mainWindow = new Views.MainWindow { DataContext = mainVm };
+            desktop.MainWindow = mainWindow;
+
+            TrayIcon? tray = null;
+            bool shuttingDown = false;
+
+            void ShowMainWindow()
             {
-                // Keep app alive independently of window state so the tray icon works.
-                desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                mainWindow.Show();
+                mainWindow.Activate();
+                if (mainWindow.WindowState == WindowState.Minimized)
+                    mainWindow.WindowState = WindowState.Normal;
+            }
 
-                MainWindow? mainWindow = null;
-                TrayIcon? tray = null;
-                bool shuttingDown = false;
+            // Hide to tray instead of closing when the user clicks X (if CloseToTray is enabled).
+            // When CloseToTray is disabled, closing the window shuts the whole app down.
+            mainWindow.Closing += (_, e) =>
+            {
+                if (shuttingDown) return;
 
-                void ShowMainWindow()
+                if (settingsService.Settings?.CloseToTray == true)
                 {
-                    if (mainWindow == null)
-                    {
-                        mainWindow = new Views.MainWindow { DataContext = mainVm };
-                        desktop.MainWindow = mainWindow;
-
-                        // Hide to tray instead of closing when the user clicks X.
-                        mainWindow.Closing += (_, e) =>
-                        {
-                            if (!shuttingDown)
-                            {
-                                e.Cancel = true;
-                                mainWindow.Hide();
-                            }
-                        };
-                    }
-
-                    mainWindow.Show();
-                    mainWindow.Activate();
-                    if (mainWindow.WindowState == WindowState.Minimized)
-                        mainWindow.WindowState = WindowState.Normal;
+                    e.Cancel = true;
+                    mainWindow.Hide();
                 }
-
-                var menu = new NativeMenu();
-
-                var openItem = new NativeMenuItem("Open");
-                openItem.Click += (_, _) => ShowMainWindow();
-
-                var exitItem = new NativeMenuItem("Exit");
-                exitItem.Click += (_, _) =>
+                else
                 {
                     shuttingDown = true;
                     tray!.IsVisible = false;
                     desktop.Shutdown();
-                };
+                }
+            };
 
-                menu.Add(openItem);
-                menu.Add(exitItem);
+            var menu = new NativeMenu();
 
-                tray = new TrayIcon
-                {
-                    ToolTipText = "MouseApp",
-                    Icon = new WindowIcon("Assets/avalonia-logo.ico"),
-                    Menu = menu,
-                    IsVisible = true,
-                };
+            var openItem = new NativeMenuItem("Open");
+            openItem.Click += (_, _) => ShowMainWindow();
 
-                // Dispose tray cleanly when the process exits.
-                desktop.Exit += (_, _) =>
-                {
-                    tray.IsVisible = false;
-                };
-            }
-            else
+            var exitItem = new NativeMenuItem("Exit");
+            exitItem.Click += (_, _) =>
             {
-                desktop.MainWindow = new Views.MainWindow
-                {
-                    DataContext = mainVm,
-                };
-            }
+                shuttingDown = true;
+                tray!.IsVisible = false;
+                desktop.Shutdown();
+            };
+
+            menu.Add(openItem);
+            menu.Add(exitItem);
+
+            tray = new TrayIcon
+            {
+                ToolTipText = "MouseApp",
+                Icon = new WindowIcon(Avalonia.Platform.AssetLoader.Open(new Uri("avares://MouseApp/Assets/avalonia-logo.ico"))),
+                Menu = menu,
+                IsVisible = true,
+            };
+
+            // Double-click tray icon to restore window.
+            tray.Clicked += (_, _) => ShowMainWindow();
+
+            // Dispose tray cleanly when the process exits.
+            desktop.Exit += (_, _) => tray.IsVisible = false;
+
+            // StartMinimized: don't show the window on launch.
+            if (settingsService.Settings?.StartMinimized != true)
+                ShowMainWindow();
         }
 
         base.OnFrameworkInitializationCompleted();

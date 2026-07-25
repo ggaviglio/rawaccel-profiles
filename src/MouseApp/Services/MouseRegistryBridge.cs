@@ -69,7 +69,7 @@ public static class MouseRegistryBridge
     ///   At regResult=2.0 the output is 2× the MarkC baseline — genuinely 2× faster.
     /// Values are written as 64-bit fixed-point (16.16) little-endian binary.
     /// </summary>
-    public static void ApplyRegistryBridge(double regResult)
+    public static void ApplyRegistryBridge(double regResult, int? profileDpi = null)
     {
         if (double.IsNaN(regResult) || double.IsInfinity(regResult))
             throw new ArgumentException("regResult must be a finite number", nameof(regResult));
@@ -77,8 +77,8 @@ public static class MouseRegistryBridge
         if (!OperatingSystem.IsWindows())
             return; // No-op on non-Windows platforms
 
-        int dpi = GetCurrentLogicalDpi();
-        Debug.WriteLine($"[RegistryBridge] ApplyRegistryBridge regResult={regResult:G10} dpi={dpi}");
+        int dpi = profileDpi ?? GetCurrentLogicalDpi();
+        Debug.WriteLine($"[RegistryBridge] ApplyRegistryBridge regResult={regResult:G10} dpi={dpi} (source={(profileDpi.HasValue ? "profile" : "live")})");
 
         // Win7/8/10 formula (Mark Cranness): Windows internally multiplies cursor movement by
         // (DPI/150) and also by the pointer speed multiplier (WinSpeedMult).

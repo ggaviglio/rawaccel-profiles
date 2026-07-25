@@ -22,4 +22,21 @@ public sealed class AvaloniaWindowService : IWindowService
 
         return tcs.Task;
     }
+
+    public Task<string?> ShowTemplateNameDialogAsync(string title, string defaultName)
+    {
+        var vm  = new TemplateNameDialogViewModel(title, defaultName);
+        var win = new TemplateNameDialog(vm);
+
+        var tcs = new TaskCompletionSource<string?>();
+        vm.RequestClose += result =>
+        {
+            tcs.TrySetResult(result);
+            win.Close();
+        };
+        win.Closed += (_, _) => tcs.TrySetResult(null);
+        win.Show();
+
+        return tcs.Task;
+    }
 }

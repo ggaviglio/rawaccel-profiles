@@ -120,7 +120,7 @@ public class RawAccelService
 
     /// <summary>
     /// Mirrors <c>TemplateService.ResolveTemplatesDirectory()</c>.
-    /// Returns the configured templates path or the portable default (&lt;AppDir&gt;\curves).
+    /// Returns the configured templates path or the portable default (app folder).
     /// Kept local so <see cref="RawAccelService"/> has no dependency on TemplateService.
     /// </summary>
     private string ResolveTemplatesDirectory()
@@ -128,6 +128,6 @@ public class RawAccelService
         var configured = _settingsService.Settings?.TemplatesDirectory;
         return !string.IsNullOrWhiteSpace(configured)
             ? configured
-            : Path.Combine(AppContext.BaseDirectory, "curves");
+            : AppContext.BaseDirectory;
     }
 }

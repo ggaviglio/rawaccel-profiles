@@ -94,6 +94,9 @@ public class MouseService : IMouseService
         _lastAppliedState = newState;
         Debug.WriteLine($"[MouseService] Applying profile '{profile.ProfileName}' to hardware.");
 
+        // Apply Raw Accel template and sensitivity first.
+        await _rawAccelProvider.ApplyTemplateAsync(profile.RawAccelTemplate, profile.SensMultiplier).ConfigureAwait(false);
+
         // Apply discrete Windows pointer speed (coarse) FIRST so that ApplyRegistryBridge reads
         // the correct live value from the registry when it divides out the pointer speed multiplier.
         // If winSpeed is null (profile skips it), the user's existing registry value is preserved
@@ -126,7 +129,7 @@ public class MouseService : IMouseService
                 try
                 {
                     Debug.WriteLine($"[MouseService] Calling ApplyRegistryBridge regResult={regResult.Value:G10}");
-                    MouseRegistryBridge.ApplyRegistryBridge(regResult.Value);
+                    MouseRegistryBridge.ApplyRegistryBridge(regResult.Value, profile.TargetLogicalDpi);
                 }
                 catch (Exception ex)
                 {
@@ -138,9 +141,6 @@ public class MouseService : IMouseService
         {
             Debug.WriteLine($"[MouseService] Registry bridge skipped — regResult={regResult}");
         }
-
-        // Apply Raw Accel template and sensitivity
-        await _rawAccelProvider.ApplyTemplateAsync(profile.RawAccelTemplate, profile.SensMultiplier).ConfigureAwait(false);
 
         // Apply EPP toggle if explicitly set on this profile.
         // Null = do not touch EPP — respect the user's current system setting.

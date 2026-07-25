@@ -117,6 +117,7 @@ public partial class SettingsViewModel : ViewModelBase
             if (value == Settings.EnableRegistryBridge) return;
             Settings.EnableRegistryBridge = value;
             OnPropertyChanged(nameof(EnableRegistryBridge));
+            _settingsService?.Save();
         }
     }
 
@@ -128,6 +129,9 @@ public partial class SettingsViewModel : ViewModelBase
             if (value == Settings.RunAtStartup) return;
             Settings.RunAtStartup = value;
             OnPropertyChanged(nameof(RunAtStartup));
+            _settingsService?.Save();
+            if (OperatingSystem.IsWindows())
+                try { ApplyRunAtStartup(value); } catch { }
         }
     }
 
@@ -139,6 +143,19 @@ public partial class SettingsViewModel : ViewModelBase
             if (value == Settings.StartMinimized) return;
             Settings.StartMinimized = value;
             OnPropertyChanged(nameof(StartMinimized));
+            _settingsService?.Save();
+        }
+    }
+
+    public bool CloseToTray
+    {
+        get => Settings.CloseToTray;
+        set
+        {
+            if (value == Settings.CloseToTray) return;
+            Settings.CloseToTray = value;
+            OnPropertyChanged(nameof(CloseToTray));
+            _settingsService?.Save();
         }
     }
 
@@ -171,11 +188,13 @@ public partial class SettingsViewModel : ViewModelBase
         Settings.EnableRegistryBridge = s.EnableRegistryBridge;
         Settings.RunAtStartup = s.RunAtStartup;
         Settings.StartMinimized = s.StartMinimized;
+        Settings.CloseToTray = s.CloseToTray;
         OnPropertyChanged(nameof(RawAccelDirectory));
         OnPropertyChanged(nameof(TemplatesDirectory));
         OnPropertyChanged(nameof(EnableRegistryBridge));
         OnPropertyChanged(nameof(RunAtStartup));
         OnPropertyChanged(nameof(StartMinimized));
+        OnPropertyChanged(nameof(CloseToTray));
     }
 
     private void ApplyRunAtStartup(bool enable)
