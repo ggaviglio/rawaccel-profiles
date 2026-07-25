@@ -47,26 +47,31 @@
                 </DataTemplate>
               </ComboBox.ItemTemplate>
             </ComboBox>
-            <Button Content="🔧" Width="32" Height="32" Padding="0"
-                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+            <Button Width="32" Height="32" Padding="0"
                     Command="{Binding OpenRawAccelGuiCommand}"
-                    ToolTip.Tip="Open the Raw Accel GUI (rawaccel.exe)" />
-            <Button Content="📥" Width="32" Height="32" Padding="0"
-                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                    ToolTip.Tip="Open the Raw Accel GUI (rawaccel.exe)">
+              <TextBlock Text="🔧" FontSize="14" TextAlignment="Center" VerticalAlignment="Center" />
+            </Button>
+            <Button Width="32" Height="32" Padding="0"
                     Command="{Binding ImportCurrentSettingsCommand}"
-                    ToolTip.Tip="Import current Raw Accel settings.json into the settings library" />
-            <Button Content="⧉"  Width="32" Height="32" Padding="0"
-                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                    ToolTip.Tip="Import current Raw Accel settings.json into the settings library">
+              <TextBlock Text="📥" FontSize="14" TextAlignment="Center" VerticalAlignment="Center" />
+            </Button>
+            <Button Width="32" Height="32" Padding="0"
                     Command="{Binding DuplicateRawAccelSettingsCommand}"
-                    ToolTip.Tip="Duplicate selected settings file under a new name" />
-            <Button Content="✏"  Width="32" Height="32" Padding="0"
-                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                    ToolTip.Tip="Duplicate selected settings file under a new name">
+              <TextBlock Text="⧉" FontSize="14" TextAlignment="Center" VerticalAlignment="Center" />
+            </Button>
+            <Button Width="32" Height="32" Padding="0"
                     Command="{Binding RenameRawAccelSettingsCommand}"
-                    ToolTip.Tip="Rename selected settings file (updates any profiles that reference it)" />
-            <Button Content="🗑"  Width="32" Height="32" Padding="0"
-                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                    ToolTip.Tip="Rename selected settings file (updates any profiles that reference it)">
+              <TextBlock Text="✏" FontSize="14" TextAlignment="Center" VerticalAlignment="Center" />
+            </Button>
+            <Button Width="32" Height="32" Padding="0"
                     Command="{Binding DeleteRawAccelSettingsCommand}"
-                    ToolTip.Tip="Delete selected settings file from library" />
+                    ToolTip.Tip="Delete selected settings file from library">
+              <TextBlock Text="🗑" FontSize="14" TextAlignment="Center" VerticalAlignment="Center" />
+            </Button>
           </StackPanel>
 
           <!-- Sensitivity row -->

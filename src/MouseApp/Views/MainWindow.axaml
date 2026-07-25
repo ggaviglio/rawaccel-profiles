@@ -108,7 +108,7 @@
                             <Setter Property="Height" Value="28" />
                             <Setter Property="MinWidth" Value="28" />
                             <Setter Property="Padding" Value="0" />
-                            <Setter Property="Margin" Value="1,0" />
+                            <Setter Property="Margin" Value="3,0" />
                             <Setter Property="HorizontalContentAlignment" Value="Center" />
                             <Setter Property="VerticalContentAlignment" Value="Center" />
                         </Style>
