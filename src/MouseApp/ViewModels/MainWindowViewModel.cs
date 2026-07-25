@@ -281,7 +281,9 @@ public partial class MainWindowViewModel : ViewModelBase
         var newProfile = new MouseProfile
         {
             ProfileName        = $"New Profile {Profiles.Count}",
-            SensMultiplier     = 1.0,
+            RawSyncMode        = SyncMode.Skip,
+            OSSyncMode         = SyncMode.Skip,
+            RegSyncMode        = SyncMode.Skip,
             TargetAssociations = new()
         };
 
