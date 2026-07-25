@@ -301,18 +301,23 @@ public sealed class ProcessWatcher : IProcessWatcher
             return;
         }
 
-        // Last Man Standing — no windows remain for the active profile → revert to Global Default
+        // Last Man Standing — no windows remain for the active profile → revert to Global Default,
+        // but only if the Global Default's own AutoSwitchEnabled checkbox opts into that behavior.
         var global = _profileService.Profiles.FirstOrDefault(p => p.IsGlobalDefault);
-        if (global != null)
+        if (global == null)
+        {
+            Debug.WriteLine($"[ProcessWatcher] DESTROY — no Global Default found; cannot revert. Triggering window: HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"");
+        }
+        else if (!global.AutoSwitchEnabled)
+        {
+            Debug.WriteLine($"[ProcessWatcher] DESTROY — Global Default revert disabled (AutoSwitchEnabled unchecked); staying on \"{activeProfile.ProfileName}\". Triggering window: HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"");
+        }
+        else
         {
             Debug.WriteLine($"[ProcessWatcher] DESTROY — last window closed; reverting to Global Default \"{global.ProfileName}\". Triggering window: HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"");
             _currentProfile = global;
             _knownForegroundHwnds.Clear();
             _applyProfile(global);
-        }
-        else
-        {
-            Debug.WriteLine($"[ProcessWatcher] DESTROY — no Global Default found; cannot revert. Triggering window: HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"");
         }
     }
 
