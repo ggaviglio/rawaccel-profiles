@@ -894,11 +894,13 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var rawAccelDir = _profileService.Settings?.RawAccelDirectory;
         if (string.IsNullOrEmpty(rawAccelDir)) return;
 
-        var name = await _windowService.ShowTemplateNameDialogAsync("Save current Raw Accel settings as:", "settings");
+        var name = await _windowService.ShowTemplateNameDialogAsync("Save current Raw Accel settings as:", string.Empty);
         if (string.IsNullOrWhiteSpace(name)) return;
 
         var sourcePath = Path.Combine(rawAccelDir, "settings.json");
-        _templateService.ImportTemplate(sourcePath, name);
+        var result = _templateService.ImportTemplate(sourcePath, name);
+        if (result != null)
+            SelectedTemplate = result;
     }
 
     private async Task ExecuteDuplicateTemplateAsync()
@@ -907,7 +909,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var baseName = SelectedTemplate.Replace(".json", string.Empty,
                            StringComparison.OrdinalIgnoreCase);
 
-        var name = await _windowService.ShowTemplateNameDialogAsync("Duplicate template as:", baseName + " - copy");
+        var name = await _windowService.ShowTemplateNameDialogAsync("Duplicate settings as:", baseName + " - copy");
         if (string.IsNullOrWhiteSpace(name)) return;
 
         var result = _templateService.DuplicateTemplate(SelectedTemplate, name);
@@ -921,7 +923,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var oldName  = SelectedTemplate;
         var baseName = oldName.Replace(".json", string.Empty, StringComparison.OrdinalIgnoreCase);
 
-        var name = await _windowService.ShowTemplateNameDialogAsync("Rename template to:", baseName);
+        var name = await _windowService.ShowTemplateNameDialogAsync("Rename settings to:", baseName);
         if (string.IsNullOrWhiteSpace(name)) return;
 
         var result = _templateService.RenameTemplate(oldName, name);

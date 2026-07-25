@@ -11,8 +11,7 @@
   <StackPanel Margin="16" Spacing="12">
     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
     <TextBox Name="NameTextBox"
-             Text="{Binding TemplateName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-             Watermark="template name" />
+             Text="{Binding TemplateName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
       <Button Content="Cancel" Command="{Binding CancelCommand}" />
       <Button Content="OK" Command="{Binding OkCommand}" IsDefault="True" />
