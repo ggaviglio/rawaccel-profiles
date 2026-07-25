@@ -35,6 +35,12 @@ Thumbs.db
 .DS_Store
 Desktop.ini
 
+# NVIDIA driver/overlay log artifact (created in whatever CWD hooks a process)
+NVIDIA Corporation/
+
+# Release packages
+dist/
+
 # Log, Temp, & Analyzers
 *.log
 *.tmp
