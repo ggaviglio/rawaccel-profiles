@@ -34,10 +34,10 @@ public sealed class AvaloniaWindowService : IWindowService
         return tcs.Task;
     }
 
-    public Task<string?> ShowTemplateNameDialogAsync(string title, string defaultName)
+    public Task<string?> ShowRawAccelSettingsNameDialogAsync(string title, string defaultName)
     {
-        var vm  = new TemplateNameDialogViewModel(title, defaultName);
-        var win = new TemplateNameDialog(vm);
+        var vm  = new RawAccelSettingsNameDialogViewModel(title, defaultName);
+        var win = new RawAccelSettingsNameDialog(vm);
 
         var tcs = new TaskCompletionSource<string?>();
         vm.RequestClose += result =>

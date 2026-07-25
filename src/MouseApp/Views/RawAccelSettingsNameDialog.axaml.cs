@@ -3,14 +3,14 @@ using MouseApp.ViewModels;
 
 namespace MouseApp.Views;
 
-public partial class TemplateNameDialog : Window
+public partial class RawAccelSettingsNameDialog : Window
 {
-    public TemplateNameDialog()
+    public RawAccelSettingsNameDialog()
     {
         InitializeComponent();
     }
 
-    public TemplateNameDialog(TemplateNameDialogViewModel vm) : this()
+    public RawAccelSettingsNameDialog(RawAccelSettingsNameDialogViewModel vm) : this()
     {
         DataContext = vm;
 

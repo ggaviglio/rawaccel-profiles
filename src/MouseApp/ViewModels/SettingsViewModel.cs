@@ -27,7 +27,7 @@ public partial class SettingsViewModel : ViewModelBase
         Settings = new AppSettings
         {
             RawAccelDirectory    = source.RawAccelDirectory,
-            TemplatesDirectory   = source.TemplatesDirectory,
+            RawAccelSettingsDirectory   = source.RawAccelSettingsDirectory,
             EnableRegistryBridge = source.EnableRegistryBridge,
             RunAtStartup         = source.RunAtStartup,
             StartMinimized       = source.StartMinimized,
@@ -71,11 +71,11 @@ public partial class SettingsViewModel : ViewModelBase
                 RawAccelDirectory = path;
         });
 
-        BrowseTemplatesDirCommand = new AsyncRelayCommand(async () =>
+        BrowseRawAccelSettingsDirCommand = new AsyncRelayCommand(async () =>
         {
             var path = await _storageService.PickFolderAsync();
             if (!string.IsNullOrEmpty(path))
-                TemplatesDirectory = path;
+                RawAccelSettingsDirectory = path;
         });
     }
 
@@ -92,14 +92,14 @@ public partial class SettingsViewModel : ViewModelBase
         }
     }
 
-    public string TemplatesDirectory
+    public string RawAccelSettingsDirectory
     {
-        get => Settings.TemplatesDirectory ?? string.Empty;
+        get => Settings.RawAccelSettingsDirectory ?? string.Empty;
         set
         {
-            if (value == Settings.TemplatesDirectory) return;
-            Settings.TemplatesDirectory = value ?? string.Empty;
-            OnPropertyChanged(nameof(TemplatesDirectory));
+            if (value == Settings.RawAccelSettingsDirectory) return;
+            Settings.RawAccelSettingsDirectory = value ?? string.Empty;
+            OnPropertyChanged(nameof(RawAccelSettingsDirectory));
         }
     }
 
@@ -148,7 +148,7 @@ public partial class SettingsViewModel : ViewModelBase
     }
 
     public IAsyncRelayCommand BrowseRawAccelDirCommand  { get; }
-    public IAsyncRelayCommand BrowseTemplatesDirCommand { get; }
+    public IAsyncRelayCommand BrowseRawAccelSettingsDirCommand { get; }
     public IRelayCommand      SaveCommand               { get; }
     public IRelayCommand      CancelCommand             { get; }
 
@@ -156,7 +156,7 @@ public partial class SettingsViewModel : ViewModelBase
     {
         var target = _profileService.Settings;
         target.RawAccelDirectory    = Settings.RawAccelDirectory;
-        target.TemplatesDirectory   = Settings.TemplatesDirectory;
+        target.RawAccelSettingsDirectory   = Settings.RawAccelSettingsDirectory;
         target.EnableRegistryBridge = Settings.EnableRegistryBridge;
         target.RunAtStartup         = Settings.RunAtStartup;
         target.StartMinimized       = Settings.StartMinimized;

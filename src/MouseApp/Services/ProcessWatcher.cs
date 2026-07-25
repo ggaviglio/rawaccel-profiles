@@ -24,7 +24,7 @@ public interface IProcessWatcher : IDisposable
     /// <summary>
     /// Suppresses Last-Man-Standing reverts for the remainder of the process lifetime.
     /// Call when the application is shutting down (logoff, reboot, or normal exit) so that
-    /// matched apps closing before MouseApp does not revert registry settings to Global Default.
+    /// matched apps closing before MouseApp does not revert registry settings to Default.
     /// </summary>
     void NotifySessionEnding();
 }
@@ -32,7 +32,7 @@ public interface IProcessWatcher : IDisposable
 /// <summary>
 /// Unified Win32 hook that monitors foreground changes and window destruction.
 /// Switches to a matching profile on foreground focus, and performs a "Last Man Standing"
-/// desktop scan on window destroy to revert to the Global Default when no matching window
+/// desktop scan on window destroy to revert to the Default profile when no matching window
 /// remains for the currently active profile.
 /// </summary>
 public sealed class ProcessWatcher : IProcessWatcher
@@ -60,7 +60,7 @@ public sealed class ProcessWatcher : IProcessWatcher
 
     /// <summary>
     /// Call this when the application is shutting down (logoff, reboot, or normal exit).
-    /// Prevents Last-Man-Standing from reverting registry settings to the Global Default
+    /// Prevents Last-Man-Standing from reverting registry settings to the Default profile
     /// just because a matched app closes before MouseApp does during system shutdown.
     /// </summary>
     public void NotifySessionEnding()
@@ -254,7 +254,7 @@ public sealed class ProcessWatcher : IProcessWatcher
     private void HandleDestroy(IntPtr hwnd)
     {
         // Suppress during logoff/shutdown — we don't want to revert registry settings
-        // to the Global Default just because a matched app closes before MouseApp does.
+        // to the Default profile just because a matched app closes before MouseApp does.
         if (_sessionEnding) return;
 
         // Only process destroy for HWNDs we actually saw as a foreground window.
@@ -301,20 +301,20 @@ public sealed class ProcessWatcher : IProcessWatcher
             return;
         }
 
-        // Last Man Standing — no windows remain for the active profile → revert to Global Default,
-        // but only if the Global Default's own AutoSwitchEnabled checkbox opts into that behavior.
-        var global = _profileService.Profiles.FirstOrDefault(p => p.IsGlobalDefault);
+        // Last Man Standing — no windows remain for the active profile → revert to Default,
+        // but only if the Default profile's own AutoSwitchEnabled checkbox opts into that behavior.
+        var global = _profileService.Profiles.FirstOrDefault(p => p.IsDefault);
         if (global == null)
         {
-            Debug.WriteLine($"[ProcessWatcher] DESTROY — no Global Default found; cannot revert. Triggering window: HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"");
+            Debug.WriteLine($"[ProcessWatcher] DESTROY — no Default profile found; cannot revert. Triggering window: HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"");
         }
         else if (!global.AutoSwitchEnabled)
         {
-            Debug.WriteLine($"[ProcessWatcher] DESTROY — Global Default revert disabled (AutoSwitchEnabled unchecked); staying on \"{activeProfile.ProfileName}\". Triggering window: HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"");
+            Debug.WriteLine($"[ProcessWatcher] DESTROY — Default profile revert disabled (AutoSwitchEnabled unchecked); staying on \"{activeProfile.ProfileName}\". Triggering window: HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"");
         }
         else
         {
-            Debug.WriteLine($"[ProcessWatcher] DESTROY — last window closed; reverting to Global Default \"{global.ProfileName}\". Triggering window: HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"");
+            Debug.WriteLine($"[ProcessWatcher] DESTROY — last window closed; reverting to Default \"{global.ProfileName}\". Triggering window: HWND={hwnd} Exe={attr.ExeName} Path={attr.FullPath} Class=\"{attr.Class}\" Title=\"{attr.Title}\"");
             _currentProfile = global;
             _knownForegroundHwnds.Clear();
             _applyProfile(global);

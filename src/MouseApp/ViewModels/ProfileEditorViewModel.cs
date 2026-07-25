@@ -15,7 +15,7 @@ namespace MouseApp.ViewModels;
 
 public partial class ProfileEditorViewModel : ViewModelBase
 {
-    private readonly TemplateService  _templateService;
+    private readonly RawAccelSettingsRepository  _rawAccelSettingsRepository;
     private readonly ProfileService   _profileService;
     private readonly IWindowService   _windowService;
 
@@ -31,12 +31,12 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>Guards against circular property-changed cascades during auto-sync.</summary>
     private bool _isSyncing;
 
-    // ── Template management panel state ───────────────────────────────────
+    // ── Raw Accel settings-file management panel state ──────────────────────
 
 
     // ── Collections exposed to the View ────────────────────────────────────
-    /// <summary>Null entry at index 0 allows users to unset/deselect a template.</summary>
-    public ObservableCollection<string?> Templates { get; } = new();
+    /// <summary>Null entry at index 0 allows users to unset/deselect a settings file.</summary>
+    public ObservableCollection<string?> RawAccelSettingsFiles { get; } = new();
 
     /// <summary>Null entry allows a sparse (unset) selection at the top of the list.</summary>
     public ObservableCollection<int?> WinPointerOptions { get; } = new();
@@ -57,7 +57,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     private string profileName = string.Empty;
 
     [ObservableProperty]
-    private string? selectedTemplate;
+    private string? selectedRawAccelSettingsFile;
 
     // Sensitivity (double?) + its string proxy for TextBox binding
     [ObservableProperty]
@@ -107,7 +107,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsAutoSyncAvailable))]
-    private bool isGlobalDefault;
+    private bool isDefault;
 
     // ── Derived display ─────────────────────────────────────────────────────
     /// <summary>
@@ -119,14 +119,14 @@ public partial class ProfileEditorViewModel : ViewModelBase
     private string rawAccelMatchAccuracy = "N/A";
 
     /// <summary>
-    /// Win-speed-only proof: (Sens × WinMult) / Effective(GlobalDefault) × 100.
+    /// Win-speed-only proof: (Sens × WinMult) / Effective(Default) × 100.
     /// Shows how close Raw Accel + WinPointerSpeed alone gets you, before the registry bridge.
     /// </summary>
     [ObservableProperty]
     private string winSpeedMatchAccuracy = "N/A";
 
     /// <summary>
-    /// Full proof: (Sens × WinMult × RegCurve) / Effective(GlobalDefault) × 100.
+    /// Full proof: (Sens × WinMult × RegCurve) / Effective(Default) × 100.
     /// 100.00% = exact compensation across all three factors.
     /// </summary>
     [ObservableProperty]
@@ -139,14 +139,14 @@ public partial class ProfileEditorViewModel : ViewModelBase
     public bool IsTargetManagerEnabled => true;
 
     /// <summary>
-    /// Auto-sync only makes sense on non-Global-Default profiles.
-    /// The Global Default IS the reference — there is nothing to compensate relative to itself.
+    /// Auto-sync only makes sense on non-Default profiles.
+    /// The Default profile IS the reference — there is nothing to compensate relative to itself.
     /// </summary>
-    public bool IsAutoSyncAvailable => !IsGlobalDefault;
+    public bool IsAutoSyncAvailable => !IsDefault;
 
     public bool IsRawAutoSync
     {
-        get => !IsGlobalDefault && RawSyncMode == SyncMode.Auto;
+        get => !IsDefault && RawSyncMode == SyncMode.Auto;
         set
         {
             if (value)
@@ -159,7 +159,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     public bool IsOSAutoSync
     {
-        get => !IsGlobalDefault && OSSyncMode == SyncMode.Auto;
+        get => !IsDefault && OSSyncMode == SyncMode.Auto;
         set
         {
             if (value)
@@ -172,7 +172,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     public bool IsRegAutoSync
     {
-        get => !IsGlobalDefault && RegSyncMode == SyncMode.Auto;
+        get => !IsDefault && RegSyncMode == SyncMode.Auto;
         set
         {
             if (value)
@@ -191,22 +191,22 @@ public partial class ProfileEditorViewModel : ViewModelBase
     public IAsyncRelayCommand ApplyCommand             { get; }
     public IAsyncRelayCommand OpenTargetManagerCommand { get; }
 
-    // Template management quick-actions
+    // Raw Accel settings-file management quick-actions
     public IAsyncRelayCommand ImportCurrentSettingsCommand { get; }
-    public IAsyncRelayCommand DuplicateTemplateCommand     { get; }
-    public IAsyncRelayCommand RenameTemplateCommand        { get; }
-    public IRelayCommand      DeleteTemplateCommand        { get; }
+    public IAsyncRelayCommand DuplicateRawAccelSettingsCommand     { get; }
+    public IAsyncRelayCommand RenameRawAccelSettingsCommand        { get; }
+    public IRelayCommand      DeleteRawAccelSettingsCommand        { get; }
     public IRelayCommand      OpenRawAccelGuiCommand       { get; }
 
     // ── Constructor ─────────────────────────────────────────────────────────
-    public ProfileEditorViewModel(TemplateService templateService, ProfileService profileService, IWindowService windowService)
+    public ProfileEditorViewModel(RawAccelSettingsRepository rawAccelSettingsRepository, ProfileService profileService, IWindowService windowService)
     {
-        _templateService = templateService ?? throw new ArgumentNullException(nameof(templateService));
+        _rawAccelSettingsRepository = rawAccelSettingsRepository ?? throw new ArgumentNullException(nameof(rawAccelSettingsRepository));
         _profileService  = profileService  ?? throw new ArgumentNullException(nameof(profileService));
         _windowService   = windowService   ?? throw new ArgumentNullException(nameof(windowService));
 
-        RefreshTemplates();
-        _templateService.TemplatesChanged += (_, _) => RefreshTemplates();
+        RefreshRawAccelSettingsFiles();
+        _rawAccelSettingsRepository.FilesChanged += (_, _) => RefreshRawAccelSettingsFiles();
 
         WinPointerOptions.Add(null); // sparse / unset sentinel
         for (int i = 1; i <= 20; i++) WinPointerOptions.Add(i);
@@ -219,9 +219,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
                                        () => _editingProfile != null);
 
         ImportCurrentSettingsCommand = new AsyncRelayCommand(ExecuteImportCurrentSettingsAsync);
-        DuplicateTemplateCommand     = new AsyncRelayCommand(ExecuteDuplicateTemplateAsync, () => SelectedTemplate != null);
-        RenameTemplateCommand        = new AsyncRelayCommand(ExecuteRenameTemplateAsync,    () => SelectedTemplate != null);
-        DeleteTemplateCommand        = new RelayCommand(ExecuteDeleteTemplate,    () => SelectedTemplate != null);
+        DuplicateRawAccelSettingsCommand     = new AsyncRelayCommand(ExecuteDuplicateRawAccelSettingsAsync, () => SelectedRawAccelSettingsFile != null);
+        RenameRawAccelSettingsCommand        = new AsyncRelayCommand(ExecuteRenameRawAccelSettingsAsync,    () => SelectedRawAccelSettingsFile != null);
+        DeleteRawAccelSettingsCommand        = new RelayCommand(ExecuteDeleteRawAccelSettings,    () => SelectedRawAccelSettingsFile != null);
         OpenRawAccelGuiCommand       = new RelayCommand(ExecuteOpenRawAccelGui);
     }
 
@@ -236,7 +236,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         try
         {
             ProfileName           = profile.ProfileName;
-            SelectedTemplate      = profile.RawAccelTemplate;
+            SelectedRawAccelSettingsFile      = profile.RawAccelSettingsFile;
             Sensitivity           = profile.SensMultiplier;
             SensitivityString     = profile.SensMultiplier?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             RawSyncMode           = profile.RawSyncMode;
@@ -250,7 +250,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             TargetLogicalDpi        = profile.TargetLogicalDpi;
             TargetLogicalDpiString  = profile.TargetLogicalDpi?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             EppOverride             = profile.UseEnhancePointerPrecision;
-            IsGlobalDefault       = profile.IsGlobalDefault;
+            IsDefault       = profile.IsDefault;
         }
         finally
         {
@@ -262,7 +262,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsRawAutoSync));
         OnPropertyChanged(nameof(IsOSAutoSync));
         OnPropertyChanged(nameof(IsRegAutoSync));
-        ApplyAutoOSSync();         // re-run with correct IsGlobalDefault + all loaded values
+        ApplyAutoOSSync();         // re-run with correct IsDefault + all loaded values
         RecalculateMatchAccuracy();
     }
 
@@ -495,15 +495,15 @@ public partial class ProfileEditorViewModel : ViewModelBase
         RecalculateMatchAccuracy();
     }
 
-    partial void OnSelectedTemplateChanged(string? oldValue, string? newValue)
+    partial void OnSelectedRawAccelSettingsFileChanged(string? oldValue, string? newValue)
     {
         AutoPersist();
-        DuplicateTemplateCommand.NotifyCanExecuteChanged();
-        RenameTemplateCommand.NotifyCanExecuteChanged();
-        DeleteTemplateCommand.NotifyCanExecuteChanged();
+        DuplicateRawAccelSettingsCommand.NotifyCanExecuteChanged();
+        RenameRawAccelSettingsCommand.NotifyCanExecuteChanged();
+        DeleteRawAccelSettingsCommand.NotifyCanExecuteChanged();
     }
 
-    partial void OnIsGlobalDefaultChanged(bool oldValue, bool newValue)
+    partial void OnIsDefaultChanged(bool oldValue, bool newValue)
     {
         if (_isSyncing || _editingProfile == null) return;
 
@@ -514,24 +514,24 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         if (newValue)
         {
-            // SetGlobalDefaultAsync atomically clears all others and saves.
-            _ = _profileService.SetGlobalDefaultAsync(_editingProfile);
+            // SetDefaultAsync atomically clears all others and saves.
+            _ = _profileService.SetDefaultAsync(_editingProfile);
         }
         else
         {
             // Prevent unchecking when this is the only global default — we must always
             // have exactly one. Revert the checkbox silently and bail.
-            bool isOnlyDefault = _profileService.Profiles.Count(p => p.IsGlobalDefault) <= 1
-                                 && _editingProfile.IsGlobalDefault;
+            bool isOnlyDefault = _profileService.Profiles.Count(p => p.IsDefault) <= 1
+                                 && _editingProfile.IsDefault;
             if (isOnlyDefault)
             {
                 _isSyncing = true;
-                IsGlobalDefault = true;  // revert the VM back to true
+                IsDefault = true;  // revert the VM back to true
                 _isSyncing = false;
                 return;
             }
             // Profile was previously default but another is now: just persist the false.
-            _editingProfile.IsGlobalDefault = false;
+            _editingProfile.IsDefault = false;
             _ = _profileService.SaveAsync();
         }
     }
@@ -539,30 +539,30 @@ public partial class ProfileEditorViewModel : ViewModelBase
     // ── Math Engine ─────────────────────────────────────────────────────────
 
     private MouseProfile? GetBaseProfile() =>
-        _profileService.Profiles.FirstOrDefault(p => p.IsGlobalDefault)
+        _profileService.Profiles.FirstOrDefault(p => p.IsDefault)
         ?? _profileService.Profiles.FirstOrDefault();
 
-    /// <summary>Raw Accel SensMultiplier of the Global Default (fallback 1.0).</summary>
+    /// <summary>Raw Accel SensMultiplier of the Default profile (fallback 1.0).</summary>
     private double GetBaseSens()
     {
         var s = GetBaseProfile()?.SensMultiplier ?? 1.0;
         return s == 0 ? 1.0 : s;
     }
 
-    /// <summary>WinPointerSpeed index (1-20) of the Global Default (fallback 10 = neutral).</summary>
+    /// <summary>WinPointerSpeed index (1-20) of the Default profile (fallback 10 = neutral).</summary>
     private int GetBaseWinPointerSpeed() => GetBaseProfile()?.WinPointerSpeed ?? 10;
 
-    /// <summary>RegistryCurveOverride of the Global Default (fallback 1.0 = neutral).</summary>
+    /// <summary>RegistryCurveOverride of the Default profile (fallback 1.0 = neutral).</summary>
     private double GetBaseRegCurve()
     {
         var r = GetBaseProfile()?.RegistryCurveOverride ?? 1.0;
         return r == 0 ? 1.0 : r;
     }
 
-    /// <summary>TargetScreenWidth of the Global Default. Null if not declared.</summary>
+    /// <summary>TargetScreenWidth of the Default profile. Null if not declared.</summary>
     private int? GetBaseScreenWidth() => GetBaseProfile()?.TargetScreenWidth;
 
-    /// <summary>TargetLogicalDpi of the Global Default. Null if not declared (no DPI normalization).</summary>
+    /// <summary>TargetLogicalDpi of the Default profile. Null if not declared (no DPI normalization).</summary>
     private int? GetBaseLogicalDpi() => GetBaseProfile()?.TargetLogicalDpi;
 
 
@@ -573,7 +573,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// </summary>
     private void ApplyAutoRawSync()
     {
-        if (IsGlobalDefault || RawSyncMode != SyncMode.Auto) return;
+        if (IsDefault || RawSyncMode != SyncMode.Auto) return;
 
         var sBase  = GetBaseSens();
         var bp     = GetBaseProfile();
@@ -607,7 +607,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// </summary>
     private void ApplyAutoOSSync()
     {
-        if (IsGlobalDefault) { ApplyAutoRegSync(); return; }
+        if (IsDefault) { ApplyAutoRegSync(); return; }
 
         ApplyAutoRawSync(); // runs first — updates Sensitivity before Win Speed target is computed
 
@@ -658,7 +658,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// </summary>
     private void ApplyAutoRegSync()
     {
-        if (IsGlobalDefault) return;
+        if (IsDefault) return;
 
         if (RegSyncMode == SyncMode.Auto)
         {
@@ -718,7 +718,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var fullBase = bp != null ? _profileService.GetEffectiveSensitivity(bp) : sBase;
         if (fullBase == 0) fullBase = 1.0;
 
-        // Null fields inherit from Global Default — a fully-null profile is a perfect 100% match.
+        // Null fields inherit from the Default profile — a fully-null profile is a perfect 100% match.
         var curSens     = Sensitivity ?? GetBaseSens();
         var curWinIndex = Math.Clamp((WinPointerSpeed ?? GetBaseWinPointerSpeed()) - 1, 0, ProfileService.WinMultipliers.Length - 1);
         var curWinMult  = ProfileService.WinMultipliers[curWinIndex];
@@ -774,7 +774,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         if (_editingProfile == null || _isSyncing) return;
 
         _editingProfile.ProfileName           = ProfileName;
-        _editingProfile.RawAccelTemplate      = SelectedTemplate;
+        _editingProfile.RawAccelSettingsFile      = SelectedRawAccelSettingsFile;
         _editingProfile.SensMultiplier        = Sensitivity;
         _editingProfile.RawSyncMode           = RawSyncMode;
         _editingProfile.OSSyncMode            = OSSyncMode;
@@ -784,8 +784,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
         _editingProfile.TargetScreenWidth             = TargetScreenWidth;
         _editingProfile.TargetLogicalDpi              = TargetLogicalDpi;
         _editingProfile.UseEnhancePointerPrecision    = EppOverride;
-        // IsGlobalDefault is intentionally NOT written here.
-        // It is exclusively managed by OnIsGlobalDefaultChanged → SetGlobalDefaultAsync,
+        // IsDefault is intentionally NOT written here.
+        // It is exclusively managed by OnIsDefaultChanged → SetDefaultAsync,
         // which performs the atomic exclusive-flag update and file write in one shot.
 
         _ = _profileService.SaveAsync();
@@ -839,20 +839,20 @@ public partial class ProfileEditorViewModel : ViewModelBase
     private async Task ExecuteSaveAsync()
     {
         // This path is only hit if _editingProfile is null (e.g. edge-case on first load).
-        // In normal operation AutoPersist handles all saves; IsGlobalDefault is managed
-        // exclusively by OnIsGlobalDefaultChanged \u2192 SetGlobalDefaultAsync, never here.
+        // In normal operation AutoPersist handles all saves; IsDefault is managed
+        // exclusively by OnIsDefaultChanged \u2192 SetDefaultAsync, never here.
         if (_editingProfile == null)
         {
             var draft = new MouseProfile
             {
                 ProfileName           = ProfileName,
-                RawAccelTemplate      = SelectedTemplate,
+                RawAccelSettingsFile      = SelectedRawAccelSettingsFile,
                 SensMultiplier        = Sensitivity,
                 OSSyncMode            = OSSyncMode,
                 WinPointerSpeed       = WinPointerSpeed,
                 RegSyncMode           = RegSyncMode,
                 RegistryCurveOverride = RegistryCurveOverride,
-                IsGlobalDefault       = false, // new profiles are never the default on creation
+                IsDefault       = false, // new profiles are never the default on creation
                 TargetAssociations    = new()
             };
             _profileService.Profiles.Add(draft);
@@ -863,7 +863,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         await Task.CompletedTask;
     }
 
-    // ── Template management execute methods ─────────────────────────────────
+    // ── Raw Accel settings-file management execute methods ──────────────────
 
     private void ExecuteOpenRawAccelGui()
     {
@@ -894,65 +894,65 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var rawAccelDir = _profileService.Settings?.RawAccelDirectory;
         if (string.IsNullOrEmpty(rawAccelDir)) return;
 
-        var name = await _windowService.ShowTemplateNameDialogAsync("Save current Raw Accel settings as:", string.Empty);
+        var name = await _windowService.ShowRawAccelSettingsNameDialogAsync("Save current Raw Accel settings as:", string.Empty);
         if (string.IsNullOrWhiteSpace(name)) return;
 
         var sourcePath = Path.Combine(rawAccelDir, "settings.json");
-        var result = _templateService.ImportTemplate(sourcePath, name);
+        var result = _rawAccelSettingsRepository.Import(sourcePath, name);
         if (result != null)
-            SelectedTemplate = result;
+            SelectedRawAccelSettingsFile = result;
     }
 
-    private async Task ExecuteDuplicateTemplateAsync()
+    private async Task ExecuteDuplicateRawAccelSettingsAsync()
     {
-        if (SelectedTemplate == null) return;
-        var baseName = SelectedTemplate.Replace(".json", string.Empty,
+        if (SelectedRawAccelSettingsFile == null) return;
+        var baseName = SelectedRawAccelSettingsFile.Replace(".json", string.Empty,
                            StringComparison.OrdinalIgnoreCase);
 
-        var name = await _windowService.ShowTemplateNameDialogAsync("Duplicate settings as:", baseName + " - copy");
+        var name = await _windowService.ShowRawAccelSettingsNameDialogAsync("Duplicate settings as:", baseName + " - copy");
         if (string.IsNullOrWhiteSpace(name)) return;
 
-        var result = _templateService.DuplicateTemplate(SelectedTemplate, name);
+        var result = _rawAccelSettingsRepository.Duplicate(SelectedRawAccelSettingsFile, name);
         if (result != null)
-            SelectedTemplate = result;
+            SelectedRawAccelSettingsFile = result;
     }
 
-    private async Task ExecuteRenameTemplateAsync()
+    private async Task ExecuteRenameRawAccelSettingsAsync()
     {
-        if (SelectedTemplate == null) return;
-        var oldName  = SelectedTemplate;
+        if (SelectedRawAccelSettingsFile == null) return;
+        var oldName  = SelectedRawAccelSettingsFile;
         var baseName = oldName.Replace(".json", string.Empty, StringComparison.OrdinalIgnoreCase);
 
-        var name = await _windowService.ShowTemplateNameDialogAsync("Rename settings to:", baseName);
+        var name = await _windowService.ShowRawAccelSettingsNameDialogAsync("Rename settings to:", baseName);
         if (string.IsNullOrWhiteSpace(name)) return;
 
-        var result = _templateService.RenameTemplate(oldName, name);
+        var result = _rawAccelSettingsRepository.Rename(oldName, name);
         if (result == null) return; // rename failed (collision, blacklisted, or missing source)
 
         // Keep every profile that referenced the old filename pointed at the renamed file.
-        await _profileService.RetargetTemplateReferencesAsync(oldName, result);
+        await _profileService.RetargetSettingsFileReferencesAsync(oldName, result);
 
-        SelectedTemplate = result;
+        SelectedRawAccelSettingsFile = result;
     }
 
-    private void ExecuteDeleteTemplate()
+    private void ExecuteDeleteRawAccelSettings()
     {
-        if (SelectedTemplate == null) return;
-        var toDelete = SelectedTemplate;
-        _templateService.DeleteTemplate(toDelete);
-        // RefreshTemplates fires via TemplatesChanged; clear selection if it still references deleted item
-        if (SelectedTemplate == toDelete)
-            SelectedTemplate = null;
+        if (SelectedRawAccelSettingsFile == null) return;
+        var toDelete = SelectedRawAccelSettingsFile;
+        _rawAccelSettingsRepository.Delete(toDelete);
+        // RefreshRawAccelSettingsFiles fires via FilesChanged; clear selection if it still references deleted item
+        if (SelectedRawAccelSettingsFile == toDelete)
+            SelectedRawAccelSettingsFile = null;
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
-    private void RefreshTemplates()
+    private void RefreshRawAccelSettingsFiles()
     {
-        Templates.Clear();
-        Templates.Add(null); // Blank/unset entry so users can deselect a template
-        foreach (var t in _templateService.GetTemplates())
-            Templates.Add(t);
+        RawAccelSettingsFiles.Clear();
+        RawAccelSettingsFiles.Add(null); // Blank/unset entry so users can deselect a settings file
+        foreach (var t in _rawAccelSettingsRepository.GetAll())
+            RawAccelSettingsFiles.Add(t);
     }
 
     private void OnProfilesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)

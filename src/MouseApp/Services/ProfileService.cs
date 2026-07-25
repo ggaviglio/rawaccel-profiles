@@ -20,7 +20,7 @@ public class ProfileService
     };
 
     /// <summary>
-    /// Serializes all file writes so concurrent AutoPersist + SetGlobalDefaultAsync calls
+    /// Serializes all file writes so concurrent AutoPersist + SetDefaultAsync calls
     /// (and settings saves, since both share this file) never race on File.Create()
     /// and truncate each other's output.
     /// </summary>
@@ -60,19 +60,19 @@ public class ProfileService
     {
         if (!File.Exists(_dataFile))
         {
-            // Create a sensible Global Default starting point
-            var global = new MouseProfile
+            // Create a sensible Default starting point
+            var defaultProfile = new MouseProfile
             {
-                ProfileName        = "Global Default",
+                ProfileName        = "Default",
                 SensMultiplier     = 1.0,
-                OSSyncMode         = SyncMode.Skip, // Global Default is the reference — auto-sync has no meaning here
+                OSSyncMode         = SyncMode.Skip, // Default is the reference — auto-sync has no meaning here
                 RegSyncMode        = SyncMode.Skip,
-                IsGlobalDefault    = true,
+                IsDefault          = true,
                 TargetAssociations = new()
             };
 
             Profiles.Clear();
-            Profiles.Add(global);
+            Profiles.Add(defaultProfile);
             Settings = new AppSettings();
             await SaveAsync().ConfigureAwait(false);
             return;
@@ -101,16 +101,16 @@ public class ProfileService
         {
             list.Add(new MouseProfile
             {
-                ProfileName        = "Global Default",
+                ProfileName        = "Default",
                 SensMultiplier     = 1.0,
                 OSSyncMode         = SyncMode.Skip,
                 RegSyncMode        = SyncMode.Skip,
-                IsGlobalDefault    = true,
+                IsDefault          = true,
                 TargetAssociations = new()
             });
         }
 
-        NormalizeGlobalDefault(list);
+        NormalizeDefault(list);
 
         Profiles.Clear();
         foreach (var p in list)
@@ -164,7 +164,7 @@ public class ProfileService
     private PersistedData BuildPersistedData()
     {
         var list = Profiles.ToList();
-        NormalizeGlobalDefault(list);
+        NormalizeDefault(list);
         return new PersistedData { Settings = Settings, Profiles = list };
     }
 
@@ -175,28 +175,28 @@ public class ProfileService
             Directory.CreateDirectory(dir);
     }
 
-    public async Task SetGlobalDefaultAsync(MouseProfile p)
+    public async Task SetDefaultAsync(MouseProfile p)
     {
         foreach (var pr in Profiles)
-            pr.IsGlobalDefault = false;
+            pr.IsDefault = false;
 
-        p.IsGlobalDefault = true;
+        p.IsDefault = true;
         await SaveAsync().ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Updates every profile referencing <paramref name="oldTemplateName"/> as its RawAccelTemplate
-    /// to point at <paramref name="newTemplateName"/> instead, then persists. Call this immediately
-    /// after a successful TemplateService.RenameTemplate to keep profiles in sync with the renamed file.
+    /// Updates every profile referencing <paramref name="oldFileName"/> as its RawAccelSettingsFile
+    /// to point at <paramref name="newFileName"/> instead, then persists. Call this immediately
+    /// after a successful RawAccelSettingsRepository.Rename to keep profiles in sync with the renamed file.
     /// </summary>
-    public async Task RetargetTemplateReferencesAsync(string oldTemplateName, string newTemplateName)
+    public async Task RetargetSettingsFileReferencesAsync(string oldFileName, string newFileName)
     {
         bool changed = false;
         foreach (var p in Profiles)
         {
-            if (string.Equals(p.RawAccelTemplate, oldTemplateName, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(p.RawAccelSettingsFile, oldFileName, StringComparison.OrdinalIgnoreCase))
             {
-                p.RawAccelTemplate = newTemplateName;
+                p.RawAccelSettingsFile = newFileName;
                 changed = true;
             }
         }
@@ -205,35 +205,35 @@ public class ProfileService
             await SaveAsync().ConfigureAwait(false);
     }
 
-    private static void NormalizeGlobalDefault(List<MouseProfile> list)
+    private static void NormalizeDefault(List<MouseProfile> list)
     {
         if (list.Count == 0)
             return;
 
-        var globals = list.Where(p => p.IsGlobalDefault).ToList();
-        if (globals.Count == 0)
+        var defaults = list.Where(p => p.IsDefault).ToList();
+        if (defaults.Count == 0)
         {
-            list[0].IsGlobalDefault = true;
+            list[0].IsDefault = true;
             return;
         }
 
-        foreach (var g in globals.Skip(1))
-            g.IsGlobalDefault = false;
+        foreach (var d in defaults.Skip(1))
+            d.IsDefault = false;
 
-        // The Global Default must never have auto-computed OS compensation values.
+        // The Default profile must never have auto-computed OS compensation values.
         // If OSSyncMode/RegSyncMode were previously Auto, they may have written
         // a non-neutral WinPointerSpeed or RegistryCurveOverride into the stored profile,
         // poisoning Effective(base) for all proof-of-match calculations on other profiles.
-        var gd = globals[0];
-        if (gd.OSSyncMode == SyncMode.Auto)
+        var defaultProfile = defaults[0];
+        if (defaultProfile.OSSyncMode == SyncMode.Auto)
         {
-            gd.OSSyncMode      = SyncMode.Skip;
-            gd.WinPointerSpeed = null; // reset to neutral (10 = 1.0×)
+            defaultProfile.OSSyncMode      = SyncMode.Skip;
+            defaultProfile.WinPointerSpeed = null; // reset to neutral (10 = 1.0×)
         }
-        if (gd.RegSyncMode == SyncMode.Auto)
+        if (defaultProfile.RegSyncMode == SyncMode.Auto)
         {
-            gd.RegSyncMode           = SyncMode.Skip;
-            gd.RegistryCurveOverride = null; // reset to neutral (1.0×)
+            defaultProfile.RegSyncMode           = SyncMode.Skip;
+            defaultProfile.RegistryCurveOverride = null; // reset to neutral (1.0×)
         }
     }
 
@@ -244,13 +244,13 @@ public class ProfileService
     ///   × (baseScreenWidth / profileScreenWidth)  [resolution compensation]
     /// RegCurve is round-tripped through 16.16 fixed-point encoding so this matches what
     /// Windows will actually apply — the single source-of-truth for MatchAccuracy comparisons.
-    /// Null fields inherit from Global Default; fully-null profile yields 100% match by definition.
+    /// Null fields inherit from the Default profile; fully-null profile yields 100% match by definition.
     /// </summary>
     public double GetEffectiveSensitivity(MouseProfile profile)
     {
         if (profile == null) throw new ArgumentNullException(nameof(profile));
 
-        var baseProfile = Profiles.FirstOrDefault(p => p.IsGlobalDefault) ?? Profiles.FirstOrDefault();
+        var baseProfile = Profiles.FirstOrDefault(p => p.IsDefault) ?? Profiles.FirstOrDefault();
 
         var sens     = profile.SensMultiplier ?? 1.0;
         var winIndex = Math.Clamp((profile.WinPointerSpeed ?? 10) - 1, 0, WinMultipliers.Length - 1);
@@ -297,7 +297,7 @@ public class ProfileService
     {
         if (activeProfile == null) throw new ArgumentNullException(nameof(activeProfile));
 
-        var baseProfile = Profiles.FirstOrDefault(p => p.IsGlobalDefault) ?? Profiles.FirstOrDefault();
+        var baseProfile = Profiles.FirstOrDefault(p => p.IsDefault) ?? Profiles.FirstOrDefault();
         if (baseProfile == null) return (activeProfile.WinPointerSpeed, activeProfile.RegistryCurveOverride);
 
         // Effective(base) = S_base × WinMult_base × EncodeRegCurve(RegCurve_base)
@@ -351,7 +351,7 @@ public class ProfileService
 
             // Env correction: the stored regResult must compensate for the active profile's DPI
             // and screen width so that GetEffectiveSensitivity(active) == GetEffectiveSensitivity(base).
-            var baseProfile2 = Profiles.FirstOrDefault(p => p.IsGlobalDefault) ?? Profiles.FirstOrDefault();
+            var baseProfile2 = Profiles.FirstOrDefault(p => p.IsDefault) ?? Profiles.FirstOrDefault();
             var activeDpi   = activeProfile.TargetLogicalDpi ?? baseProfile2?.TargetLogicalDpi ?? 96;
             var baseW2      = baseProfile2?.TargetScreenWidth;
             var activeW     = activeProfile.TargetScreenWidth ?? baseW2;

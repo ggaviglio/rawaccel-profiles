@@ -20,8 +20,8 @@
     </StackPanel>
 
     <StackPanel Orientation="Horizontal" Spacing="6">
-      <TextBox Width="420" Watermark="Curves folder (default: app folder)" Text="{Binding TemplatesDirectory, Mode=TwoWay}" />
-      <Button Content="Browse" Command="{Binding BrowseTemplatesDirCommand}" />
+      <TextBox Width="420" Watermark="Curves folder (default: app folder)" Text="{Binding RawAccelSettingsDirectory, Mode=TwoWay}" />
+      <Button Content="Browse" Command="{Binding BrowseRawAccelSettingsDirCommand}" />
     </StackPanel>
 
     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">

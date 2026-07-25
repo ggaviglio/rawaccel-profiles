@@ -30,7 +30,7 @@ public sealed class TargetAssociation
 /// Sync behaviour for a hardware setting (raw sens, Win Pointer Speed, Registry Bridge).
 /// Auto   = value is computed automatically from environment compensation math.
 /// Manual = value is set explicitly by the user.
-/// Skip   = field is left null; the Global Default's value is inherited at apply-time.
+/// Skip   = field is left null; the Default profile's value is inherited at apply-time.
 /// </summary>
 public enum SyncMode { Auto, Manual, Skip }
 
@@ -40,7 +40,7 @@ public partial class MouseProfile : ObservableObject
     public partial string ProfileName { get; set; } = string.Empty;
 
     [ObservableProperty]
-    public partial string? RawAccelTemplate { get; set; }
+    public partial string? RawAccelSettingsFile { get; set; }
 
     [ObservableProperty]
     public partial double? SensMultiplier { get; set; }
@@ -70,7 +70,7 @@ public partial class MouseProfile : ObservableObject
     public partial bool? UseEnhancePointerPrecision { get; set; }
 
     [ObservableProperty]
-    public partial bool IsGlobalDefault { get; set; }
+    public partial bool IsDefault { get; set; }
 
     /// <summary>
     /// When false, this profile is excluded from automatic foreground-window switching.

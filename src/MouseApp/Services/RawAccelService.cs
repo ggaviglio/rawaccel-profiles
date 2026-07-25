@@ -15,11 +15,11 @@ public class RawAccelService
     }
 
     /// <summary>
-    /// Replaces the Raw Accel settings.json with the provided template file (if given) and
+    /// Replaces the Raw Accel settings.json with the provided settings file (if given) and
     /// optionally updates its sensitivity multiplier entry before invoking writer.exe.
     /// This method is a best-effort no-UI operation and will not throw on non-Windows platforms.
     /// </summary>
-    public async Task ApplyTemplateAsync(string? templatePath, double? sensMultiplier)
+    public async Task ApplySettingsFileAsync(string? settingsFilePath, double? sensMultiplier)
     {
         if (!OperatingSystem.IsWindows())
             return;
@@ -37,20 +37,20 @@ public class RawAccelService
 
             var dest = Path.Combine(rawAccelDir, "settings.json");
 
-            // Resolve bare filename → full path under TemplatesDirectory.
-            // profile.RawAccelTemplate stores only the filename, never a rooted path.
-            string? resolvedTemplatePath = null;
-            if (!string.IsNullOrEmpty(templatePath))
+            // Resolve bare filename → full path under the Raw Accel settings directory.
+            // profile.RawAccelSettingsFile stores only the filename, never a rooted path.
+            string? resolvedSettingsFilePath = null;
+            if (!string.IsNullOrEmpty(settingsFilePath))
             {
-                resolvedTemplatePath = Path.IsPathRooted(templatePath)
-                    ? templatePath
-                    : Path.Combine(ResolveTemplatesDirectory(), templatePath);
+                resolvedSettingsFilePath = Path.IsPathRooted(settingsFilePath)
+                    ? settingsFilePath
+                    : Path.Combine(ResolveSettingsDirectory(), settingsFilePath);
             }
 
-            if (!string.IsNullOrEmpty(resolvedTemplatePath) && File.Exists(resolvedTemplatePath))
+            if (!string.IsNullOrEmpty(resolvedSettingsFilePath) && File.Exists(resolvedSettingsFilePath))
             {
-                // Copy template to destination
-                File.Copy(resolvedTemplatePath, dest, overwrite: true);
+                // Copy the settings file to destination
+                File.Copy(resolvedSettingsFilePath, dest, overwrite: true);
 
                 if (sensMultiplier.HasValue)
                 {
@@ -75,7 +75,7 @@ public class RawAccelService
             }
             else if (sensMultiplier.HasValue && File.Exists(dest))
             {
-                // No template swap — just patch sensitivity into the existing settings.json.
+                // No settings-file swap — just patch sensitivity into the existing settings.json.
                 try
                 {
                     var json = await File.ReadAllTextAsync(dest).ConfigureAwait(false);
@@ -119,13 +119,13 @@ public class RawAccelService
     }
 
     /// <summary>
-    /// Mirrors <c>TemplateService.ResolveTemplatesDirectory()</c>.
-    /// Returns the configured templates path or the portable default (app folder).
-    /// Kept local so <see cref="RawAccelService"/> has no dependency on TemplateService.
+    /// Mirrors <c>RawAccelSettingsRepository.ResolveDirectory()</c>.
+    /// Returns the configured settings path or the portable default (app folder).
+    /// Kept local so <see cref="RawAccelService"/> has no dependency on RawAccelSettingsRepository.
     /// </summary>
-    private string ResolveTemplatesDirectory()
+    private string ResolveSettingsDirectory()
     {
-        var configured = _profileService.Settings?.TemplatesDirectory;
+        var configured = _profileService.Settings?.RawAccelSettingsDirectory;
         return !string.IsNullOrWhiteSpace(configured)
             ? configured
             : AppContext.BaseDirectory;

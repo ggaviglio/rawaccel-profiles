@@ -40,7 +40,7 @@
           <!-- Settings row -->
           <TextBlock Grid.Row="1" Grid.Column="0" Text="Settings:" VerticalAlignment="Center" Margin="0,0,10,6" />
           <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
-            <ComboBox ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate, Mode=TwoWay}" Width="210">
+            <ComboBox ItemsSource="{Binding RawAccelSettingsFiles}" SelectedItem="{Binding SelectedRawAccelSettingsFile, Mode=TwoWay}" Width="210">
               <ComboBox.ItemTemplate>
                 <DataTemplate>
                   <TextBlock Text="{Binding ., TargetNullValue=(Skip)}" />
@@ -54,19 +54,19 @@
             <Button Content="📥" Width="32" Height="32" Padding="0"
                     HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                     Command="{Binding ImportCurrentSettingsCommand}"
-                    ToolTip.Tip="Import current Raw Accel settings.json into template library" />
+                    ToolTip.Tip="Import current Raw Accel settings.json into the settings library" />
             <Button Content="⧉"  Width="32" Height="32" Padding="0"
                     HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                    Command="{Binding DuplicateTemplateCommand}"
-                    ToolTip.Tip="Duplicate selected template under a new name" />
+                    Command="{Binding DuplicateRawAccelSettingsCommand}"
+                    ToolTip.Tip="Duplicate selected settings file under a new name" />
             <Button Content="✏"  Width="32" Height="32" Padding="0"
                     HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                    Command="{Binding RenameTemplateCommand}"
-                    ToolTip.Tip="Rename selected template (updates any profiles that reference it)" />
+                    Command="{Binding RenameRawAccelSettingsCommand}"
+                    ToolTip.Tip="Rename selected settings file (updates any profiles that reference it)" />
             <Button Content="🗑"  Width="32" Height="32" Padding="0"
                     HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                    Command="{Binding DeleteTemplateCommand}"
-                    ToolTip.Tip="Delete selected template from library" />
+                    Command="{Binding DeleteRawAccelSettingsCommand}"
+                    ToolTip.Tip="Delete selected settings file from library" />
           </StackPanel>
 
           <!-- Sensitivity row -->
@@ -82,7 +82,7 @@
                           Content="Auto" Padding="8,2"
                           Opacity="{Binding IsAutoSyncAvailable, Converter={StaticResource BoolToOpacityConverter}}"
                           IsHitTestVisible="{Binding IsAutoSyncAvailable}"
-                          ToolTip.Tip="Auto-compute sensitivity to match Global Default" />
+                          ToolTip.Tip="Auto-compute sensitivity to match the Default profile" />
             <TextBlock Text="{Binding RawAccelMatchAccuracy}"
                        VerticalAlignment="Center"
                        ToolTip.Tip="How well raw accel sensitivity alone offsets the environmental delta before Win Speed or Registry Bridge contribute"
@@ -153,7 +153,7 @@
                           ToolTip.Tip="Auto-compute registry curve to cover exact remainder gap" />
             <TextBlock Text="{Binding MatchAccuracy}"
                        VerticalAlignment="Center"
-                       ToolTip.Tip="Final accuracy after all three compensation layers. 100.00% = exact match with Global Default."
+                       ToolTip.Tip="Final accuracy after all three compensation layers. 100.00% = exact match with the Default profile."
                        Opacity="{Binding IsAutoSyncAvailable, Converter={StaticResource BoolToOpacityConverter}}" />
           </StackPanel>
         </Grid>
@@ -197,7 +197,7 @@
         </Grid>
       </Border>
 
-            <!-- ═══ Card 5: Target Associations (hidden for Global Default) ═══ -->
+            <!-- ═══ Card 5: Target Associations (hidden for Default profile) ═══ -->
             <Border Grid.Row="3" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
               CornerRadius="6" Padding="14,10" MinHeight="64">
         <StackPanel Spacing="6">

@@ -75,7 +75,7 @@
                                           Margin="0,0,6,0" />
                                 <TextBlock Grid.Column="2"
                                            Text="{Binding ProfileName}"
-                                           FontWeight="{Binding IsGlobalDefault, Converter={StaticResource BoolToFontWeightConverter}}"
+                                           FontWeight="{Binding IsDefault, Converter={StaticResource BoolToFontWeightConverter}}"
                                            VerticalAlignment="Center"
                                            HorizontalAlignment="Stretch"
                                            Background="Transparent"
@@ -121,7 +121,7 @@
                                    VerticalAlignment="Center" />
                     </Button>
                     <Button Grid.Column="1"
-                            ToolTip.Tip="Set as Global Default — the baseline every other profile's Auto-sync compensates against, and the fallback applied when no profile's targets match the active window."
+                            ToolTip.Tip="Set as Default — the baseline every other profile's Auto-sync compensates against, and the fallback applied when no profile's targets match the active window."
                             Command="{Binding SetAsDefaultCommand}">
                         <TextBlock Text="🏠" FontSize="14"
                                    TextAlignment="Center"

@@ -39,11 +39,11 @@ public partial class App : Application
             profileService.LoadAsync().GetAwaiter().GetResult();
 
             var storageService    = new Services.AvaloniaStorageService();
-            var templateService   = new Services.TemplateService(profileService);
+            var rawAccelSettingsRepository = new Services.RawAccelSettingsRepository(profileService);
             var windowService     = new Services.AvaloniaWindowService();
 
             // Create feature view-models
-            var profileEditorVm = new ViewModels.ProfileEditorViewModel(templateService, profileService, windowService);
+            var profileEditorVm = new ViewModels.ProfileEditorViewModel(rawAccelSettingsRepository, profileService, windowService);
 
             // Main VM — Settings is opened via windowService as a modal popup (fresh view-model
             // per open), not in-place navigation.

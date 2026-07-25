@@ -14,7 +14,7 @@ public class MouseService : IMouseService
     private readonly ProfileService _profileService;
     private readonly RawAccelService _rawAccelProvider;
     /// <summary>Last hardware state written — prevents redundant registry/SPI writes when nothing has changed.</summary>
-    private (int? winSpeed, double? regResult, string? template, double? sens, bool? epp) _lastAppliedState;
+    private (int? winSpeed, double? regResult, string? settingsFile, double? sens, bool? epp) _lastAppliedState;
 
     public MouseService(ProfileService profileService, RawAccelService rawAccelProvider)
     {
@@ -82,8 +82,8 @@ public class MouseService : IMouseService
 
         var (winSpeed, regResult) = _profileService.CalculateCompensations(profile);
         var eppValue = profile.UseEnhancePointerPrecision
-            ?? _profileService.Profiles.FirstOrDefault(p => p.IsGlobalDefault)?.UseEnhancePointerPrecision;
-        var newState = (winSpeed, regResult, profile.RawAccelTemplate, profile.SensMultiplier, eppValue);
+            ?? _profileService.Profiles.FirstOrDefault(p => p.IsDefault)?.UseEnhancePointerPrecision;
+        var newState = (winSpeed, regResult, profile.RawAccelSettingsFile, profile.SensMultiplier, eppValue);
 
         // Dedup: skip hardware writes if effective values haven't changed
         if (newState == _lastAppliedState)
@@ -94,8 +94,8 @@ public class MouseService : IMouseService
         _lastAppliedState = newState;
         Debug.WriteLine($"[MouseService] Applying profile '{profile.ProfileName}' to hardware.");
 
-        // Apply Raw Accel template and sensitivity first.
-        await _rawAccelProvider.ApplyTemplateAsync(profile.RawAccelTemplate, profile.SensMultiplier).ConfigureAwait(false);
+        // Apply the Raw Accel settings file and sensitivity first.
+        await _rawAccelProvider.ApplySettingsFileAsync(profile.RawAccelSettingsFile, profile.SensMultiplier).ConfigureAwait(false);
 
         // Apply discrete Windows pointer speed (coarse) FIRST so that ApplyRegistryBridge reads
         // the correct live value from the registry when it divides out the pointer speed multiplier.

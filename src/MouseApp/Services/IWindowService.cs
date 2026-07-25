@@ -15,10 +15,10 @@ public interface IWindowService
     Task ShowTargetManagerAsync(MouseProfile profile, ProfileService profileService);
 
     /// <summary>
-    /// Shows a small modal dialog asking the user to enter/confirm a template name.
+    /// Shows a small modal dialog asking the user to enter/confirm a name for a Raw Accel settings file.
     /// Returns the entered name, or null if the user cancelled.
     /// </summary>
-    Task<string?> ShowTemplateNameDialogAsync(string title, string defaultName);
+    Task<string?> ShowRawAccelSettingsNameDialogAsync(string title, string defaultName);
 
     /// <summary>
     /// Opens the Settings window modally against the main window with a fresh

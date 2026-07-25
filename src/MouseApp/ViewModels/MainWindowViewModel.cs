@@ -110,7 +110,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public MainWindowViewModel()
     {
-        Profiles = new() { new MouseProfile { ProfileName = "Global Default", IsGlobalDefault = true } };
+        Profiles = new() { new MouseProfile { ProfileName = "Default", IsDefault = true } };
         SelectedProfile = Profiles[0];
 
         OpenSettingsCommand = new AsyncRelayCommand(async () =>
@@ -141,7 +141,7 @@ public partial class MainWindowViewModel : ViewModelBase
         Profiles.CollectionChanged += (_, _) => OnPropertyChanged(nameof(FilteredProfiles));
 
         // LoadAsync has already run before this ctor is called (see App.axaml.cs);
-        // select the first profile (Global Default) so the editor is never blank.
+        // select the first profile (Default) so the editor is never blank.
         SelectedProfile = Profiles.FirstOrDefault();
 
         // "Apply Now" in ProfileEditor should light the active indicator.
@@ -172,12 +172,12 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     private bool CanSetAsDefault() =>
-        _selectedProfile != null && !_selectedProfile.IsGlobalDefault;
+        _selectedProfile != null && !_selectedProfile.IsDefault;
 
     private async void ExecuteSetAsDefault()
     {
         if (_selectedProfile == null || _profileService == null) return;
-        await _profileService.SetGlobalDefaultAsync(_selectedProfile);
+        await _profileService.SetDefaultAsync(_selectedProfile);
         _profileEditor?.LoadProfile(_selectedProfile);
         SetAsDefaultCommand.NotifyCanExecuteChanged();
     }
@@ -197,7 +197,7 @@ public partial class MainWindowViewModel : ViewModelBase
         var clone = new MouseProfile
         {
             ProfileName            = cloneName,
-            RawAccelTemplate       = _selectedProfile.RawAccelTemplate,
+            RawAccelSettingsFile       = _selectedProfile.RawAccelSettingsFile,
             SensMultiplier         = _selectedProfile.SensMultiplier,
             RawSyncMode            = _selectedProfile.RawSyncMode,
             OSSyncMode             = _selectedProfile.OSSyncMode,
@@ -225,7 +225,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (_selectedProfile == null) return false;
         var index = Profiles.IndexOf(_selectedProfile);
-        return index > 0 && !(_selectedProfile.IsGlobalDefault && index == 0);
+        return index > 0 && !(_selectedProfile.IsDefault && index == 0);
     }
 
     private async void ExecuteMoveProfileUp()
@@ -234,7 +234,7 @@ public partial class MainWindowViewModel : ViewModelBase
         if (current == null || _profileService == null) return;
         var index = Profiles.IndexOf(current);
         if (index <= 0) return;
-        if (index == 1 && Profiles[0].IsGlobalDefault) return;
+        if (index == 1 && Profiles[0].IsDefault) return;
 
         Profiles.Move(index, index - 1);
         RestoreSelectedProfile(current);
@@ -261,7 +261,7 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     private bool CanDeleteProfile() =>
-        _selectedProfile != null && !_selectedProfile.IsGlobalDefault;
+        _selectedProfile != null && !_selectedProfile.IsDefault;
 
     private async void ExecuteAddProfile()
     {
@@ -284,7 +284,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private async void ExecuteDeleteProfile()
     {
-        if (_selectedProfile == null || _selectedProfile.IsGlobalDefault) return;
+        if (_selectedProfile == null || _selectedProfile.IsDefault) return;
 
         var toRemove = _selectedProfile;
         var idx = Profiles.IndexOf(toRemove);
