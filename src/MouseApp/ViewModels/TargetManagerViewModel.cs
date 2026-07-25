@@ -43,6 +43,9 @@ public partial class WindowEntry : ObservableObject
         }
     }
 
+    /// <summary>Window title with a fallback, shown as the secondary line in the Active Windows picker.</summary>
+    public string TitleDisplay => string.IsNullOrEmpty(Title) ? "[No Title]" : Title;
+
     /// <summary>Multi-line tooltip shown in the Active Windows picker.</summary>
     public string DetailTooltip
     {

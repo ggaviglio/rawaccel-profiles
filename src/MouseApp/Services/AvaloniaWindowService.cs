@@ -1,4 +1,7 @@
 using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using MouseApp.Models;
 using MouseApp.ViewModels;
 using MouseApp.Views;
@@ -11,6 +14,9 @@ namespace MouseApp.Services;
 /// </summary>
 public sealed class AvaloniaWindowService : IWindowService
 {
+    private static Window? MainWindow =>
+        (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+
     public Task ShowTargetManagerAsync(MouseProfile profile, ProfileService profileService)
     {
         var vm  = new TargetManagerViewModel(profile, profileService);
@@ -18,7 +24,12 @@ public sealed class AvaloniaWindowService : IWindowService
 
         var tcs = new TaskCompletionSource();
         win.Closed += (_, _) => tcs.TrySetResult();
-        win.Show();
+
+        var owner = MainWindow;
+        if (owner is not null)
+            win.ShowDialog(owner);
+        else
+            win.Show();
 
         return tcs.Task;
     }
@@ -35,7 +46,12 @@ public sealed class AvaloniaWindowService : IWindowService
             win.Close();
         };
         win.Closed += (_, _) => tcs.TrySetResult(null);
-        win.Show();
+
+        var owner = MainWindow;
+        if (owner is not null)
+            win.ShowDialog(owner);
+        else
+            win.Show();
 
         return tcs.Task;
     }

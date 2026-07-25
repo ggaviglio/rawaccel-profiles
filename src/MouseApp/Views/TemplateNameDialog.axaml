@@ -6,7 +6,8 @@
         Title="{Binding Title}"
         Width="360" SizeToContent="Height"
         CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
   <StackPanel Margin="16" Spacing="12">
     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
     <TextBox Name="NameTextBox"

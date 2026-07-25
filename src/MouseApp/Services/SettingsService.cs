@@ -20,17 +20,7 @@ public class SettingsService
 
     public SettingsService()
     {
-        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        string dir;
-        if (!string.IsNullOrEmpty(local))
-            dir = Path.Combine(local, "MouseApp");
-        else
-            dir = AppContext.BaseDirectory;
-
-        if (!Directory.Exists(dir))
-            Directory.CreateDirectory(dir);
-
-        _filePath = Path.Combine(dir, "appsettings.json");
+        _filePath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
 
         // Ensure a default exists so first-run doesn't crash
         try
