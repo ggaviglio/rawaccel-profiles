@@ -14,13 +14,15 @@
         Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
 
   <StackPanel Margin="16" Spacing="8">
+    <TextBlock Text="Raw Accel Install Folder" FontWeight="SemiBold" />
     <StackPanel Orientation="Horizontal" Spacing="6">
-      <TextBox Width="420" Text="{Binding RawAccelDirectory, Mode=TwoWay}" />
+      <TextBox Width="420" Watermark="(default: app folder)" Text="{Binding RawAccelDirectory, Mode=TwoWay}" />
       <Button Content="Browse" Command="{Binding BrowseRawAccelDirCommand}" />
     </StackPanel>
 
+    <TextBlock Text="Raw Accel Settings Folder" FontWeight="SemiBold" Margin="0,4,0,0" />
     <StackPanel Orientation="Horizontal" Spacing="6">
-      <TextBox Width="420" Watermark="Curves folder (default: app folder)" Text="{Binding RawAccelSettingsDirectory, Mode=TwoWay}" />
+      <TextBox Width="420" Watermark="(default: app folder)" Text="{Binding RawAccelSettingsDirectory, Mode=TwoWay}" />
       <Button Content="Browse" Command="{Binding BrowseRawAccelSettingsDirCommand}" />
     </StackPanel>
 

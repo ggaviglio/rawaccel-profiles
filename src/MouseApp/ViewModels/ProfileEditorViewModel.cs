@@ -865,13 +865,23 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     // ── Raw Accel settings-file management execute methods ──────────────────
 
+    /// <summary>
+    /// Returns the configured Raw Accel install directory, or the portable default (app folder)
+    /// if unset -- e.g. when Raw Accel's binaries are bundled alongside MouseApp itself.
+    /// </summary>
+    private string ResolveRawAccelDirectory()
+    {
+        var configured = _profileService.Settings?.RawAccelDirectory;
+        return !string.IsNullOrWhiteSpace(configured)
+            ? configured
+            : AppContext.BaseDirectory;
+    }
+
     private void ExecuteOpenRawAccelGui()
     {
         if (!OperatingSystem.IsWindows()) return;
 
-        var rawAccelDir = _profileService.Settings?.RawAccelDirectory;
-        if (string.IsNullOrEmpty(rawAccelDir)) return;
-
+        var rawAccelDir = ResolveRawAccelDirectory();
         var exePath = Path.Combine(rawAccelDir, "rawaccel.exe");
         if (!File.Exists(exePath)) return;
 
@@ -891,8 +901,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     private async Task ExecuteImportCurrentSettingsAsync()
     {
-        var rawAccelDir = _profileService.Settings?.RawAccelDirectory;
-        if (string.IsNullOrEmpty(rawAccelDir)) return;
+        var rawAccelDir = ResolveRawAccelDirectory();
 
         var name = await _windowService.ShowRawAccelSettingsNameDialogAsync("Save current Raw Accel settings as:", string.Empty);
         if (string.IsNullOrWhiteSpace(name)) return;

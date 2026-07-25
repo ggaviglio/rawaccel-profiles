@@ -26,11 +26,9 @@ public class RawAccelService
 
         try
         {
-            var rawAccelDir = _profileService.Settings.RawAccelDirectory ?? string.Empty;
+            var rawAccelDir = ResolveRawAccelDirectory();
             // writer.exe is always derived from the Raw Accel install directory.
-            var writerExePath = string.IsNullOrEmpty(rawAccelDir)
-                ? string.Empty
-                : Path.Combine(rawAccelDir, "writer.exe");
+            var writerExePath = Path.Combine(rawAccelDir, "writer.exe");
 
             if (!Directory.Exists(rawAccelDir))
                 Directory.CreateDirectory(rawAccelDir);
@@ -126,6 +124,18 @@ public class RawAccelService
     private string ResolveSettingsDirectory()
     {
         var configured = _profileService.Settings?.RawAccelSettingsDirectory;
+        return !string.IsNullOrWhiteSpace(configured)
+            ? configured
+            : AppContext.BaseDirectory;
+    }
+
+    /// <summary>
+    /// Returns the configured Raw Accel install directory, or the portable default (app folder)
+    /// if unset -- e.g. when Raw Accel's writer.exe is bundled alongside MouseApp itself.
+    /// </summary>
+    private string ResolveRawAccelDirectory()
+    {
+        var configured = _profileService.Settings?.RawAccelDirectory;
         return !string.IsNullOrWhiteSpace(configured)
             ? configured
             : AppContext.BaseDirectory;
