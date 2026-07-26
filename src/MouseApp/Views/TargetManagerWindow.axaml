@@ -29,8 +29,10 @@
         </StackPanel>
 
         <Border Grid.Row="1"
-                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                CornerRadius="6"
+                Background="{DynamicResource ThemeBackgroundBrush}"
+                BorderBrush="{DynamicResource ThemeBorderMidBrush}"
+                BorderThickness="1"
+                CornerRadius="0"
                 ClipToBounds="True">
           <ListBox ItemsSource="{Binding ActiveWindows}"
                    SelectedItem="{Binding SelectedWindow, Mode=TwoWay}"
@@ -50,7 +52,7 @@
                           Background="{DynamicResource MatchIndicatorBrush}"
                           IsVisible="{Binding IsMatched}"
                           Margin="0,2,5,2"
-                          CornerRadius="2" />
+                          CornerRadius="0" />
                   <StackPanel Grid.Column="1"
                               ToolTip.Tip="{Binding DetailTooltip}">
                     <TextBlock Text="{Binding ExeName}"
@@ -102,8 +104,10 @@
         </StackPanel>
 
         <Border Grid.Row="1"
-                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                CornerRadius="6"
+                Background="{DynamicResource ThemeBackgroundBrush}"
+                BorderBrush="{DynamicResource ThemeBorderMidBrush}"
+                BorderThickness="1"
+                CornerRadius="0"
                 ClipToBounds="True">
           <ListBox ItemsSource="{Binding Associations}"
                    Background="Transparent"
@@ -119,8 +123,8 @@
                 <Grid ColumnDefinitions="Auto,*,Auto" Margin="2,2">
                   <!-- Type badge -->
                   <Border Grid.Column="0"
-                          Background="{DynamicResource SystemControlBackgroundBaseMediumLowBrush}"
-                          CornerRadius="3"
+                          Background="{DynamicResource ThemeControlMidBrush}"
+                          CornerRadius="0"
                           Padding="5,2"
                           Margin="0,0,6,0"
                           VerticalAlignment="Center">
@@ -162,7 +166,7 @@
 
     <!-- ════ Manual entry + Save / Cancel ════ -->
     <Border Grid.Row="1"
-            BorderBrush="{DynamicResource SystemBaseHighColor}"
+            BorderBrush="{DynamicResource ThemeBorderMidBrush}"
             BorderThickness="0,1,0,0"
             Padding="0,8,0,0">
       <Grid ColumnDefinitions="*,Auto">

@@ -29,13 +29,15 @@
         </Grid.ColumnDefinitions>
 
         <!-- Sidebar -->
-        <Border x:Name="SidebarHost" Grid.Column="0" Background="{DynamicResource SystemControlBackgroundChromeLowBrush}" Padding="8,8,4,8">
+        <Border x:Name="SidebarHost" Grid.Column="0" Background="{DynamicResource ThemeBackgroundBrush}" Padding="8,8,4,8">
             <Grid RowDefinitions="*,Auto">
 
                 <!-- Row 0: All profiles -->
                 <Border Grid.Row="0"
-                        Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                        CornerRadius="8"
+                        Background="{DynamicResource ThemeBackgroundBrush}"
+                        BorderBrush="{DynamicResource ThemeBorderMidBrush}"
+                        BorderThickness="1"
+                        CornerRadius="0"
                         ClipToBounds="True"
                         Padding="0">
                     <Grid RowDefinitions="Auto,*">
@@ -43,7 +45,7 @@
                                  Text="{Binding SearchText, Mode=TwoWay}"
                                  Watermark="Search profiles..."
                                  Margin="4,4,4,2"
-                                 CornerRadius="4" />
+                                 CornerRadius="0" />
                         <ListBox Grid.Row="1"
                                  ItemsSource="{Binding FilteredProfiles}"
                              SelectedItem="{Binding SelectedProfile, Mode=TwoWay}"

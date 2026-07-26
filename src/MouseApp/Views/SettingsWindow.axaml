@@ -10,8 +10,7 @@
         Title="Settings"
         SizeToContent="WidthAndHeight"
         CanResize="False"
-        WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
+        WindowStartupLocation="CenterOwner">
 
   <StackPanel Margin="16" Spacing="8">
     <TextBlock Text="Raw Accel Install Folder" FontWeight="SemiBold" />
