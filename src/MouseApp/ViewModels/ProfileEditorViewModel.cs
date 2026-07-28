@@ -779,39 +779,64 @@ public partial class ProfileEditorViewModel : ViewModelBase
         // shows exactly the real significant digits instead of fabricated ones.
         static string FormatMatchPercent(double value, int domainDecimalPlaces)
         {
-            const int doubleSignificantDigitBudget = 15;
-            // Clamp immediately, before any formatting: a caller passing "no domain cap"
-            // (int.MaxValue, see below) must never reach ToString($"F{...}")/$"E{...}" with that
-            // raw value — .NET throws FormatException for an out-of-range precision specifier.
-            // Clamping once here, ahead of every return path (including the value==0 case),
-            // means neither branch below can be the one that forgets to.
-            domainDecimalPlaces = Math.Min(domainDecimalPlaces, doubleSignificantDigitBudget);
-
-            // '#' (not '0') after the decimal point omits trailing zeros instead of padding
-            // them out to the cap. The cap itself (places) is still the real precision ceiling
-            // — a domain floor when one genuinely exists, double's own budget otherwise — this
-            // only removes digits that happen to be zero, never digits that actually
-            // distinguish the value. Without this, a clean value like a typed 1.12312312
-            // sensitivity displayed as "112.312312000000%" instead of "112.312312%", implying
-            // precision that was never real — exactly the kind of fake digit this whole
-            // formatting rework exists to avoid.
-            static string FixedFormat(int places) => places > 0 ? "0." + new string('#', places) : "0";
-
             if (double.IsNaN(value)) return "NaN%";
             if (double.IsInfinity(value)) return (value > 0 ? "Infinity" : "-Infinity") + "%";
-            if (value == 0) return (0.0).ToString(FixedFormat(domainDecimalPlaces), CultureInfo.InvariantCulture) + "%";
+            if (value == 0) return "0%";
 
+            // The exact number of significant decimal digits THIS specific double needs to
+            // round-trip back to itself, bit-for-bit — not a fixed guess (15? 16? 17?). Doubles
+            // vary: some round-trip in a handful of digits, some genuinely need all 17. This is
+            // the same notion .NET's own default double formatting uses internally; deriving it
+            // explicitly here means the fixed-point and scientific paths below share one
+            // consistent, per-value-exact cap instead of two different fixed guesses.
+            int realSigFigs = 17;
+            for (int n = 1; n < 17; n++)
+            {
+                if (double.Parse(value.ToString("G" + n, CultureInfo.InvariantCulture), CultureInfo.InvariantCulture) == value)
+                {
+                    realSigFigs = n;
+                    break;
+                }
+            }
+
+            // Order-of-magnitude digit count, UNCLAMPED — zero or negative for values under 1
+            // (e.g. 0.05 has trueIntegerDigits = -1, correctly placing its first significant
+            // digit in the hundredths position). Clamping this to "at least 1" was a real bug:
+            // it silently breaks decimal-place placement for any sub-1 value and can round a
+            // genuinely nonzero percentage all the way down to a false "0%".
             var absValue = Math.Abs(value);
-            int integerDigits = absValue < 1 ? 1 : (int)Math.Floor(Math.Log10(absValue)) + 1;
+            int trueIntegerDigits = (int)Math.Floor(Math.Log10(absValue)) + 1;
 
-            bool tooLargeForFixed = integerDigits > doubleSignificantDigitBudget;
-            bool tooSmallForFixed = Math.Round(value, domainDecimalPlaces) == 0;
+            // Decimal places needed to show realSigFigs significant digits starting from this
+            // value's actual first significant digit, further capped by a real domain-specific
+            // floor when one exists (Full Match, EPP on — domainDecimalPlaces there comes from
+            // the registry curve's live-computed quantization step, not a guess. int.MaxValue,
+            // see callers, means no such floor applies and this value's own precision is the
+            // only cap).
+            int naturalDecimalPlaces = realSigFigs - trueIntegerDigits;
+            int decimalPlaces = domainDecimalPlaces == int.MaxValue
+                ? naturalDecimalPlaces
+                : Math.Min(domainDecimalPlaces, naturalDecimalPlaces);
 
-            if (tooLargeForFixed || tooSmallForFixed)
-                return value.ToString($"E{domainDecimalPlaces}", CultureInfo.InvariantCulture) + "%";
+            // Fixed-point notation stops being honest once it would need a negative number of
+            // decimal places (the integer part alone already exceeds this value's real
+            // precision — too large) or more than Math.Round can even evaluate (an unreasonable
+            // wall of leading zeros for an extremely small value — too small). Scientific
+            // notation shows exactly the real significant digits in both cases, instead of
+            // either fabricating digits or rounding a real value down to a false zero.
+            if (decimalPlaces < 0 || decimalPlaces > 15)
+            {
+                int sciDecimalPlaces = domainDecimalPlaces == int.MaxValue
+                    ? Math.Max(0, realSigFigs - 1)
+                    : Math.Min(domainDecimalPlaces, Math.Max(0, realSigFigs - 1));
+                return value.ToString($"E{sciDecimalPlaces}", CultureInfo.InvariantCulture) + "%";
+            }
 
-            int decimalPlaces = Math.Min(domainDecimalPlaces, Math.Max(0, doubleSignificantDigitBudget - integerDigits));
-            return value.ToString(FixedFormat(decimalPlaces), CultureInfo.InvariantCulture) + "%";
+            // '#' (not '0') after the decimal point omits trailing zeros instead of padding
+            // them out to the cap — a clean typed 1.12312312 sensitivity shows as "112.312312%",
+            // not "112.312312000000%" implying precision that was never real.
+            string format = decimalPlaces > 0 ? "0." + new string('#', decimalPlaces) : "0";
+            return value.ToString(format, CultureInfo.InvariantCulture) + "%";
         }
 
         // No domain-specific floor for either row (see comment above) — int.MaxValue means
