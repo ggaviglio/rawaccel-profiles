@@ -286,6 +286,21 @@ public partial class ProfileEditorViewModel : ViewModelBase
         RecalculateMatchAccuracy();
     }
 
+    /// <summary>
+    /// Sensitivity and RegistryCurveOverride both only accept strictly-positive numbers (0 or
+    /// negative is not a meaningful multiplier for either). Single shared check so that rule
+    /// lives in exactly one place instead of two independently hand-typed copies that could
+    /// silently drift out of sync with each other.
+    /// </summary>
+    private static bool TryParsePositiveDouble(string text, out double parsed) =>
+        double.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out parsed) && parsed > 0;
+
+    /// <summary>Same idea as <see cref="TryParsePositiveDouble"/>, for the int-typed fields
+    /// (TargetScreenWidth, TargetLogicalDpi) — a pixel width or DPI of 0 or negative is not
+    /// meaningful either.</summary>
+    private static bool TryParsePositiveInt(string text, out int parsed) =>
+        int.TryParse(text, out parsed) && parsed > 0;
+
     partial void OnSensitivityStringChanged(string? oldValue, string newValue)
     {
         if (_isSyncing) return;
@@ -298,8 +313,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             return;
         }
 
-        if (double.TryParse(newValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)
-            && parsed > 0)
+        if (TryParsePositiveDouble(newValue, out var parsed))
         {
             _isSyncing = true;
             Sensitivity = parsed;
@@ -390,8 +404,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             return;
         }
 
-        if (double.TryParse(newValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)
-            && parsed > 0)
+        if (TryParsePositiveDouble(newValue, out var parsed))
         {
             _isSyncing = true;
             RegistryCurveOverride = parsed;
@@ -426,7 +439,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             return;
         }
 
-        if (int.TryParse(newValue, out var parsed) && parsed > 0)
+        if (TryParsePositiveInt(newValue, out var parsed))
         {
             _isSyncing = true;
             TargetScreenWidth = parsed;
@@ -459,7 +472,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             return;
         }
 
-        if (int.TryParse(newValue, out var parsed) && parsed > 0)
+        if (TryParsePositiveInt(newValue, out var parsed))
         {
             _isSyncing = true;
             TargetLogicalDpi = parsed;
