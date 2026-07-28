@@ -258,7 +258,16 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     here previously crashed the entire app just from typing an extreme value
     into a field, before ever pressing Apply. Keep this catch even if it
     looks redundant; the failure mode it prevents is a hard crash, not a bad
-    display.
+    display. `EncodeRegCurve` has a **second** direct call site further down
+    the same method — the regStep nudge used only to derive the Full Match
+    row's decimal precision — that is *not* covered by the try/catch above
+    (it runs after that block) and crashed the app live even after the first
+    fix shipped. Guarded separately: skipped entirely when `fullMatchPercent`
+    is already non-finite (the nudge is moot then — it'll display
+    `"NaN%"`/`"Infinity%"` regardless of decimal count) plus its own
+    defensive `try/catch`. If `EncodeRegCurve` ever grows a third call site,
+    it needs the same treatment — grep for `EncodeRegCurve(` to check
+    instead of assuming these two are the only ones.
   - `On*Changed` callback **ordering** matters: `AutoPersist()` must come
     before `RecalculateMatchAccuracy()` everywhere. Swapping them causes stale
     model reads.
