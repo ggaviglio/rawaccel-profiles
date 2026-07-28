@@ -87,10 +87,13 @@ public static class MouseRegistryBridge
         //   Set Y/X = (150/DPI) / WinSpeedMult  →  PointerMovement = MouseInput × regResult
         // WinSpeedMult is read live from the registry — MouseService writes the profile's pointer
         // speed BEFORE calling this, so the value here is already correct for this profile.
-        // Clamp regResult to a small positive floor so the curve is never zeroed (a zero Y curve
-        // stops the pointer dead when EPP is ON).
+        // No artificial floor on regResult here: QuantizeToFixedPoint1616 (below, per curve node)
+        // already guarantees a nonzero regResult never produces a literal-zero curve node — it
+        // computes the exact smallest representable step instead of guessing a "safe" constant,
+        // so it doesn't need help from a cruder pre-floor that would just destroy real
+        // distinguishability between small regResult values for no mathematical reason.
         double winSpeedMult = ReadWindowsPointerSpeedMultiplier();
-        double scale = Math.Max(regResult, 0.01) * (150.0 / dpi) / winSpeedMult;
+        double scale = regResult * (150.0 / dpi) / winSpeedMult;
         Debug.WriteLine($"[RegistryBridge] winSpeedMult={winSpeedMult:G6} scale={scale:G10}");
         double[] xCurve = MarkCXCurve;
         var yCurve = new double[MarkCXCurve.Length];
@@ -188,17 +191,12 @@ public static class MouseRegistryBridge
         double yBase1 = MarkCXCurve[1] * (150.0 / dpi) / winSpeedMult;
         step = 1.0 / (yBase1 * 65536.0);
 
-        // Mirror ApplyRegistryBridge's own floor exactly (its Math.Max(regResult, 0.01),
-        // applied before the DPI/pointer-speed scaling) — without this, a tiny/zero override
-        // displays as if it produced almost no curve at all, when the real write never lets
-        // regResult itself go below 0.01.
-        double flooredRegResult = Math.Max(regResult, 0.01);
-
-        // Same shared quantize-and-clamp helper CurveToBinary uses per curve node, applied here
-        // to node[1] (the tightest anchor — see comment above), then converted back to
-        // regResult units. One implementation for both, so the "never round down to a literal
-        // 0" floor can't drift between the display and the real write.
-        long fixedVal = QuantizeToFixedPoint1616(yBase1 * flooredRegResult);
+        // No artificial floor on regResult here — matches ApplyRegistryBridge, which no longer
+        // has one either (see its comment). Same shared quantize-and-clamp helper CurveToBinary
+        // uses per curve node, applied here to node[1] (the tightest anchor — see comment above),
+        // then converted back to regResult units. One implementation for both, so the "never
+        // round down to a literal 0" floor can't drift between the display and the real write.
+        long fixedVal = QuantizeToFixedPoint1616(yBase1 * regResult);
         return fixedVal / 65536.0 / yBase1;
     }
 

@@ -126,54 +126,50 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     accuracy display and every compensation calculation. An additional
     `EncodeRegCurve(double, out double step)` overload exists (exposes the same
     internal quantization step for display-precision use) — same formula,
-    don't let the two overloads drift apart. Before quantizing, it applies
-    `Math.Max(regResult, 0.01)` — **the same floor `ApplyRegistryBridge` applies
-    to the real write** — then runs the floored value through
-    `QuantizeToFixedPoint1616` on node `[1]` and converts back to regResult
-    units. Both the 0.01 floor and the zero-avoidance clamp must be present
-    here or an extreme (e.g. near-zero) override under-predicts what the real
-    write would actually do — this was a real, verified bug (not just cosmetic):
-    an EPP Override of `0.00001` briefly displayed a wildly wrong "6025993%"
-    match because only the zero-avoidance clamp had been added to the display
-    path and the 0.01 floor was missing entirely. Reads DPI and Windows Pointer
-    Speed **live from the current system state**, not from the profile being
-    displayed/edited — for a profile that isn't the one currently applied to
-    Windows, this is technically the wrong environment for prediction, but in
-    practice only matters when `regResult` is already within about a factor of
-    2 of `step` (~1e-5–1e-4), since otherwise `EncodeRegCurve(x) ≈ x` regardless
-    of which live DPI/speed set the granularity. Not worth refactoring into an
+    don't let the two overloads drift apart. Runs `regResult` (unfloored — see
+    below) through `QuantizeToFixedPoint1616` on node `[1]` and converts back
+    to regResult units. Reads DPI and Windows Pointer Speed **live from the
+    current system state**, not from the profile being displayed/edited — for
+    a profile that isn't the one currently applied to Windows, this is
+    technically the wrong environment for prediction, but in practice only
+    matters when `regResult` is already within about a factor of 2 of `step`
+    (~1e-5–1e-4), since otherwise `EncodeRegCurve(x) ≈ x` regardless of which
+    live DPI/speed set the granularity. Not worth refactoring into an
     explicit-parameter signature unless that edge case turns out to matter for
     realistic profile values.
   - `ApplyRegistryBridge()` → `CurveToBinary()` — the actual registry write:
     `Y[i] = X[i] × (150/DPI) / winSpeedMult × regResult`. Must stay
     formula-identical to `EncodeRegCurve` or the model stops predicting
-    reality — enforced now by both calling the shared
-    `QuantizeToFixedPoint1616` helper described above instead of duplicating
-    the clamp logic. `winSpeedMult` is read live from the registry immediately
-    before this call (pointer speed is written first so the live value is
-    already correct for the profile). Despite the "16.16" name, each curve node
-    is stored as a **signed 64-bit integer**, not a 32-bit container — real
-    overflow ceiling is `long.MaxValue / 65536` per node (~1.4×10^14), not what
-    "16.16" might suggest; `QuantizeToFixedPoint1616` throws
-    `ArgumentOutOfRangeException` rather than silently wrapping via an
-    unchecked `(long)` cast. `Math.Max(regResult, 0.01)` is applied *before*
-    the DPI/winSpeedMult division, so it doesn't fully protect against a large
-    enough DPI still shrinking a curve value below the smallest representable
-    fixed-point step — that's what the zero-avoidance clamp inside
-    `QuantizeToFixedPoint1616` is for. A zero breakpoint here means a genuinely
-    frozen cursor at real-world usage speeds when EPP is on, not just a display
-    bug — this guard is about actual applied hardware behavior. The `0.01`
-    floor value itself is **not a tuned or researched constant** — checked via
-    `git log --all -S"0.01" -- Services/MouseRegistryBridge.cs`: it was
-    introduced once (commit `f10c1fb`, "cancel live pointer speed so
-    regResult=1 is true 1:1") with only the comment "clamp regResult to a
-    small positive floor," and has never been touched since. It's a real
-    behavior with real consequences — confirmed live in-app that
-    `RegistryCurveOverride` values of `0.001`, `0.01`, and `0.0001` all produce
-    an *identical* applied result, since anything below `0.01` collapses to
-    exactly `0.01` — but the specific number `0.01` is a placeholder that
-    happened to stick, not a derived value. Don't treat it as authoritative if
-    you're ever asked to justify it.
+    reality — enforced by both calling the shared `QuantizeToFixedPoint1616`
+    helper described above instead of duplicating the clamp logic.
+    `winSpeedMult` is read live from the registry immediately before this call
+    (pointer speed is written first so the live value is already correct for
+    the profile). Despite the "16.16" name, each curve node is stored as a
+    **signed 64-bit integer**, not a 32-bit container — real overflow ceiling
+    is `long.MaxValue / 65536` per node (~1.4×10^14), not what "16.16" might
+    suggest; `QuantizeToFixedPoint1616` throws `ArgumentOutOfRangeException`
+    rather than silently wrapping via an unchecked `(long)` cast, and never
+    lets a genuinely nonzero curve value round down to a literal `0` (a zero Y
+    curve stops the pointer dead when EPP is on) — that guard alone is
+    sufficient and precise (computed from the real fixed-point step, not a
+    guess), so there is no separate `regResult`-level floor above it.
+  - **There used to be a `Math.Max(regResult, 0.01)` floor here (and mirrored
+    in `EncodeRegCurve`) — it has been removed, deliberately, not just left
+    alone.** History, so it doesn't get silently reintroduced: it predates
+    this app's `QuantizeToFixedPoint1616` guard (confirmed via
+    `git log --all -S"0.01" -- Services/MouseRegistryBridge.cs`: introduced
+    once, commit `f10c1fb`, comment "clamp regResult to a small positive
+    floor," never tuned or revisited since). Once the precise per-node
+    zero-avoidance clamp existed, the `0.01` floor became pure redundancy that
+    actively hurt accuracy: it doesn't prevent anything the per-node clamp
+    doesn't already prevent more precisely, but it did flatten every
+    `RegistryCurveOverride` value between `0` and `0.01` to an *identical*
+    applied result — confirmed live in-app before the fix (`0.001`, `0.01`,
+    `0.0001` all produced the same output) and after (they now differ
+    proportionally, e.g. `0.001` vs `0.01` differ by roughly the expected 10×).
+    If you're ever asked to reintroduce a `regResult` floor "for safety,"
+    the answer is: it's not needed — `QuantizeToFixedPoint1616` already
+    guarantees no literal zero, exactly, for any nonzero input.
   - The Raw Accel sensitivity tooltip's old stated max (`123456789012345.12`,
     `~6e-6` step) has been **verified false** and removed. Checked directly
     against Raw Accel's own source
