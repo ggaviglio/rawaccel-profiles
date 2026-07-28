@@ -98,7 +98,7 @@
                      Text="{Binding SensitivityString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Width="210" Watermark="Skip"
                      IsEnabled="{Binding !IsRawAutoSync}"
-                     ToolTip.Tip="Raw Accel sensitivity multiplier. Max value: 123456789012345.12, step ~6e-6. Leave blank to skip." />
+                     ToolTip.Tip="Raw Accel sensitivity multiplier. No enforced maximum — Raw Accel's own source places no bound on this field beyond standard double-precision range. Leave blank to skip." />
             <ToggleButton Grid.Column="1"
                           IsChecked="{Binding IsRawAutoSync, Mode=TwoWay}"
                           Content="Auto" Classes="auto-toggle"

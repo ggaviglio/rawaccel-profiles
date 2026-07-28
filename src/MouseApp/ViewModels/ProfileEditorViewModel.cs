@@ -742,8 +742,12 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var rawEffDisplay = factors.RawOnly;
 
         // Display precision reflects real-world distinguishability, not an arbitrary digit
-        // count. Raw Accel Only / Win Speed Only never touch the registry curve, so their
-        // floor is always Raw Accel's own documented ~6e-6 relative step (fixed).
+        // count. Raw Accel Only / Win Speed Only never touch the registry curve, and Raw Accel
+        // itself has no precision floor of its own to derive a digit count from — verified
+        // against Raw Accel's own source (its Sensitivity Multiplier field is a plain, unbounded
+        // double; see CLAUDE.md). So these rows (and the Full Match row whenever EPP is off, since
+        // the registry curve is forced neutral with no quantization in that case) get no
+        // domain-specific cap at all — just the double-precision budget below.
         //
         // A `double` only ever holds ~15-17 real significant decimal digits, regardless of
         // domain or of whether those digits land before or after the decimal point. Fixed-
@@ -772,18 +776,21 @@ public partial class ProfileEditorViewModel : ViewModelBase
             return value.ToString($"F{decimalPlaces}", CultureInfo.InvariantCulture) + "%";
         }
 
-        const int rawAccelDecimalPlaces = 4;
+        // No domain-specific floor for either row (see comment above) — int.MaxValue means
+        // FormatMatchPercent's own double-precision budget is the only cap in effect.
+        const int noDomainFloor = int.MaxValue;
         var rawAccelPercent = (rawEffDisplay / sBase) * 100.0;
         var winSpeedPercent = (winEff / fullBase) * 100.0;
-        RawAccelMatchAccuracy = FormatMatchPercent(rawAccelPercent, rawAccelDecimalPlaces);
-        WinSpeedMatchAccuracy = FormatMatchPercent(winSpeedPercent, rawAccelDecimalPlaces);
+        RawAccelMatchAccuracy = FormatMatchPercent(rawAccelPercent, noDomainFloor);
+        WinSpeedMatchAccuracy = FormatMatchPercent(winSpeedPercent, noDomainFloor);
 
         // Full Match additionally goes through the registry curve when EPP is active, whose
-        // live-computed quantization step is coarser than Raw Accel's and varies with the
-        // current DPI/pointer speed — measure the actual percentage-point delta it produces
-        // for this profile rather than assuming a fixed digit count.
+        // live-computed quantization step IS a real, verified precision floor (unlike Raw
+        // Accel's) — measure the actual percentage-point delta it produces for this profile
+        // rather than assuming a fixed digit count. When EPP is off the curve is neutral (no
+        // quantization at all), so fall back to the same uncapped double-precision budget.
         var fullMatchPercent = (fullEff / fullBase) * 100.0;
-        int fullMatchDecimalPlaces = rawAccelDecimalPlaces;
+        int fullMatchDecimalPlaces = noDomainFloor;
         if (useEpp != false)
         {
             MouseRegistryBridge.EncodeRegCurve(rawRegCurve, out double regStep);

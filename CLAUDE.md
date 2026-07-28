@@ -77,8 +77,17 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
    multiplier × Windows Pointer Speed multiplier (`WinMultipliers[]`, a 20-entry
    table) × registry curve factor (round-tripped through
    `MouseRegistryBridge.EncodeRegCurve`, 16.16 fixed-point) × DPI compensation ×
-   screen-width compensation. This is the single source of truth used both for
-   "match accuracy" display and as the target for compensation math.
+   screen-width compensation. It's a one-line `.Full` over
+   `GetEffectiveSensitivityFactors(profile)`, which computes and returns those
+   five factors individually (`EffectiveSensitivityFactors` record struct) so a
+   caller that needs a *partial* product — the Profile Editor's match-accuracy
+   display shows "Raw Accel only" and "Raw Accel + Win Speed" rows before the
+   final combined row — can reuse the exact same calculation instead of
+   re-deriving it by hand. This split exists because that hand-rolled duplicate
+   is exactly what caused a real bug earlier: an edge-case guard got added to
+   the real formula but not the duplicate, and the display silently stopped
+   predicting reality. There is now exactly one implementation of this formula;
+   don't reintroduce a second one in the ViewModel.
 2. `ProfileService.CalculateCompensations(activeProfile)` — when a profile's
    `OSSyncMode`/`RegSyncMode` is `Auto`, solves backwards from
    `Effective(GlobalDefault)` to pick the closest discrete Windows Pointer Speed
@@ -153,16 +162,48 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     fixed-point step — that's what the zero-avoidance clamp inside
     `QuantizeToFixedPoint1616` is for. A zero breakpoint here means a genuinely
     frozen cursor at real-world usage speeds when EPP is on, not just a display
-    bug — this guard is about actual applied hardware behavior.
-  - The Raw Accel sensitivity tooltip's stated max (`123456789012345.12`) is
-    **unverified** — no derivation or source anywhere in the repo, looks like
-    placeholder text. Don't treat it as a real researched limit.
+    bug — this guard is about actual applied hardware behavior. The `0.01`
+    floor value itself is **not a tuned or researched constant** — checked via
+    `git log --all -S"0.01" -- Services/MouseRegistryBridge.cs`: it was
+    introduced once (commit `f10c1fb`, "cancel live pointer speed so
+    regResult=1 is true 1:1") with only the comment "clamp regResult to a
+    small positive floor," and has never been touched since. It's a real
+    behavior with real consequences — confirmed live in-app that
+    `RegistryCurveOverride` values of `0.001`, `0.01`, and `0.0001` all produce
+    an *identical* applied result, since anything below `0.01` collapses to
+    exactly `0.01` — but the specific number `0.01` is a placeholder that
+    happened to stick, not a derived value. Don't treat it as authoritative if
+    you're ever asked to justify it.
+  - The Raw Accel sensitivity tooltip's old stated max (`123456789012345.12`,
+    `~6e-6` step) has been **verified false** and removed. Checked directly
+    against Raw Accel's own source
+    (github.com/RawAccelOfficial/rawaccel, `grapher/Models/Options/Option.cs`):
+    the Sensitivity Multiplier field is constructed as
+    `new Field(box, containingForm, defaultData)` with no min/max arguments,
+    which falls through to `Field.cs`'s own defaults —
+    `minData = double.MinValue, maxData = double.MaxValue`. Raw Accel imposes
+    **no domain-specific bound or precision floor at all**; it's a plain,
+    unbounded `double` the same as everywhere else in this app. This matters
+    beyond the tooltip: `ProfileEditorViewModel.RecalculateMatchAccuracy()`
+    used to hardcode 4 decimal places for the Raw Accel-only / Win Speed-only
+    rows (and the Full Match row when EPP is off) on the assumption that Raw
+    Accel had a `~6e-6`-scale floor analogous to the registry curve's real
+    16.16-quantization floor — it doesn't, so those rows now use the
+    uncapped double-precision budget instead (see below). The registry
+    curve's floor (`EncodeRegCurve`'s live-computed `step`) is the one
+    genuinely real, hardware-verified precision floor in this app; don't
+    assume any other field has an equivalent one without checking the same way.
 - **`Services/ProfileService.cs`**
   - `WinMultipliers[]` — the 20-entry table is the single source of truth for
     all Win Speed math. A wrong value means wrong compensation applied to
     hardware.
-  - `GetEffectiveSensitivity()` — uses `EncodeRegCurve`, feeds every
-    comparison. Removing the encode call here is a silent precision regression.
+  - `GetEffectiveSensitivityFactors(profile)` — the single implementation of
+    the 5-factor effective-sensitivity formula (sens × winMult × regCurve ×
+    dpiComp × screenComp), returned as an `EffectiveSensitivityFactors` record
+    struct (`.RawOnly`, `.WinOnly`, `.Full` partial-product properties) instead
+    of a single combined number. `GetEffectiveSensitivity()` is just `.Full`
+    over this. Uses `EncodeRegCurve` for the `RegCurve` factor, feeding every
+    comparison — removing that call is a silent precision regression.
   - `CalculateCompensations()` — the apply-time math. Must stay in sync with
     `ProfileEditorViewModel`'s `ApplyAutoOSSync`/`ApplyAutoRegSync`.
 - **`ViewModels/ProfileEditorViewModel.cs`** (Math Engine section, ~lines 305–440)
@@ -170,13 +211,24 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     `Effective(base) / S_target`.
   - `ApplyAutoRegSync()` — Registry remainder formula: target is
     `Effective(base) / (S_target × WinMult)`.
-  - `RecalculateMatchAccuracy()` — display math; uses `EncodeRegCurve` on the
-    reg curve value. Formats each of the three match-% rows with dynamically
-    derived decimal places (from the real Raw Accel/registry-curve precision
-    floor, further capped by `double`'s own ~15-digit significant-figure
-    budget), falling back to scientific notation at extreme magnitudes —
-    not a fixed `"G10"`/`"F2"`-style format string. Don't revert to a flat
-    format without re-deriving why (see git history for the reasoning).
+  - `RecalculateMatchAccuracy()` — display math. Calls
+    `_profileService.GetEffectiveSensitivityFactors(_editingProfile)` and reads
+    off whichever partial product each row needs (`.RawOnly`, `.WinOnly`,
+    `.Full`) instead of re-deriving the formula by hand — safe because
+    `AutoPersist()` already writes every current field onto `_editingProfile`
+    before this runs (see the ordering rule below), so the real math-engine
+    function sees the same values the ViewModel does. Formats each of the
+    three match-% rows via `FormatMatchPercent`, capped by `double`'s own
+    ~15-digit significant-figure budget, falling back to scientific notation
+    at extreme magnitudes — not a fixed `"G10"`/`"F2"`-style format string.
+    Only the registry curve (Full Match row, EPP on) has a real domain-specific
+    precision floor beneath the double-precision cap — computed by nudging the
+    live `EncodeRegCurve` step and measuring the actual percentage-point delta,
+    not a hardcoded digit count. Raw Accel-only, Win Speed-only, and Full Match
+    with EPP off pass `int.MaxValue` as the domain floor (i.e. no domain cap —
+    see the Raw Accel research note above for why). Don't revert to a flat
+    format, and don't reintroduce a fixed digit count for Raw Accel, without
+    re-deriving why (see git history for the reasoning).
   - `On*Changed` callback **ordering** matters: `AutoPersist()` must come
     before `RecalculateMatchAccuracy()` everywhere. Swapping them causes stale
     model reads.
