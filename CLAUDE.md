@@ -199,7 +199,21 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     struct (`.RawOnly`, `.WinOnly`, `.Full` partial-product properties) instead
     of a single combined number. `GetEffectiveSensitivity()` is just `.Full`
     over this. Uses `EncodeRegCurve` for the `RegCurve` factor, feeding every
-    comparison — removing that call is a silent precision regression.
+    comparison — removing that call is a silent precision regression. The
+    `regCurve` factor is computed in its own `try/catch` around
+    `EncodeRegCurve` — an extreme `RegistryCurveOverride` can overflow 16.16
+    fixed-point storage there (a real, intentional exception, not a bug — see
+    `QuantizeToFixedPoint1616`), and on that overflow `regCurve` becomes
+    `double.NaN` **instead of letting the exception propagate out of this
+    method**. This was a real bug found live: `sens`/`winMult` are computed
+    successfully earlier in this same method and have nothing to do with the
+    registry curve, but before this fix, one overflowing factor took the
+    entire struct down with it — Raw Accel Only and Win Speed Only (which
+    only need `.RawOnly`/`.WinOnly`, never `.RegCurve`) went blank any time
+    EPP Override alone was extreme. Now only `.Full` (which actually
+    multiplies `RegCurve` in) becomes `NaN`; the other partial products stay
+    real numbers. Don't go back to letting this method throw — every caller
+    of `.RawOnly`/`.WinOnly` depends on it not doing so.
   - `CalculateCompensations()` — the apply-time math. Must stay in sync with
     `ProfileEditorViewModel`'s `ApplyAutoOSSync`/`ApplyAutoRegSync`.
 - **`ViewModels/ProfileEditorViewModel.cs`** (Math Engine section, ~lines 305–440)
@@ -225,6 +239,26 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     see the Raw Accel research note above for why). Don't revert to a flat
     format, and don't reintroduce a fixed digit count for Raw Accel, without
     re-deriving why (see git history for the reasoning).
+    `FormatMatchPercent` clamps `domainDecimalPlaces` to the double-precision
+    budget **immediately**, before any branch — a caller passing the
+    `int.MaxValue` "no domain cap" sentinel straight into a composite format
+    string (`$"E{domainDecimalPlaces}"`) throws `FormatException` ("Format
+    specifier was invalid"), a real crash found live when this rework first
+    shipped. Also uses `'#'` (optional-digit) placeholders, not `'0'`
+    (required-digit) ones, in its fixed-point format strings — `'0'` pads
+    with trailing zeros out to the cap even when they're not real digits
+    (a clean typed `1.12312312` displayed as `"112.312312000000%"`), which is
+    a milder version of the exact fake-precision problem this whole rework
+    was meant to eliminate. `RecalculateMatchAccuracy()` itself wraps its
+    `GetEffectiveSensitivity(bp)`/`GetEffectiveSensitivityFactors(_editingProfile)`
+    calls in a `try/catch (ArgumentOutOfRangeException)` as a last-resort
+    safety net (falls back to literal `"Overflow%"` on all three rows) — this
+    should rarely fire now that `GetEffectiveSensitivityFactors` itself
+    doesn't throw for the common case (see above), but an unhandled exception
+    here previously crashed the entire app just from typing an extreme value
+    into a field, before ever pressing Apply. Keep this catch even if it
+    looks redundant; the failure mode it prevents is a hard crash, not a bad
+    display.
   - `On*Changed` callback **ordering** matters: `AutoPersist()` must come
     before `RecalculateMatchAccuracy()` everywhere. Swapping them causes stale
     model reads.
