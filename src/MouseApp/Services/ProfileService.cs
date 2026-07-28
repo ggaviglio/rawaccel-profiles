@@ -246,7 +246,35 @@ public class ProfileService
     /// Windows will actually apply — the single source-of-truth for MatchAccuracy comparisons.
     /// Null fields inherit from the Default profile; fully-null profile yields 100% match by definition.
     /// </summary>
-    public double GetEffectiveSensitivity(MouseProfile profile)
+    /// <summary>
+    /// The individual multipliers <see cref="GetEffectiveSensitivity"/> combines into one number.
+    /// Exposed so callers that need a *partial* product (e.g. the Profile Editor's match-accuracy
+    /// display, which shows "Raw Accel only" and "Raw Accel + Win Speed" rows before the final
+    /// combined row) can reuse the exact same per-factor calculation instead of re-deriving it —
+    /// see the "single source of truth" note on <see cref="GetEffectiveSensitivityFactors"/>.
+    /// </summary>
+    public readonly record struct EffectiveSensitivityFactors(
+        double Sens, double WinMult, double RegCurve, double DpiComp, double ScreenComp)
+    {
+        /// <summary>Raw Accel sensitivity alone, with environment (DPI/screen) compensation applied.</summary>
+        public double RawOnly => Sens * DpiComp * ScreenComp;
+
+        /// <summary>Raw Accel + Win Pointer Speed, with environment compensation — no registry curve yet.</summary>
+        public double WinOnly => RawOnly * WinMult;
+
+        /// <summary>All five factors combined — identical to <see cref="GetEffectiveSensitivity"/>'s result.</summary>
+        public double Full => WinOnly * RegCurve;
+    }
+
+    /// <summary>
+    /// Computes the five independent multipliers that make up a profile's effective sensitivity,
+    /// without combining them. This is the single implementation of the math — both
+    /// <see cref="GetEffectiveSensitivity"/> (the real, apply-time number) and the Profile Editor's
+    /// match-accuracy display call this same method, so a fix or edge-case guard made here (or in
+    /// <see cref="MouseRegistryBridge.EncodeRegCurve(double)"/>, which supplies the regCurve factor)
+    /// can never silently apply to only one of the two consumers.
+    /// </summary>
+    public EffectiveSensitivityFactors GetEffectiveSensitivityFactors(MouseProfile profile)
     {
         if (profile == null) throw new ArgumentNullException(nameof(profile));
 
@@ -269,24 +297,24 @@ public class ProfileService
         // When EPP is explicitly disabled, the curve has no effect — treat reg factor as 1.0.
         double regCurve = (useEpp == false) ? 1.0 : MouseRegistryBridge.EncodeRegCurve(rawRegValue);
 
-        double result = sens * winMult * regCurve;
-
         // DPI compensation: Windows amplifies SmoothMouseCurve output by (logicalDpi / 96) when EPP is
         // active. Dividing by that factor normalises the effective value so profiles at different DPI
         // settings remain directly comparable. Applied regardless of whether reg override is explicit or
         // defaulted — exactly one factor per profile.
-        if (useEpp != false)
-            result *= 96.0 / logicalDpi;
+        double dpiComp = (useEpp != false) ? 96.0 / logicalDpi : 1.0;
 
         // Screen width compensation: a wider logical canvas requires proportionally more hand movement.
         // Ratio is base/profile so a profile designed for a narrower screen gets boosted to match base feel.
         var baseScreenWidth    = baseProfile?.TargetScreenWidth ?? profile.TargetScreenWidth;
         var profileScreenWidth = profile.TargetScreenWidth ?? baseProfile?.TargetScreenWidth;
+        double screenComp = 1.0;
         if (baseScreenWidth.HasValue && profileScreenWidth.HasValue && profileScreenWidth.Value > 0)
-            result *= (double)baseScreenWidth.Value / profileScreenWidth.Value;
+            screenComp = (double)baseScreenWidth.Value / profileScreenWidth.Value;
 
-        return result;
+        return new EffectiveSensitivityFactors(sens, winMult, regCurve, dpiComp, screenComp);
     }
+
+    public double GetEffectiveSensitivity(MouseProfile profile) => GetEffectiveSensitivityFactors(profile).Full;
 
     /// <summary>
     /// Calculates the coarse (WinPointerSpeed) and fine (RegistryCurveOverride) compensations

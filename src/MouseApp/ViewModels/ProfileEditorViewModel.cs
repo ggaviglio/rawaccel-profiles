@@ -712,49 +712,34 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// </summary>
     private void RecalculateMatchAccuracy()
     {
+        // Nothing meaningful to preview yet — mirrors AutoPersist's own early-return.
+        if (_editingProfile == null) return;
+
         var bp      = GetBaseProfile();
         var sBase   = GetBaseSens();
 
         var fullBase = bp != null ? _profileService.GetEffectiveSensitivity(bp) : sBase;
         if (fullBase == 0) fullBase = 1.0;
 
-        // Null fields inherit from the Default profile — a fully-null profile is a perfect 100% match.
-        var curSens     = Sensitivity ?? GetBaseSens();
-        var curWinIndex = Math.Clamp((WinPointerSpeed ?? GetBaseWinPointerSpeed()) - 1, 0, ProfileService.WinMultipliers.Length - 1);
-        var curWinMult  = ProfileService.WinMultipliers[curWinIndex];
+        // AutoPersist() already wrote every current field onto _editingProfile before this runs
+        // (see the On*Changed ordering rule above), so the exact same math-engine calculation
+        // used at apply-time can be reused here directly instead of a hand-rolled duplicate of
+        // the formula — one implementation, shared by the real apply path and this preview.
+        var factors = _profileService.GetEffectiveSensitivityFactors(_editingProfile);
 
-        // EPP/DPI normalization — mirrors GetEffectiveSensitivity but for the currently displayed values.
-        var useEpp     = EppOverride ?? bp?.UseEnhancePointerPrecision;
-        var logicalDpi = TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
-
-        // Use the 16.16-encoded reg curve — this is what Windows will actually apply.
-        // Fallback is 1.0 (neutral); DPI correction is applied separately via envDpiRatio below,
-        // matching the single-factor approach in GetEffectiveSensitivity.
+        // Still needed directly (not part of the shared formula): useEpp gates whether the
+        // Full Match row's decimal precision responds to the registry curve's live step below,
+        // and rawRegCurve is the raw (unencoded) value EncodeRegCurve needs to derive that step.
+        var useEpp      = EppOverride ?? bp?.UseEnhancePointerPrecision;
         var rawRegCurve = RegistryCurveOverride ?? 1.0;
-        var curRegCurve = MouseRegistryBridge.EncodeRegCurve(rawRegCurve);
 
-        // Screen width env ratio for Win Speed and Full Match rows.
-        double envScreenRatio = 1.0;
-        var baseW    = GetBaseScreenWidth();
-        var profileW = TargetScreenWidth ?? baseW;
-        if (baseW.HasValue && profileW.HasValue && profileW.Value > 0)
-            envScreenRatio = (double)baseW.Value / profileW.Value;
-
-        // DPI ratio — reverses Windows' logicalDpi/96 amplification.
-        double envDpiRatio = (useEpp != false) ? (96.0 / logicalDpi) : 1.0;
-
-        if (useEpp == false) curRegCurve = 1.0;
-
-        var rawEff  = curSens;
-        var winEff  = rawEff  * curWinMult * envScreenRatio * envDpiRatio;
-        var fullEff = winEff  * curRegCurve;
+        var winEff  = factors.WinOnly;
+        var fullEff = factors.Full;
 
         // Row 1 display: raw sens scaled by ALL environment factors (screen width + DPI).
         // This shows how well raw accel alone offsets the full environmental delta,
         // before Win Speed or the Registry Bridge contribute anything.
-        // Separate variable — rawEff is left as curSens so envScreenRatio/envDpiRatio
-        // are not double-counted in the winEff/fullEff chain above.
-        var rawEffDisplay = curSens * envScreenRatio * envDpiRatio;
+        var rawEffDisplay = factors.RawOnly;
 
         // Display precision reflects real-world distinguishability, not an arbitrary digit
         // count. Raw Accel Only / Win Speed Only never touch the registry curve, so their
@@ -802,7 +787,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         if (useEpp != false)
         {
             MouseRegistryBridge.EncodeRegCurve(rawRegCurve, out double regStep);
-            var nudgedPercent = (winEff * (curRegCurve + regStep) / fullBase) * 100.0;
+            var nudgedPercent = (winEff * (factors.RegCurve + regStep) / fullBase) * 100.0;
             var deltaPercent  = Math.Abs(nudgedPercent - fullMatchPercent);
             if (deltaPercent > 0)
                 fullMatchDecimalPlaces = Math.Max(0, (int)Math.Ceiling(-Math.Log10(deltaPercent)));
