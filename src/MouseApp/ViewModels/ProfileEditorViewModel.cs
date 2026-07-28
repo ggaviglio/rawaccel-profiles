@@ -829,13 +829,28 @@ public partial class ProfileEditorViewModel : ViewModelBase
         // quantization at all), so fall back to the same uncapped double-precision budget.
         var fullMatchPercent = (fullEff / fullBase) * 100.0;
         int fullMatchDecimalPlaces = noDomainFloor;
-        if (useEpp != false)
+        // Skip the nudge entirely when fullMatchPercent isn't finite (NaN/Infinity) — it's
+        // already going to display as "NaN%"/"Infinity%" regardless of decimal count, and
+        // computing it would call EncodeRegCurve(rawRegCurve, ...) a second time with the exact
+        // same rawRegCurve that likely already overflowed once inside GetEffectiveSensitivityFactors
+        // (that's what made fullMatchPercent non-finite in the first place). This is a second,
+        // separate call site to the same throwing function — not covered by the try/catch
+        // around GetEffectiveSensitivityFactors above — found live when it crashed the app the
+        // same way. The try/catch below is kept anyway as a last-resort safety net.
+        if (useEpp != false && double.IsFinite(fullMatchPercent))
         {
-            MouseRegistryBridge.EncodeRegCurve(rawRegCurve, out double regStep);
-            var nudgedPercent = (winEff * (factors.RegCurve + regStep) / fullBase) * 100.0;
-            var deltaPercent  = Math.Abs(nudgedPercent - fullMatchPercent);
-            if (deltaPercent > 0)
-                fullMatchDecimalPlaces = Math.Max(0, (int)Math.Ceiling(-Math.Log10(deltaPercent)));
+            try
+            {
+                MouseRegistryBridge.EncodeRegCurve(rawRegCurve, out double regStep);
+                var nudgedPercent = (winEff * (factors.RegCurve + regStep) / fullBase) * 100.0;
+                var deltaPercent  = Math.Abs(nudgedPercent - fullMatchPercent);
+                if (deltaPercent > 0)
+                    fullMatchDecimalPlaces = Math.Max(0, (int)Math.Ceiling(-Math.Log10(deltaPercent)));
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // Precision refinement only — fall back to the uncapped double-precision budget.
+            }
         }
         MatchAccuracy = FormatMatchPercent(fullMatchPercent, fullMatchDecimalPlaces);
     }
