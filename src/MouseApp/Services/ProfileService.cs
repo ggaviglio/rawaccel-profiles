@@ -295,7 +295,23 @@ public class ProfileService
         double rawRegValue = profile.RegistryCurveOverride ?? 1.0;
 
         // When EPP is explicitly disabled, the curve has no effect — treat reg factor as 1.0.
-        double regCurve = (useEpp == false) ? 1.0 : MouseRegistryBridge.EncodeRegCurve(rawRegValue);
+        // EncodeRegCurve throws if rawRegValue is extreme enough to overflow 16.16 fixed-point
+        // storage (a real, intentional guard — see CLAUDE.md). That failure is specific to the
+        // registry curve alone; it must not take sens/winMult/dpiComp/screenComp down with it,
+        // since Raw Accel Only and Win Speed Only (which only need those other factors) have
+        // nothing to do with the registry curve and remain perfectly computable. Represent an
+        // unrepresentable regCurve as NaN instead of throwing, so only .Full (which actually
+        // multiplies it in) becomes NaN — RawOnly/WinOnly stay real, valid numbers.
+        double regCurve;
+        if (useEpp == false)
+        {
+            regCurve = 1.0;
+        }
+        else
+        {
+            try { regCurve = MouseRegistryBridge.EncodeRegCurve(rawRegValue); }
+            catch (ArgumentOutOfRangeException) { regCurve = double.NaN; }
+        }
 
         // DPI compensation: Windows amplifies SmoothMouseCurve output by (logicalDpi / 96) when EPP is
         // active. Dividing by that factor normalises the effective value so profiles at different DPI

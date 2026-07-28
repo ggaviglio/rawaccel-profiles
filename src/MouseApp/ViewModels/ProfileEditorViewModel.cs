@@ -718,14 +718,35 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var bp      = GetBaseProfile();
         var sBase   = GetBaseSens();
 
-        var fullBase = bp != null ? _profileService.GetEffectiveSensitivity(bp) : sBase;
-        if (fullBase == 0) fullBase = 1.0;
+        double fullBase;
+        ProfileService.EffectiveSensitivityFactors factors;
+        try
+        {
+            fullBase = bp != null ? _profileService.GetEffectiveSensitivity(bp) : sBase;
+            if (fullBase == 0) fullBase = 1.0;
 
-        // AutoPersist() already wrote every current field onto _editingProfile before this runs
-        // (see the On*Changed ordering rule above), so the exact same math-engine calculation
-        // used at apply-time can be reused here directly instead of a hand-rolled duplicate of
-        // the formula — one implementation, shared by the real apply path and this preview.
-        var factors = _profileService.GetEffectiveSensitivityFactors(_editingProfile);
+            // AutoPersist() already wrote every current field onto _editingProfile before this
+            // runs (see the On*Changed ordering rule above), so the exact same math-engine
+            // calculation used at apply-time can be reused here directly instead of a
+            // hand-rolled duplicate of the formula — one implementation, shared by the real
+            // apply path and this preview.
+            factors = _profileService.GetEffectiveSensitivityFactors(_editingProfile);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            // A typed value is extreme enough that the registry curve's 16.16 fixed-point
+            // encoding would overflow (QuantizeToFixedPoint1616's real, intentional guard —
+            // see CLAUDE.md). This is a genuine "can't even predict this" state, not a display
+            // bug — show it plainly instead of letting the exception crash the whole app.
+            // MouseService.ApplyProfileAsync already handles this exact exception the same way
+            // (catch + no-op) for the real write; this mirrors that for the live preview, which
+            // has no equivalent try/catch around it and would otherwise take the app down just
+            // from typing a number into a field.
+            RawAccelMatchAccuracy = "Overflow%";
+            WinSpeedMatchAccuracy = "Overflow%";
+            MatchAccuracy = "Overflow%";
+            return;
+        }
 
         // Still needed directly (not part of the shared formula): useEpp gates whether the
         // Full Match row's decimal precision responds to the registry curve's live step below,
@@ -758,22 +779,39 @@ public partial class ProfileEditorViewModel : ViewModelBase
         // shows exactly the real significant digits instead of fabricated ones.
         static string FormatMatchPercent(double value, int domainDecimalPlaces)
         {
+            const int doubleSignificantDigitBudget = 15;
+            // Clamp immediately, before any formatting: a caller passing "no domain cap"
+            // (int.MaxValue, see below) must never reach ToString($"F{...}")/$"E{...}" with that
+            // raw value — .NET throws FormatException for an out-of-range precision specifier.
+            // Clamping once here, ahead of every return path (including the value==0 case),
+            // means neither branch below can be the one that forgets to.
+            domainDecimalPlaces = Math.Min(domainDecimalPlaces, doubleSignificantDigitBudget);
+
+            // '#' (not '0') after the decimal point omits trailing zeros instead of padding
+            // them out to the cap. The cap itself (places) is still the real precision ceiling
+            // — a domain floor when one genuinely exists, double's own budget otherwise — this
+            // only removes digits that happen to be zero, never digits that actually
+            // distinguish the value. Without this, a clean value like a typed 1.12312312
+            // sensitivity displayed as "112.312312000000%" instead of "112.312312%", implying
+            // precision that was never real — exactly the kind of fake digit this whole
+            // formatting rework exists to avoid.
+            static string FixedFormat(int places) => places > 0 ? "0." + new string('#', places) : "0";
+
             if (double.IsNaN(value)) return "NaN%";
             if (double.IsInfinity(value)) return (value > 0 ? "Infinity" : "-Infinity") + "%";
-            if (value == 0) return (0.0).ToString($"F{domainDecimalPlaces}", CultureInfo.InvariantCulture) + "%";
+            if (value == 0) return (0.0).ToString(FixedFormat(domainDecimalPlaces), CultureInfo.InvariantCulture) + "%";
 
-            const int doubleSignificantDigitBudget = 15;
             var absValue = Math.Abs(value);
             int integerDigits = absValue < 1 ? 1 : (int)Math.Floor(Math.Log10(absValue)) + 1;
 
             bool tooLargeForFixed = integerDigits > doubleSignificantDigitBudget;
-            bool tooSmallForFixed = Math.Round(value, Math.Min(domainDecimalPlaces, 15)) == 0;
+            bool tooSmallForFixed = Math.Round(value, domainDecimalPlaces) == 0;
 
             if (tooLargeForFixed || tooSmallForFixed)
                 return value.ToString($"E{domainDecimalPlaces}", CultureInfo.InvariantCulture) + "%";
 
             int decimalPlaces = Math.Min(domainDecimalPlaces, Math.Max(0, doubleSignificantDigitBudget - integerDigits));
-            return value.ToString($"F{decimalPlaces}", CultureInfo.InvariantCulture) + "%";
+            return value.ToString(FixedFormat(decimalPlaces), CultureInfo.InvariantCulture) + "%";
         }
 
         // No domain-specific floor for either row (see comment above) — int.MaxValue means
