@@ -10,5 +10,29 @@
 
     <Application.Styles>
         <SimpleTheme />
+
+        <!-- App-wide monospace font. -->
+        <Style Selector="Window">
+            <Setter Property="FontFamily" Value="Cascadia Code" />
+        </Style>
+
+        <!-- Shared look for every card/panel box in the app. Change CornerRadius here
+             to test rounded vs. sharp corners everywhere at once. -->
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{DynamicResource ThemeBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderMidBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+
+        <!-- Consistent height/vertical-centering for every ComboBox and TextBox app-wide. -->
+        <Style Selector="ComboBox">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
     </Application.Styles>
 </Application>

@@ -103,8 +103,7 @@ public static class MouseRegistryBridge
             var buf = new byte[curve.Length * 8];
             for (int i = 0; i < curve.Length; i++)
             {
-                // 16.16 fixed-point: value * 65536
-                long fixedVal = (long)Math.Round(curve[i] * 65536.0);
+                long fixedVal = QuantizeToFixedPoint1616(curve[i]);
                 var bytes = BitConverter.GetBytes(fixedVal); // little-endian
                 Buffer.BlockCopy(bytes, 0, buf, i * 8, 8);
             }
@@ -137,12 +136,42 @@ public static class MouseRegistryBridge
     }
 
     /// <summary>
+    /// Rounds a value to its 16.16 fixed-point long representation, matching exactly what gets
+    /// written to the registry for a single curve node. Never lets a genuinely nonzero value
+    /// round down to a literal 0 (a zero Y curve stops the pointer dead when EPP is on).
+    /// Shared by CurveToBinary (the real write) and EncodeRegCurve (display prediction) so this
+    /// floor has exactly one implementation instead of two independently-maintained copies that
+    /// could drift apart — see CLAUDE.md's "formula-identical" requirement for this file.
+    /// </summary>
+    private static long QuantizeToFixedPoint1616(double value)
+    {
+        // 16.16 fixed-point: value * 65536
+        double scaled = value * 65536.0;
+        // An unchecked (long) cast doesn't throw on overflow in C# — it silently wraps, which
+        // would write a corrupted, wildly wrong curve value to the registry. Fail loudly instead
+        // so an extreme regResult never produces garbage hardware state.
+        if (scaled > long.MaxValue || scaled < long.MinValue)
+            throw new ArgumentOutOfRangeException(nameof(value), $"Curve value {value:G10} would overflow 64-bit fixed-point storage.");
+        long fixedVal = (long)Math.Round(scaled);
+        if (fixedVal == 0 && value != 0)
+            fixedVal = value > 0 ? 1 : -1;
+        return fixedVal;
+    }
+
+    /// <summary>
     /// Returns the regResult value that Windows will actually apply after 16.16 fixed-point
     /// encoding and decoding, accounting for the current DPI and pointer speed.
     /// Use this in match-accuracy display so it reflects real-world precision rather
     /// than the idealised double value.
     /// </summary>
-    public static double EncodeRegCurve(double regResult)
+    public static double EncodeRegCurve(double regResult) => EncodeRegCurve(regResult, out _);
+
+    /// <summary>
+    /// Same as <see cref="EncodeRegCurve(double)"/>, but also returns the smallest
+    /// distinguishable step in regResult units — the real-world precision floor callers
+    /// can use to decide how many digits of a derived display value are actually meaningful.
+    /// </summary>
+    public static double EncodeRegCurve(double regResult, out double step)
     {
         // The smallest distinguishable step in regResult is determined by the precision of Y[1]
         // in 16.16 fixed-point. Y[1] is the tightest anchor (smallest non-zero node):
@@ -157,8 +186,20 @@ public static class MouseRegistryBridge
         int dpi = GetCurrentLogicalDpi();
         double winSpeedMult = ReadWindowsPointerSpeedMultiplier();
         double yBase1 = MarkCXCurve[1] * (150.0 / dpi) / winSpeedMult;
-        double step = 1.0 / (yBase1 * 65536.0);
-        return Math.Round(regResult / step) * step;
+        step = 1.0 / (yBase1 * 65536.0);
+
+        // Mirror ApplyRegistryBridge's own floor exactly (its Math.Max(regResult, 0.01),
+        // applied before the DPI/pointer-speed scaling) — without this, a tiny/zero override
+        // displays as if it produced almost no curve at all, when the real write never lets
+        // regResult itself go below 0.01.
+        double flooredRegResult = Math.Max(regResult, 0.01);
+
+        // Same shared quantize-and-clamp helper CurveToBinary uses per curve node, applied here
+        // to node[1] (the tightest anchor — see comment above), then converted back to
+        // regResult units. One implementation for both, so the "never round down to a literal
+        // 0" floor can't drift between the display and the real write.
+        long fixedVal = QuantizeToFixedPoint1616(yBase1 * flooredRegResult);
+        return fixedVal / 65536.0 / yBase1;
     }
 
     // ── Environment Awareness helpers ────────────────────────────────────────

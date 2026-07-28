@@ -756,10 +756,58 @@ public partial class ProfileEditorViewModel : ViewModelBase
         // are not double-counted in the winEff/fullEff chain above.
         var rawEffDisplay = curSens * envScreenRatio * envDpiRatio;
 
-        // Row 1: Raw Accel Only — all env factors, no Win Speed, no Reg Bridge.
-        RawAccelMatchAccuracy = ((rawEffDisplay / sBase) * 100.0).ToString("G10", CultureInfo.InvariantCulture) + "%";
-        WinSpeedMatchAccuracy = ((winEff  / fullBase) * 100.0).ToString("G10", CultureInfo.InvariantCulture) + "%";
-        MatchAccuracy         = ((fullEff / fullBase) * 100.0).ToString("G10", CultureInfo.InvariantCulture) + "%";
+        // Display precision reflects real-world distinguishability, not an arbitrary digit
+        // count. Raw Accel Only / Win Speed Only never touch the registry curve, so their
+        // floor is always Raw Accel's own documented ~6e-6 relative step (fixed).
+        //
+        // A `double` only ever holds ~15-17 real significant decimal digits, regardless of
+        // domain or of whether those digits land before or after the decimal point. Fixed-
+        // point notation stops being honest once a value is so large that even its integer
+        // digits exceed that budget, or so small that the domain-appropriate decimal count
+        // would round it away to "0.0000%" and hide a real nonzero value. In both cases,
+        // scientific notation (matching what "%" values naturally do at extreme magnitudes)
+        // shows exactly the real significant digits instead of fabricated ones.
+        static string FormatMatchPercent(double value, int domainDecimalPlaces)
+        {
+            if (double.IsNaN(value)) return "NaN%";
+            if (double.IsInfinity(value)) return (value > 0 ? "Infinity" : "-Infinity") + "%";
+            if (value == 0) return (0.0).ToString($"F{domainDecimalPlaces}", CultureInfo.InvariantCulture) + "%";
+
+            const int doubleSignificantDigitBudget = 15;
+            var absValue = Math.Abs(value);
+            int integerDigits = absValue < 1 ? 1 : (int)Math.Floor(Math.Log10(absValue)) + 1;
+
+            bool tooLargeForFixed = integerDigits > doubleSignificantDigitBudget;
+            bool tooSmallForFixed = Math.Round(value, Math.Min(domainDecimalPlaces, 15)) == 0;
+
+            if (tooLargeForFixed || tooSmallForFixed)
+                return value.ToString($"E{domainDecimalPlaces}", CultureInfo.InvariantCulture) + "%";
+
+            int decimalPlaces = Math.Min(domainDecimalPlaces, Math.Max(0, doubleSignificantDigitBudget - integerDigits));
+            return value.ToString($"F{decimalPlaces}", CultureInfo.InvariantCulture) + "%";
+        }
+
+        const int rawAccelDecimalPlaces = 4;
+        var rawAccelPercent = (rawEffDisplay / sBase) * 100.0;
+        var winSpeedPercent = (winEff / fullBase) * 100.0;
+        RawAccelMatchAccuracy = FormatMatchPercent(rawAccelPercent, rawAccelDecimalPlaces);
+        WinSpeedMatchAccuracy = FormatMatchPercent(winSpeedPercent, rawAccelDecimalPlaces);
+
+        // Full Match additionally goes through the registry curve when EPP is active, whose
+        // live-computed quantization step is coarser than Raw Accel's and varies with the
+        // current DPI/pointer speed — measure the actual percentage-point delta it produces
+        // for this profile rather than assuming a fixed digit count.
+        var fullMatchPercent = (fullEff / fullBase) * 100.0;
+        int fullMatchDecimalPlaces = rawAccelDecimalPlaces;
+        if (useEpp != false)
+        {
+            MouseRegistryBridge.EncodeRegCurve(rawRegCurve, out double regStep);
+            var nudgedPercent = (winEff * (curRegCurve + regStep) / fullBase) * 100.0;
+            var deltaPercent  = Math.Abs(nudgedPercent - fullMatchPercent);
+            if (deltaPercent > 0)
+                fullMatchDecimalPlaces = Math.Max(0, (int)Math.Ceiling(-Math.Log10(deltaPercent)));
+        }
+        MatchAccuracy = FormatMatchPercent(fullMatchPercent, fullMatchDecimalPlaces);
     }
 
     // ── Auto-Persist ────────────────────────────────────────────────────────

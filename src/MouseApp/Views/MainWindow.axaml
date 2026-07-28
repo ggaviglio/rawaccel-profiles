@@ -34,10 +34,7 @@
 
                 <!-- Row 0: All profiles -->
                 <Border Grid.Row="0"
-                        Background="{DynamicResource ThemeBackgroundBrush}"
-                        BorderBrush="{DynamicResource ThemeBorderMidBrush}"
-                        BorderThickness="1"
-                        CornerRadius="0"
+                        Classes="card"
                         ClipToBounds="True"
                         Padding="0">
                     <Grid RowDefinitions="Auto,*">
@@ -55,7 +52,7 @@
                         <ListBox.Styles>
                             <Style Selector="ListBoxItem">
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                <Setter Property="CornerRadius" Value="6" />
+                                <Setter Property="CornerRadius" Value="0" />
                                 <Setter Property="Margin" Value="3,1" />
                                 <Setter Property="Padding" Value="6,3" />
                             </Style>
@@ -103,14 +100,13 @@
 
                 <!-- Row 1: Action bar -->
                 <Grid x:Name="ActionBar" Grid.Row="1" Margin="0,8,0,0"
-                      ColumnDefinitions="*,*,*,*,*,*,*,*">
+                      ColumnDefinitions="*,*,*,*,*,*,*,*" ColumnSpacing="6">
                     <Grid.Styles>
                         <Style Selector="Button">
                             <Setter Property="HorizontalAlignment" Value="Stretch" />
                             <Setter Property="Height" Value="28" />
                             <Setter Property="MinWidth" Value="28" />
                             <Setter Property="Padding" Value="0" />
-                            <Setter Property="Margin" Value="3,0" />
                             <Setter Property="HorizontalContentAlignment" Value="Center" />
                             <Setter Property="VerticalContentAlignment" Value="Center" />
                         </Style>

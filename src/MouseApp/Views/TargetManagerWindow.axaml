@@ -29,10 +29,7 @@
         </StackPanel>
 
         <Border Grid.Row="1"
-                Background="{DynamicResource ThemeBackgroundBrush}"
-                BorderBrush="{DynamicResource ThemeBorderMidBrush}"
-                BorderThickness="1"
-                CornerRadius="0"
+                Classes="card"
                 ClipToBounds="True">
           <ListBox ItemsSource="{Binding ActiveWindows}"
                    SelectedItem="{Binding SelectedWindow, Mode=TwoWay}"
@@ -40,7 +37,7 @@
                    BorderThickness="0">
             <ListBox.Styles>
               <Style Selector="ListBoxItem">
-                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="CornerRadius" Value="0" />
                 <Setter Property="Margin" Value="3,1" />
               </Style>
             </ListBox.Styles>
@@ -104,17 +101,14 @@
         </StackPanel>
 
         <Border Grid.Row="1"
-                Background="{DynamicResource ThemeBackgroundBrush}"
-                BorderBrush="{DynamicResource ThemeBorderMidBrush}"
-                BorderThickness="1"
-                CornerRadius="0"
+                Classes="card"
                 ClipToBounds="True">
           <ListBox ItemsSource="{Binding Associations}"
                    Background="Transparent"
                    BorderThickness="0">
             <ListBox.Styles>
               <Style Selector="ListBoxItem">
-                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="CornerRadius" Value="0" />
                 <Setter Property="Margin" Value="3,1" />
               </Style>
             </ListBox.Styles>

@@ -102,16 +102,61 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
 **Do not modify the following without an explicit, scoped instruction to do so:**
 
 - **`Services/MouseRegistryBridge.cs`**
+  - `QuantizeToFixedPoint1616(double)` — private helper, the **single**
+    implementation of "round a value to its 16.16 fixed-point `long`, but never
+    let a genuinely nonzero value round down to a literal `0`" (a zero Y curve
+    stops the pointer dead when EPP is on). Both `CurveToBinary` (the real
+    registry write, per curve node) and `EncodeRegCurve` (display prediction,
+    on node `[1]`) call this same helper — there used to be two independently
+    written copies of this clamp (one per function) and they were only
+    coincidentally in sync; if you need to change the clamp behavior, change it
+    here once, not in either caller.
   - `EncodeRegCurve()` — the 16.16 round-trip model:
     `yBase1 = MarkCXCurve[1] × (150/DPI) / winSpeedMult`. Changing the anchor,
     the DPI factor, or the `winSpeedMult` division silently breaks every match
-    accuracy display and every compensation calculation.
+    accuracy display and every compensation calculation. An additional
+    `EncodeRegCurve(double, out double step)` overload exists (exposes the same
+    internal quantization step for display-precision use) — same formula,
+    don't let the two overloads drift apart. Before quantizing, it applies
+    `Math.Max(regResult, 0.01)` — **the same floor `ApplyRegistryBridge` applies
+    to the real write** — then runs the floored value through
+    `QuantizeToFixedPoint1616` on node `[1]` and converts back to regResult
+    units. Both the 0.01 floor and the zero-avoidance clamp must be present
+    here or an extreme (e.g. near-zero) override under-predicts what the real
+    write would actually do — this was a real, verified bug (not just cosmetic):
+    an EPP Override of `0.00001` briefly displayed a wildly wrong "6025993%"
+    match because only the zero-avoidance clamp had been added to the display
+    path and the 0.01 floor was missing entirely. Reads DPI and Windows Pointer
+    Speed **live from the current system state**, not from the profile being
+    displayed/edited — for a profile that isn't the one currently applied to
+    Windows, this is technically the wrong environment for prediction, but in
+    practice only matters when `regResult` is already within about a factor of
+    2 of `step` (~1e-5–1e-4), since otherwise `EncodeRegCurve(x) ≈ x` regardless
+    of which live DPI/speed set the granularity. Not worth refactoring into an
+    explicit-parameter signature unless that edge case turns out to matter for
+    realistic profile values.
   - `ApplyRegistryBridge()` → `CurveToBinary()` — the actual registry write:
     `Y[i] = X[i] × (150/DPI) / winSpeedMult × regResult`. Must stay
     formula-identical to `EncodeRegCurve` or the model stops predicting
-    reality. `winSpeedMult` is read live from the registry immediately before
-    this call (pointer speed is written first so the live value is already
-    correct for the profile).
+    reality — enforced now by both calling the shared
+    `QuantizeToFixedPoint1616` helper described above instead of duplicating
+    the clamp logic. `winSpeedMult` is read live from the registry immediately
+    before this call (pointer speed is written first so the live value is
+    already correct for the profile). Despite the "16.16" name, each curve node
+    is stored as a **signed 64-bit integer**, not a 32-bit container — real
+    overflow ceiling is `long.MaxValue / 65536` per node (~1.4×10^14), not what
+    "16.16" might suggest; `QuantizeToFixedPoint1616` throws
+    `ArgumentOutOfRangeException` rather than silently wrapping via an
+    unchecked `(long)` cast. `Math.Max(regResult, 0.01)` is applied *before*
+    the DPI/winSpeedMult division, so it doesn't fully protect against a large
+    enough DPI still shrinking a curve value below the smallest representable
+    fixed-point step — that's what the zero-avoidance clamp inside
+    `QuantizeToFixedPoint1616` is for. A zero breakpoint here means a genuinely
+    frozen cursor at real-world usage speeds when EPP is on, not just a display
+    bug — this guard is about actual applied hardware behavior.
+  - The Raw Accel sensitivity tooltip's stated max (`123456789012345.12`) is
+    **unverified** — no derivation or source anywhere in the repo, looks like
+    placeholder text. Don't treat it as a real researched limit.
 - **`Services/ProfileService.cs`**
   - `WinMultipliers[]` — the 20-entry table is the single source of truth for
     all Win Speed math. A wrong value means wrong compensation applied to
@@ -126,7 +171,12 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
   - `ApplyAutoRegSync()` — Registry remainder formula: target is
     `Effective(base) / (S_target × WinMult)`.
   - `RecalculateMatchAccuracy()` — display math; uses `EncodeRegCurve` on the
-    reg curve value.
+    reg curve value. Formats each of the three match-% rows with dynamically
+    derived decimal places (from the real Raw Accel/registry-curve precision
+    floor, further capped by `double`'s own ~15-digit significant-figure
+    budget), falling back to scientific notation at extreme magnitudes —
+    not a fixed `"G10"`/`"F2"`-style format string. Don't revert to a flat
+    format without re-deriving why (see git history for the reasoning).
   - `On*Changed` callback **ordering** matters: `AutoPersist()` must come
     before `RecalculateMatchAccuracy()` everywhere. Swapping them causes stale
     model reads.
