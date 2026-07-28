@@ -228,23 +228,45 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     `AutoPersist()` already writes every current field onto `_editingProfile`
     before this runs (see the ordering rule below), so the real math-engine
     function sees the same values the ViewModel does. Formats each of the
-    three match-% rows via `FormatMatchPercent`, capped by `double`'s own
-    ~15-digit significant-figure budget, falling back to scientific notation
-    at extreme magnitudes — not a fixed `"G10"`/`"F2"`-style format string.
-    Only the registry curve (Full Match row, EPP on) has a real domain-specific
-    precision floor beneath the double-precision cap — computed by nudging the
-    live `EncodeRegCurve` step and measuring the actual percentage-point delta,
-    not a hardcoded digit count. Raw Accel-only, Win Speed-only, and Full Match
+    three match-% rows via `FormatMatchPercent`, falling back to scientific
+    notation at extreme magnitudes — not a fixed `"G10"`/`"F2"`-style format
+    string. Only the registry curve (Full Match row, EPP on) has a real
+    domain-specific precision floor — computed by nudging the live
+    `EncodeRegCurve` step and measuring the actual percentage-point delta, not
+    a hardcoded digit count. Raw Accel-only, Win Speed-only, and Full Match
     with EPP off pass `int.MaxValue` as the domain floor (i.e. no domain cap —
-    see the Raw Accel research note above for why). Don't revert to a flat
-    format, and don't reintroduce a fixed digit count for Raw Accel, without
-    re-deriving why (see git history for the reasoning).
-    `FormatMatchPercent` clamps `domainDecimalPlaces` to the double-precision
-    budget **immediately**, before any branch — a caller passing the
-    `int.MaxValue` "no domain cap" sentinel straight into a composite format
-    string (`$"E{domainDecimalPlaces}"`) throws `FormatException` ("Format
-    specifier was invalid"), a real crash found live when this rework first
-    shipped. Also uses `'#'` (optional-digit) placeholders, not `'0'`
+    see the Raw Accel research note above for why); in that case the value's
+    own real precision (see next paragraph) is the only cap. Don't revert to a
+    flat format, and don't reintroduce a fixed digit count for Raw Accel,
+    without re-deriving why (see git history for the reasoning).
+  - `FormatMatchPercent` (local function inside `RecalculateMatchAccuracy`) —
+    does **not** use a fixed significant-digit constant (an earlier version
+    used `15`, then inconsistently `16` in one branch — both were guesses, and
+    the inconsistency was a real bug caught live). Instead it computes, per
+    value, the exact number of significant decimal digits that specific
+    `double` needs to round-trip back to itself bit-for-bit: try formatting at
+    `G1`, `G2`, ... and reparsing until one matches exactly (else `17`, the
+    documented maximum any double ever needs). This is the same notion .NET's
+    own default double formatting uses internally, made explicit so both the
+    fixed-point and scientific-notation paths share one consistent,
+    per-value-correct cap instead of two different fixed guesses. A domain
+    floor (registry curve, when real) is combined via `Math.Min` on top of
+    this, never replacing it. Two real bugs were found and fixed building
+    this: (1) the "always at least 1 integer digit" convention for values
+    under 1 miscomputed decimal-place placement (e.g. treating `0.05` as if
+    its first significant digit were in the tenths place instead of the
+    hundredths place) — fixed by computing `trueIntegerDigits` **unclamped**
+    (can be ≤ 0) via `Math.Floor(Math.Log10(absValue)) + 1`; (2) the
+    no-domain-floor path had no "too small" fallback at all, so a genuinely
+    tiny but nonzero percentage (e.g. `Sensitivity = 0.0000001`) rounded
+    straight to a false `"0%"`, silently hiding a real value — fixed by
+    switching to scientific notation whenever the combined decimal-place cap
+    goes negative (too large) or exceeds 15 (too small — `Math.Round`'s own
+    limit, and the point a fixed-point string becomes an unreasonable wall of
+    leading zeros). Verified live at every extreme tried: huge Sensitivity
+    (`132123123112.312312...%`, `1.2345678901234567E+19%`), tiny Sensitivity
+    (`9.999999999999999E-006%`, not `"0%"`), and mid-range values across both
+    branches. Uses `'#'` (optional-digit) placeholders, not `'0'`
     (required-digit) ones, in its fixed-point format strings — `'0'` pads
     with trailing zeros out to the cap even when they're not real digits
     (a clean typed `1.12312312` displayed as `"112.312312000000%"`), which is
