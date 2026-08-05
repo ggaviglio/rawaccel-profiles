@@ -825,19 +825,36 @@ public partial class ProfileEditorViewModel : ViewModelBase
             // floor when one exists (Full Match, EPP on — domainDecimalPlaces there comes from
             // the registry curve's live-computed quantization step, not a guess. int.MaxValue,
             // see callers, means no such floor applies and this value's own precision is the
-            // only cap).
-            int naturalDecimalPlaces = realSigFigs - trueIntegerDigits;
+            // only cap). Clamped at a minimum of 0: realSigFigs can be SMALLER than
+            // trueIntegerDigits for values with trailing zeros in the integer part (e.g. 150.0
+            // round-trips at just 2 significant digits despite having 3 integer digit
+            // positions) — that just means "0 decimals needed," not "too large to display."
+            // Letting this go negative was a real regression found live: it made ordinary
+            // round-ish percentages (not just deliberately extreme test values) incorrectly
+            // render in scientific notation.
+            int naturalDecimalPlaces = Math.Max(0, realSigFigs - trueIntegerDigits);
             int decimalPlaces = domainDecimalPlaces == int.MaxValue
                 ? naturalDecimalPlaces
                 : Math.Min(domainDecimalPlaces, naturalDecimalPlaces);
 
-            // Fixed-point notation stops being honest once it would need a negative number of
-            // decimal places (the integer part alone already exceeds this value's real
-            // precision — too large) or more than Math.Round can even evaluate (an unreasonable
-            // wall of leading zeros for an extremely small value — too small). Scientific
-            // notation shows exactly the real significant digits in both cases, instead of
-            // either fabricating digits or rounding a real value down to a false zero.
-            if (decimalPlaces < 0 || decimalPlaces > 15)
+            // "Too large for fixed-point" must be judged against a fixed, absolute ceiling on
+            // trueIntegerDigits (independent of realSigFigs) — NOT by whether decimalPlaces
+            // would've gone negative before the clamp above. Whether THIS value's shortest
+            // round-trip form happens to need fewer digits than its integer part is wide (see
+            // above) has nothing to do with whether the integer part itself still fits within a
+            // double's real precision. 15 is the same fixed ceiling used everywhere else
+            // tonight for "double's own guaranteed-safe significant-digit budget."
+            const int absoluteIntegerDigitCeiling = 15;
+            bool tooLargeForFixed = trueIntegerDigits > absoluteIntegerDigitCeiling;
+
+            // Fixed-point notation also stops being honest once it would need more decimal
+            // places than Math.Round can even evaluate (an unreasonable wall of leading zeros
+            // for an extremely small value — too small). Scientific notation shows exactly the
+            // real significant digits in both cases, instead of either fabricating digits or
+            // rounding a real value down to a false zero.
+            bool tooSmallForFixed = decimalPlaces > 15;
+
+            if (tooLargeForFixed || tooSmallForFixed)
             {
                 int sciDecimalPlaces = domainDecimalPlaces == int.MaxValue
                     ? Math.Max(0, realSigFigs - 1)

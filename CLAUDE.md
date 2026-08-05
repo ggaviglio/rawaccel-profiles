@@ -251,23 +251,42 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     fixed-point and scientific-notation paths share one consistent,
     per-value-correct cap instead of two different fixed guesses. A domain
     floor (registry curve, when real) is combined via `Math.Min` on top of
-    this, never replacing it. Two real bugs were found and fixed building
-    this: (1) the "always at least 1 integer digit" convention for values
-    under 1 miscomputed decimal-place placement (e.g. treating `0.05` as if
-    its first significant digit were in the tenths place instead of the
-    hundredths place) — fixed by computing `trueIntegerDigits` **unclamped**
-    (can be ≤ 0) via `Math.Floor(Math.Log10(absValue)) + 1`; (2) the
-    no-domain-floor path had no "too small" fallback at all, so a genuinely
-    tiny but nonzero percentage (e.g. `Sensitivity = 0.0000001`) rounded
-    straight to a false `"0%"`, silently hiding a real value — fixed by
-    switching to scientific notation whenever the combined decimal-place cap
-    goes negative (too large) or exceeds 15 (too small — `Math.Round`'s own
-    limit, and the point a fixed-point string becomes an unreasonable wall of
-    leading zeros). Verified live at every extreme tried: huge Sensitivity
+    this, never replacing it. `trueIntegerDigits` (the value's order-of-magnitude
+    digit count) is deliberately **unclamped** — can be ≤ 0 for values under 1
+    (e.g. `0.05` has `trueIntegerDigits = -1`) — computed via
+    `Math.Floor(Math.Log10(absValue)) + 1`.
+    Three real bugs were found and fixed building this, in order: (1) clamping
+    `trueIntegerDigits` to "always at least 1" miscomputed decimal-place
+    placement for any value under 1 (e.g. treating `0.05` as if its first
+    significant digit were in the tenths place instead of the hundredths
+    place); (2) the no-domain-floor path had no "too small" fallback at all,
+    so a genuinely tiny but nonzero percentage (e.g. `Sensitivity = 0.0000001`)
+    rounded straight to a false `"0%"`, silently hiding a real value; (3) —
+    found *after* (1) and (2) shipped, by the user hitting it in completely
+    ordinary use, not an extreme test value — `realSigFigs` (how many digits
+    THIS value needs for round-trip) can be **smaller** than
+    `trueIntegerDigits` (how many integer-part digit positions it has)
+    whenever the value has trailing zeros in its integer part — e.g. `150.0`
+    round-trips at just 2 significant digits (`"1.5E+02"`) despite having 3
+    integer digit positions. `decimalPlaces = realSigFigs - trueIntegerDigits`
+    went **negative** in that case, and the code was treating "negative"
+    as "too large for fixed-point" — incorrectly routing an ordinary value
+    like a `150%` match into scientific notation (`"1.5E+002%"`). Fixed by
+    separating the two concerns that bug conflated: `decimalPlaces` itself is
+    now clamped at a minimum of `0` (a value like `150.0` just needs 0
+    decimals — that's not the same thing as "too large"), and "too large for
+    fixed-point" is judged independently, against a fixed ceiling
+    (`trueIntegerDigits > 15`) — the same fixed budget used everywhere else in
+    this app, not derived from `realSigFigs`. If you touch this function
+    again: `decimalPlaces` (how many decimals to show) and "is this value too
+    large for fixed-point at all" are two different questions — don't let a
+    per-value round-trip quantity (`realSigFigs`) answer the second one.
+    Verified live at every extreme tried: huge Sensitivity
     (`132123123112.312312...%`, `1.2345678901234567E+19%`), tiny Sensitivity
-    (`9.999999999999999E-006%`, not `"0%"`), and mid-range values across both
-    branches. Uses `'#'` (optional-digit) placeholders, not `'0'`
-    (required-digit) ones, in its fixed-point format strings — `'0'` pads
+    (`9.999999999999999E-006%`, not `"0%"`), ordinary round values (`150%`,
+    not `"1.5E+002%"`), and mid-range values across both branches. Uses `'#'`
+    (optional-digit) placeholders, not `'0'` (required-digit) ones, in its
+    fixed-point format strings — `'0'` pads
     with trailing zeros out to the cap even when they're not real digits
     (a clean typed `1.12312312` displayed as `"112.312312000000%"`), which is
     a milder version of the exact fake-precision problem this whole rework
