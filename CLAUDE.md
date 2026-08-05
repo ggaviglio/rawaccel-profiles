@@ -376,3 +376,27 @@ whenever the `Profiles` collection changes or a profile's
   `profile.Field ?? globalDefault.Field ?? hardcodedFallback`.
 - Never touch the math-engine functions listed above without an explicit,
   scoped instruction to do so.
+- **Invalid GUI input (`Sensitivity`/`RegistryCurveOverride`/`TargetScreenWidth`/
+  `TargetLogicalDpi`) is flagged, never silently discarded or auto-corrected.**
+  `TryParsePositiveDouble`/`TryParsePositiveInt` in `ProfileEditorViewModel.cs`
+  already refuse to write a `<= 0` parsed value into the real property (unchanged,
+  long-standing behavior — Apply always uses the last valid value, never
+  whatever's sitting unconfirmed in a textbox). What was missing was *visibility*:
+  each `On*StringChanged` handler now also sets a matching `IsXxxInputValid`
+  observable bool from that same parse result, and the View overlays a small red
+  ⚠ `TextBlock` (`Classes="input-error-icon"`) on the field when it's `false`.
+  Reset to `true` in `LoadProfile` — a freshly loaded profile's stored fields are
+  always valid (nothing invalid is ever persisted), so a stale flag from whatever
+  was being edited on the *previous* profile must not carry over.
+  **Avalonia gotcha found live**: a plain `Style Selector="TextBox.input-error"`
+  setting `BorderBrush` is silently overridden by the theme's own `:focus`
+  styling while the field is actually focused — the red border only appeared
+  after clicking away, exactly when the flag stops being useful. Adding an
+  explicit `:focus`-scoped selector variant of the *same* style did **not** fix
+  it either (the theme's focus styling wins at the control template's internal
+  level, not just via selector specificity). The reliable fix was a separate
+  overlaid icon element instead of trying to override the TextBox/ComboBox's own
+  border — it isn't part of the control's template, so no theme-internal styling
+  can hide it. If a future validation indicator needs to react to `:focus`
+  specifically, don't assume a same-specificity `:focus` selector override will
+  work against this theme; verify live.

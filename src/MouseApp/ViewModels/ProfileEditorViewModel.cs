@@ -66,6 +66,13 @@ public partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     private string sensitivityString = string.Empty;
 
+    /// <summary>False while SensitivityString holds text that failed the shared
+    /// TryParsePositiveDouble check — a rejected keystroke, not a new validation rule; see
+    /// OnSensitivityStringChanged. Drives an error indicator in the View; Sensitivity itself
+    /// (the value actually used everywhere) never gets set to the invalid text.</summary>
+    [ObservableProperty]
+    private bool isSensitivityInputValid = true;
+
     // Three-way sync modes: Auto, Manual, Skip
     [ObservableProperty]
     private SyncMode rawSyncMode;
@@ -85,6 +92,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     private string registryCurveString = string.Empty;
 
+    /// <summary>Same idea as <see cref="IsSensitivityInputValid"/>, for RegistryCurveString.</summary>
+    [ObservableProperty]
+    private bool isRegistryCurveInputValid = true;
+
     // ── Environment fields ──────────────────────────────────────────────────
 
     // TargetScreenWidth (int?) + string proxy for TextBox binding
@@ -94,12 +105,20 @@ public partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     private string targetScreenWidthString = string.Empty;
 
+    /// <summary>Same idea as <see cref="IsSensitivityInputValid"/>, for TargetScreenWidthString.</summary>
+    [ObservableProperty]
+    private bool isTargetScreenWidthInputValid = true;
+
     // TargetLogicalDpi (int?) + string proxy for TextBox binding
     [ObservableProperty]
     private int? targetLogicalDpi;
 
     [ObservableProperty]
     private string targetLogicalDpiString = string.Empty;
+
+    /// <summary>Same idea as <see cref="IsSensitivityInputValid"/>, for TargetLogicalDpiString.</summary>
+    [ObservableProperty]
+    private bool isTargetLogicalDpiInputValid = true;
 
     // EPP override — null = inherit, true = on, false = off
     [ObservableProperty]
@@ -251,6 +270,15 @@ public partial class ProfileEditorViewModel : ViewModelBase
             TargetLogicalDpiString  = profile.TargetLogicalDpi?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             EppOverride             = profile.UseEnhancePointerPrecision;
             IsDefault       = profile.IsDefault;
+
+            // A stored profile's fields are always either null or a value that already passed
+            // TryParsePositiveDouble/Int (nothing invalid is ever persisted) — so a freshly
+            // loaded profile is always valid, regardless of whatever was flagged on whichever
+            // profile was being edited before this one.
+            IsSensitivityInputValid       = true;
+            IsRegistryCurveInputValid     = true;
+            IsTargetScreenWidthInputValid = true;
+            IsTargetLogicalDpiInputValid  = true;
         }
         finally
         {
@@ -307,13 +335,15 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         if (string.IsNullOrWhiteSpace(newValue))
         {
+            IsSensitivityInputValid = true;
             Sensitivity = null;
             if (RawSyncMode != SyncMode.Auto)
                 RawSyncMode = SyncMode.Skip;
             return;
         }
 
-        if (TryParsePositiveDouble(newValue, out var parsed))
+        IsSensitivityInputValid = TryParsePositiveDouble(newValue, out var parsed);
+        if (IsSensitivityInputValid)
         {
             _isSyncing = true;
             Sensitivity = parsed;
@@ -398,13 +428,15 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         if (string.IsNullOrWhiteSpace(newValue))
         {
+            IsRegistryCurveInputValid = true;
             RegistryCurveOverride = null;
             if (RegSyncMode != SyncMode.Auto)
                 RegSyncMode = SyncMode.Skip;
             return;
         }
 
-        if (TryParsePositiveDouble(newValue, out var parsed))
+        IsRegistryCurveInputValid = TryParsePositiveDouble(newValue, out var parsed);
+        if (IsRegistryCurveInputValid)
         {
             _isSyncing = true;
             RegistryCurveOverride = parsed;
@@ -435,11 +467,13 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         if (string.IsNullOrWhiteSpace(newValue))
         {
+            IsTargetScreenWidthInputValid = true;
             TargetScreenWidth = null;
             return;
         }
 
-        if (TryParsePositiveInt(newValue, out var parsed))
+        IsTargetScreenWidthInputValid = TryParsePositiveInt(newValue, out var parsed);
+        if (IsTargetScreenWidthInputValid)
         {
             _isSyncing = true;
             TargetScreenWidth = parsed;
@@ -468,11 +502,13 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         if (string.IsNullOrWhiteSpace(newValue))
         {
+            IsTargetLogicalDpiInputValid = true;
             TargetLogicalDpi = null;
             return;
         }
 
-        if (TryParsePositiveInt(newValue, out var parsed))
+        IsTargetLogicalDpiInputValid = TryParsePositiveInt(newValue, out var parsed);
+        if (IsTargetLogicalDpiInputValid)
         {
             _isSyncing = true;
             TargetLogicalDpi = parsed;

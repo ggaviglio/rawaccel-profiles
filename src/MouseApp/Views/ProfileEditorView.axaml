@@ -39,6 +39,33 @@
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="Opacity" Value="{Binding IsAutoSyncAvailable, Converter={StaticResource BoolToOpacityConverter}}" />
     </Style>
+    <!-- Toggled via Classes.input-error="{Binding !IsXxxInputValid}": rejected keystrokes
+         (e.g. a typed negative number) are never applied to the real value, but previously gave
+         no visual sign that anything was rejected. This is display-only: it never changes what
+         gets applied, only whether the mismatch between the box and the real value is visible.
+         Comma-separated selector (not a bare ".input-error") since Avalonia needs a concrete
+         type to verify BorderBrush/BorderThickness exist — applied to both plain TextBoxes and
+         the editable ScreenWidth/Scale ComboBoxes. Secondary cue only: confirmed live that the
+         theme's own :focus style (internal to its control template) wins over this while the
+         field is actually focused, so the red border only becomes visible after clicking away —
+         the input-error-icon style below is the primary indicator that works in both states. -->
+    <Style Selector="TextBox.input-error, ComboBox.input-error">
+      <Setter Property="BorderBrush" Value="#E5484D" />
+      <Setter Property="BorderThickness" Value="2" />
+    </Style>
+    <!-- A separate overlaid glyph, not styling on the TextBox/ComboBox itself, so it can't be
+         hidden by the theme's own focus-state template internals the way the border above is.
+         IsHitTestVisible="False" so it never intercepts clicks/typing meant for the field
+         underneath it. -->
+    <Style Selector="TextBlock.input-error-icon">
+      <Setter Property="Text" Value="⚠" />
+      <Setter Property="Foreground" Value="#E5484D" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="Margin" Value="0,0,6,0" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
   </UserControl.Styles>
 
 
@@ -98,7 +125,11 @@
                      Text="{Binding SensitivityString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Width="210" Watermark="Skip"
                      IsEnabled="{Binding !IsRawAutoSync}"
+                     Classes.input-error="{Binding !IsSensitivityInputValid}"
                      ToolTip.Tip="Raw Accel sensitivity multiplier. No enforced maximum — Raw Accel's own source places no bound on this field beyond standard double-precision range. Leave blank to skip." />
+            <TextBlock Grid.Column="0" Classes="input-error-icon"
+                       IsVisible="{Binding !IsSensitivityInputValid}"
+                       ToolTip.Tip="Rejected — must be a positive number. Sensitivity still holds its last valid value; this text isn't actually in effect." />
             <ToggleButton Grid.Column="1"
                           IsChecked="{Binding IsRawAutoSync, Mode=TwoWay}"
                           Content="Auto" Classes="auto-toggle"
@@ -169,7 +200,11 @@
                      Text="{Binding RegistryCurveString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Width="180" Watermark="Skip"
                      IsEnabled="{Binding !IsRegAutoSync}"
+                     Classes.input-error="{Binding !IsRegistryCurveInputValid}"
                      ToolTip.Tip="Registry curve multiplier for EPP (SmoothMouseCurve). Practical max is roughly 10^11-10^13 (varies with DPI/pointer speed) before internal registry storage overflows. Leave blank to skip." />
+            <TextBlock Grid.Column="0" Classes="input-error-icon"
+                       IsVisible="{Binding !IsRegistryCurveInputValid}"
+                       ToolTip.Tip="Rejected — must be a positive number. RegistryCurveOverride still holds its last valid value; this text isn't actually in effect." />
             <ToggleButton Grid.Column="1"
                           IsChecked="{Binding IsRegAutoSync, Mode=TwoWay}"
                           Content="Auto" Classes="auto-toggle"
@@ -196,28 +231,41 @@
                      Text="Auto-Match Environment" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
 
           <TextBlock Grid.Row="1" Grid.Column="0" Text="Screen Width:" VerticalAlignment="Center" Margin="0,0,10,6" />
-          <ComboBox Grid.Row="1" Grid.Column="1" IsEditable="True"
-                    Classes="editable-centered"
-                    Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                    ItemsSource="{Binding ScreenWidthPresets}"
-                    Width="100" HorizontalAlignment="Left" Margin="0,0,0,6"
-                    PlaceholderText="Skip"
-                    ToolTip.Tip="Target screen width in pixels. Leave blank to skip. Common values: 1280, 1366, 1440, 1920, 2560, 3440, 3840, 5120, 7680." />
+          <!-- Width/alignment moved to this wrapper (off the ComboBox itself) so the overlaid
+               error icon's own HorizontalAlignment="Right" lines up with the ComboBox's actual
+               right edge, not the far edge of the wide "*" column it sits in. -->
+          <Grid Grid.Row="1" Grid.Column="1" Width="100" HorizontalAlignment="Left" Margin="0,0,0,6">
+            <ComboBox IsEditable="True"
+                      Classes="editable-centered"
+                      Classes.input-error="{Binding !IsTargetScreenWidthInputValid}"
+                      Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                      ItemsSource="{Binding ScreenWidthPresets}"
+                      PlaceholderText="Skip"
+                      ToolTip.Tip="Target screen width in pixels. Leave blank to skip. Common values: 1280, 1366, 1440, 1920, 2560, 3440, 3840, 5120, 7680." />
+            <TextBlock Classes="input-error-icon"
+                       IsVisible="{Binding !IsTargetScreenWidthInputValid}"
+                       ToolTip.Tip="Rejected — must be a positive number. TargetScreenWidth still holds its last valid value; this text isn't actually in effect." />
+          </Grid>
 
           <TextBlock Grid.Row="2" Grid.Column="0" Text="Scale:" VerticalAlignment="Center" Margin="0,0,10,6" />
-          <ComboBox Grid.Row="2" Grid.Column="1" IsEditable="True"
-                    Classes="editable-centered"
-                    Text="{Binding TargetLogicalDpiString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                    ItemsSource="{Binding DpiPresets}"
-                    Width="100" HorizontalAlignment="Left" Margin="0,0,0,6"
-                    PlaceholderText="Skip"
-                    ToolTip.Tip="Windows display scale (found in Display Settings). Type a custom DPI value or pick a preset. Leave blank to skip.">
-            <ComboBox.ItemTemplate>
-              <DataTemplate>
-                <TextBlock Text="{Binding ., Converter={StaticResource DpiDisplayConverter}}" />
-              </DataTemplate>
-            </ComboBox.ItemTemplate>
-          </ComboBox>
+          <Grid Grid.Row="2" Grid.Column="1" Width="100" HorizontalAlignment="Left" Margin="0,0,0,6">
+            <ComboBox IsEditable="True"
+                      Classes="editable-centered"
+                      Classes.input-error="{Binding !IsTargetLogicalDpiInputValid}"
+                      Text="{Binding TargetLogicalDpiString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                      ItemsSource="{Binding DpiPresets}"
+                      PlaceholderText="Skip"
+                      ToolTip.Tip="Windows display scale (found in Display Settings). Type a custom DPI value or pick a preset. Leave blank to skip.">
+              <ComboBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding ., Converter={StaticResource DpiDisplayConverter}}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Classes="input-error-icon"
+                       IsVisible="{Binding !IsTargetLogicalDpiInputValid}"
+                       ToolTip.Tip="Rejected — must be a positive number. TargetLogicalDpi still holds its last valid value; this text isn't actually in effect." />
+          </Grid>
         </Grid>
       </Border>
 
