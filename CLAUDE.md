@@ -388,15 +388,21 @@ whenever the `Profiles` collection changes or a profile's
   Reset to `true` in `LoadProfile` — a freshly loaded profile's stored fields are
   always valid (nothing invalid is ever persisted), so a stale flag from whatever
   was being edited on the *previous* profile must not carry over.
-  **Avalonia gotcha found live**: a plain `Style Selector="TextBox.input-error"`
-  setting `BorderBrush` is silently overridden by the theme's own `:focus`
-  styling while the field is actually focused — the red border only appeared
-  after clicking away, exactly when the flag stops being useful. Adding an
-  explicit `:focus`-scoped selector variant of the *same* style did **not** fix
-  it either (the theme's focus styling wins at the control template's internal
-  level, not just via selector specificity). The reliable fix was a separate
-  overlaid icon element instead of trying to override the TextBox/ComboBox's own
-  border — it isn't part of the control's template, so no theme-internal styling
-  can hide it. If a future validation indicator needs to react to `:focus`
-  specifically, don't assume a same-specificity `:focus` selector override will
-  work against this theme; verify live.
+  **Avalonia gotcha found live, twice**: a plain `Style Selector="TextBox.input-error"`
+  setting `BorderBrush` was silently overridden by the theme's own `:focus`
+  styling while a TextBox was actually focused (red border only appeared after
+  clicking away — exactly when the flag stops being useful), and separately by
+  the theme's `:pointerover` styling on the two editable ComboBoxes (border
+  vanished on hover). An explicit `:focus`-scoped selector variant of the same
+  style did **not** fix the first case either — the theme's state styling wins
+  at the control template's internal level, not just via selector specificity,
+  so don't assume a same-specificity pseudo-class override will beat it; verify
+  live. Ended up **removing the border approach entirely** (a cue that's only
+  sometimes visible reads as broken, which is worse than no cue) in favor of a
+  separate overlaid `TextBlock.input-error-icon` glyph — not part of either
+  control's template, so no theme-internal state styling can hide it, and it
+  behaves identically on both TextBox and ComboBox. The two editable ComboBoxes
+  (Screen Width, Scale) need a larger right `Margin` on their icon instance
+  (`24` vs `6`) than the plain TextBoxes, set per-instance rather than in the
+  shared style, so the icon clears the ComboBox's own built-in dropdown arrow
+  instead of overlapping it.
