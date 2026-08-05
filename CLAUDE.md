@@ -220,7 +220,23 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
   - `ApplyAutoOSSync()` — Win Speed selection formula: target is
     `Effective(base) / S_target`.
   - `ApplyAutoRegSync()` — Registry remainder formula: target is
-    `Effective(base) / (S_target × WinMult)`.
+    `Effective(base) / (S_target × WinMult)`. `RegistryCurveOverride` itself is
+    stored at **full double precision** (the raw computed `remainder`,
+    intentionally unrounded) so it can be correctly re-quantized fresh if
+    DPI/pointer speed ever change later — only `RegistryCurveString` (the
+    textbox display) is capped, via `FormatRegistryCurveValue()`. That used to
+    be a flat `.ToString("G6")` — an arbitrary, unjustified digit count in the
+    same category as the flat `G10`/`15`-digit guesses this file already
+    warns against elsewhere. Replaced with a cap derived from the real,
+    live registry-curve quantization step (`EncodeRegCurve`'s own `step`,
+    converted to a decimal-place count via `Math.Ceiling(-Math.Log10(step))`),
+    combined via `Math.Min` with the value's own round-trip precision
+    (`GetRealSignificantDigits()` — the same round-trip-search helper
+    `FormatMatchPercent` uses, factored out so the two can't drift into two
+    different digit-count guesses again). Found live: the old `G6` was
+    showing one digit beyond what the real step could distinguish (e.g.
+    `0.998785` vs `0.99878` — differ by `5e-6`, smaller than the ~`2.6e-5`
+    step — encoded identically); the fix trims exactly that fake digit.
   - `RecalculateMatchAccuracy()` — display math. Calls
     `_profileService.GetEffectiveSensitivityFactors(_editingProfile)` and reads
     off whichever partial product each row needs (`.RawOnly`, `.WinOnly`,

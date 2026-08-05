@@ -702,7 +702,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             var wasSyncing = _isSyncing;
             _isSyncing = true;
             RegistryCurveOverride = remainder;
-            RegistryCurveString   = remainder.ToString("G6", CultureInfo.InvariantCulture);
+            RegistryCurveString   = FormatRegistryCurveValue(remainder);
             _isSyncing = wasSyncing;
         }
     }
@@ -723,6 +723,63 @@ public partial class ProfileEditorViewModel : ViewModelBase
     ///       value Windows stores, revealing the ~6.1e-6 (0.0006%) precision floor.
     ///       100.00% = exact compensation across all three layers.
     /// </summary>
+    /// <summary>
+    /// The exact number of significant decimal digits THIS specific double needs to round-trip
+    /// back to itself, bit-for-bit — not a fixed guess (15? 16? 17?). Doubles vary: some
+    /// round-trip in a handful of digits, some genuinely need all 17. Same notion .NET's own
+    /// default double formatting uses internally. Shared by FormatMatchPercent (the match%
+    /// display, local to RecalculateMatchAccuracy) and FormatRegistryCurveValue (the
+    /// Auto-computed Registry Curve textbox, below) so both derive real precision the same way
+    /// instead of two independently-maintained copies that could drift apart.
+    /// </summary>
+    private static int GetRealSignificantDigits(double value)
+    {
+        for (int n = 1; n < 17; n++)
+        {
+            if (double.Parse(value.ToString("G" + n, CultureInfo.InvariantCulture), CultureInfo.InvariantCulture) == value)
+                return n;
+        }
+        return 17;
+    }
+
+    /// <summary>
+    /// Formats an Auto-computed RegistryCurveOverride value for the textbox, capped by the
+    /// real, live registry-curve quantization step (EncodeRegCurve's own step) instead of a
+    /// flat guessed digit count (this replaces a hardcoded "G6") — the same "never show a fake
+    /// digit" principle as FormatMatchPercent, applied to the raw value instead of a percentage.
+    /// The underlying RegistryCurveOverride double itself is left at full precision (unchanged)
+    /// so it can be correctly re-quantized fresh if DPI/pointer speed ever change later — only
+    /// this display string is capped.
+    /// </summary>
+    private static string FormatRegistryCurveValue(double value)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return value.ToString(CultureInfo.InvariantCulture);
+        if (value == 0) return "0";
+
+        double step;
+        try
+        {
+            MouseRegistryBridge.EncodeRegCurve(value, out step);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            // Extreme enough to overflow 16.16 fixed-point storage (see QuantizeToFixedPoint1616)
+            // — no real step to derive from; fall back to this value's own round-trip precision.
+            step = 0;
+        }
+        int stepDecimalPlaces = step > 0 ? Math.Max(0, (int)Math.Ceiling(-Math.Log10(step))) : 15;
+
+        int realSigFigs = GetRealSignificantDigits(value);
+        var absValue = Math.Abs(value);
+        int trueIntegerDigits = (int)Math.Floor(Math.Log10(absValue)) + 1;
+        int naturalDecimalPlaces = Math.Max(0, realSigFigs - trueIntegerDigits);
+
+        int decimalPlaces = Math.Clamp(Math.Min(stepDecimalPlaces, naturalDecimalPlaces), 0, 15);
+        string format = decimalPlaces > 0 ? "0." + new string('#', decimalPlaces) : "0";
+        return value.ToString(format, CultureInfo.InvariantCulture);
+    }
+
     private void RecalculateMatchAccuracy()
     {
         // Nothing meaningful to preview yet — mirrors AutoPersist's own early-return.
@@ -796,21 +853,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             if (double.IsInfinity(value)) return (value > 0 ? "Infinity" : "-Infinity") + "%";
             if (value == 0) return "0%";
 
-            // The exact number of significant decimal digits THIS specific double needs to
-            // round-trip back to itself, bit-for-bit — not a fixed guess (15? 16? 17?). Doubles
-            // vary: some round-trip in a handful of digits, some genuinely need all 17. This is
-            // the same notion .NET's own default double formatting uses internally; deriving it
-            // explicitly here means the fixed-point and scientific paths below share one
-            // consistent, per-value-exact cap instead of two different fixed guesses.
-            int realSigFigs = 17;
-            for (int n = 1; n < 17; n++)
-            {
-                if (double.Parse(value.ToString("G" + n, CultureInfo.InvariantCulture), CultureInfo.InvariantCulture) == value)
-                {
-                    realSigFigs = n;
-                    break;
-                }
-            }
+            int realSigFigs = GetRealSignificantDigits(value);
 
             // Order-of-magnitude digit count, UNCLAMPED — zero or negative for values under 1
             // (e.g. 0.05 has trueIntegerDigits = -1, correctly placing its first significant
