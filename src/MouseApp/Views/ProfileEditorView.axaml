@@ -23,6 +23,18 @@
       <Setter Property="Padding" Value="8,0,0,0" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
+    <!-- SimpleTheme's own ComboBox.xaml only styles BorderBrush for :pointerover, never :focus
+         (confirmed against Avalonia's source, v11.3.12) — unlike TextBox.xaml, which styles both
+         with the same ThemeBorderHighBrush. That's why Screen Width/Scale only highlighted on
+         hover while Sensitivity/RegistryCurveOverride also highlighted on focus: different
+         control types (ComboBox vs TextBox), and only one of the two has focus styling at all in
+         the theme itself. :focus-within (not :focus) because focus actually lands on the
+         editable ComboBox's internal PART_EditableTextBox, not the ComboBox itself. Reuses the
+         theme's own ThemeBorderHighBrush so this matches its hover color exactly instead of
+         introducing a new one. -->
+    <Style Selector="ComboBox.editable-centered:focus-within /template/ Border#border">
+      <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderHighBrush}" />
+    </Style>
     <Style Selector="Button.icon-btn">
       <Setter Property="Width" Value="28" />
       <Setter Property="Height" Value="28" />
