@@ -257,13 +257,13 @@ public partial class ProfileEditorViewModel : ViewModelBase
             ProfileName           = profile.ProfileName;
             SelectedRawAccelSettingsFile      = profile.RawAccelSettingsFile;
             Sensitivity           = profile.SensMultiplier;
-            SensitivityString     = profile.SensMultiplier?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            SensitivityString     = profile.SensMultiplier is { } sensVal ? FormatFixedPointInput(sensVal, int.MaxValue) : string.Empty;
             RawSyncMode           = profile.RawSyncMode;
             OSSyncMode            = profile.OSSyncMode;
             WinPointerSpeed       = profile.WinPointerSpeed;
             RegSyncMode           = profile.RegSyncMode;
             RegistryCurveOverride = profile.RegistryCurveOverride;
-            RegistryCurveString   = profile.RegistryCurveOverride?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            RegistryCurveString   = profile.RegistryCurveOverride is { } regVal ? FormatFixedPointInput(regVal, int.MaxValue) : string.Empty;
             TargetScreenWidth       = profile.TargetScreenWidth;
             TargetScreenWidthString = profile.TargetScreenWidth?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             TargetLogicalDpi        = profile.TargetLogicalDpi;
@@ -271,10 +271,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
             EppOverride             = profile.UseEnhancePointerPrecision;
             IsDefault       = profile.IsDefault;
 
-            // A stored profile's fields are always either null or a value that already passed
-            // TryParsePositiveDouble/Int (nothing invalid is ever persisted) — so a freshly
-            // loaded profile is always valid, regardless of whatever was flagged on whichever
-            // profile was being edited before this one.
+            // Loading itself now guarantees SensMultiplier/RegistryCurveOverride are always
+            // either null or already-valid (see ProfileService's lenient JSON converters --
+            // anything that fails TryParsePositiveDouble is read as null, same as a blank
+            // field), so there's nothing left to check here.
             IsSensitivityInputValid       = true;
             IsRegistryCurveInputValid     = true;
             IsTargetScreenWidthInputValid = true;
@@ -306,28 +306,13 @@ public partial class ProfileEditorViewModel : ViewModelBase
     {
         if (_isSyncing) return;
         _isSyncing = true;
-        SensitivityString = newValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        SensitivityString = newValue is { } sensVal ? FormatFixedPointInput(sensVal, int.MaxValue) : string.Empty;
         _isSyncing = false;
 
         ApplyAutoOSSync();
         AutoPersist();             // persist before recalc so GetEffectiveSensitivity sees current model
         RecalculateMatchAccuracy();
     }
-
-    /// <summary>
-    /// Sensitivity and RegistryCurveOverride both only accept strictly-positive numbers (0 or
-    /// negative is not a meaningful multiplier for either). Single shared check so that rule
-    /// lives in exactly one place instead of two independently hand-typed copies that could
-    /// silently drift out of sync with each other.
-    /// </summary>
-    private static bool TryParsePositiveDouble(string text, out double parsed) =>
-        double.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out parsed) && parsed > 0;
-
-    /// <summary>Same idea as <see cref="TryParsePositiveDouble"/>, for the int-typed fields
-    /// (TargetScreenWidth, TargetLogicalDpi) — a pixel width or DPI of 0 or negative is not
-    /// meaningful either.</summary>
-    private static bool TryParsePositiveInt(string text, out int parsed) =>
-        int.TryParse(text, out parsed) && parsed > 0;
 
     partial void OnSensitivityStringChanged(string? oldValue, string newValue)
     {
@@ -342,7 +327,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             return;
         }
 
-        IsSensitivityInputValid = TryParsePositiveDouble(newValue, out var parsed);
+        IsSensitivityInputValid = ProfileService.TryParsePositiveDouble(newValue, out var parsed);
         if (IsSensitivityInputValid)
         {
             _isSyncing = true;
@@ -416,7 +401,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     {
         if (_isSyncing) return;
         _isSyncing = true;
-        RegistryCurveString = newValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        RegistryCurveString = newValue is { } regVal ? FormatFixedPointInput(regVal, int.MaxValue) : string.Empty;
         _isSyncing = false;
         AutoPersist();
         RecalculateMatchAccuracy();
@@ -435,7 +420,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             return;
         }
 
-        IsRegistryCurveInputValid = TryParsePositiveDouble(newValue, out var parsed);
+        IsRegistryCurveInputValid = ProfileService.TryParsePositiveDouble(newValue, out var parsed);
         if (IsRegistryCurveInputValid)
         {
             _isSyncing = true;
@@ -472,7 +457,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             return;
         }
 
-        IsTargetScreenWidthInputValid = TryParsePositiveInt(newValue, out var parsed);
+        IsTargetScreenWidthInputValid = ProfileService.TryParsePositiveInt(newValue, out var parsed);
         if (IsTargetScreenWidthInputValid)
         {
             _isSyncing = true;
@@ -507,7 +492,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             return;
         }
 
-        IsTargetLogicalDpiInputValid = TryParsePositiveInt(newValue, out var parsed);
+        IsTargetLogicalDpiInputValid = ProfileService.TryParsePositiveInt(newValue, out var parsed);
         if (IsTargetLogicalDpiInputValid)
         {
             _isSyncing = true;
@@ -645,7 +630,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var wasSyncing = _isSyncing;
         _isSyncing = true;
         Sensitivity       = newSens;
-        SensitivityString = newSens.ToString("G6", CultureInfo.InvariantCulture);
+        SensitivityString = FormatFixedPointInput(newSens, int.MaxValue);
         _isSyncing = wasSyncing;
     }
 
@@ -779,19 +764,64 @@ public partial class ProfileEditorViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// How many digit positions <paramref name="absValue"/>'s integer part has -- e.g. 150.0 has
+    /// 3, 0.05 has -1 (correctly placing its first significant digit in the hundredths position;
+    /// see FormatMatchPercent's local use for why this must stay unclamped). Shared by
+    /// FormatFixedPointInput and FormatMatchPercent so the same order-of-magnitude formula isn't
+    /// hand-typed in two places.
+    /// </summary>
+    private static int GetTrueIntegerDigitCount(double absValue) => (int)Math.Floor(Math.Log10(absValue)) + 1;
+
+    /// <summary>
+    /// Formats a value for a raw input textbox (Sensitivity, RegistryCurveOverride), always in
+    /// fixed-point notation — never switching to scientific "E" notation the way a plain
+    /// <c>ToString(CultureInfo.InvariantCulture)</c> does for extreme magnitudes (that default
+    /// behavior was the actual bug: typing "0.00001" and reloading the profile silently showed
+    /// "1E-05" back — the field reformatting what you typed, not just displaying it). Shows
+    /// exactly this value's own real round-trip precision (via <see cref="GetRealSignificantDigits"/>),
+    /// further capped by a genuine domain-specific floor when one exists (e.g. the registry
+    /// curve's live quantization step — see <see cref="FormatRegistryCurveValue"/>); pass
+    /// <c>int.MaxValue</c> when no such floor applies (Sensitivity has none of its own — see
+    /// CLAUDE.md's Raw Accel research note). Capped at 50 decimal places regardless, purely as a
+    /// sanity bound against a pathologically tiny test value producing a multi-hundred-character
+    /// string — not a precision-correctness limit the way the ~15 budget elsewhere is.
+    /// </summary>
+    private static string FormatFixedPointInput(double value, int domainDecimalPlaces)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return value.ToString(CultureInfo.InvariantCulture);
+        if (value == 0) return "0";
+
+        int realSigFigs = GetRealSignificantDigits(value);
+        var absValue = Math.Abs(value);
+        int trueIntegerDigits = GetTrueIntegerDigitCount(absValue);
+        int naturalDecimalPlaces = Math.Max(0, realSigFigs - trueIntegerDigits);
+
+        int decimalPlaces = domainDecimalPlaces == int.MaxValue
+            ? naturalDecimalPlaces
+            : Math.Min(domainDecimalPlaces, naturalDecimalPlaces);
+        decimalPlaces = Math.Min(decimalPlaces, 50);
+
+        string format = decimalPlaces > 0 ? "0." + new string('#', decimalPlaces) : "0";
+        return value.ToString(format, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
     /// Formats an Auto-computed RegistryCurveOverride value for the textbox, capped by the
     /// real, live registry-curve quantization step (EncodeRegCurve's own step) instead of a
     /// flat guessed digit count (this replaces a hardcoded "G6") — the same "never show a fake
     /// digit" principle as FormatMatchPercent, applied to the raw value instead of a percentage.
     /// The underlying RegistryCurveOverride double itself is left at full precision (unchanged)
     /// so it can be correctly re-quantized fresh if DPI/pointer speed ever change later — only
-    /// this display string is capped.
+    /// this display string is capped. Only for the Auto-computed path: a manually-typed
+    /// RegistryCurveOverride is shown with <see cref="FormatFixedPointInput"/> directly (no
+    /// domain cap) so it round-trips back exactly as typed instead of being silently trimmed to
+    /// the hardware step on the next profile load.
     /// </summary>
     private static string FormatRegistryCurveValue(double value)
     {
         if (double.IsNaN(value) || double.IsInfinity(value))
             return value.ToString(CultureInfo.InvariantCulture);
-        if (value == 0) return "0";
 
         double step;
         try
@@ -804,16 +834,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
             // — no real step to derive from; fall back to this value's own round-trip precision.
             step = 0;
         }
-        int stepDecimalPlaces = step > 0 ? Math.Max(0, (int)Math.Ceiling(-Math.Log10(step))) : 15;
-
-        int realSigFigs = GetRealSignificantDigits(value);
-        var absValue = Math.Abs(value);
-        int trueIntegerDigits = (int)Math.Floor(Math.Log10(absValue)) + 1;
-        int naturalDecimalPlaces = Math.Max(0, realSigFigs - trueIntegerDigits);
-
-        int decimalPlaces = Math.Clamp(Math.Min(stepDecimalPlaces, naturalDecimalPlaces), 0, 15);
-        string format = decimalPlaces > 0 ? "0." + new string('#', decimalPlaces) : "0";
-        return value.ToString(format, CultureInfo.InvariantCulture);
+        int stepDecimalPlaces = step > 0 ? Math.Max(0, (int)Math.Ceiling(-Math.Log10(step))) : int.MaxValue;
+        return FormatFixedPointInput(value, stepDecimalPlaces);
     }
 
     private void RecalculateMatchAccuracy()
@@ -897,7 +919,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             // it silently breaks decimal-place placement for any sub-1 value and can round a
             // genuinely nonzero percentage all the way down to a false "0%".
             var absValue = Math.Abs(value);
-            int trueIntegerDigits = (int)Math.Floor(Math.Log10(absValue)) + 1;
+            int trueIntegerDigits = GetTrueIntegerDigitCount(absValue);
 
             // Decimal places needed to show realSigFigs significant digits starting from this
             // value's actual first significant digit, further capped by a real domain-specific

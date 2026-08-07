@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
@@ -16,7 +18,7 @@ public class ProfileService
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
         WriteIndented = true,
-        Converters    = { new JsonStringEnumConverter() }
+        Converters    = { new JsonStringEnumConverter(), new LenientPositiveDoubleConverter(), new LenientPositiveIntConverter() }
     };
 
     /// <summary>
@@ -30,6 +32,100 @@ public class ProfileService
     {
         public AppSettings        Settings { get; set; } = new();
         public List<MouseProfile> Profiles { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Sensitivity and RegistryCurveOverride both only accept strictly-positive numbers (0 or
+    /// negative is not a meaningful multiplier for either), and no more than 15 significant
+    /// digits -- the same guaranteed-safe round-trip budget IEEE 754 double precision offers. A
+    /// double literally cannot hold more than that without silently losing information; a huge
+    /// typed number (20+ digits) that skipped this check used to display fine while typing, then
+    /// visibly fall apart (a wall of trailing zeros) the next time it had to become text again,
+    /// because nothing had ever told the user precision was about to be lost.
+    /// Public and static (not just for typed GUI input) because <see cref="LenientPositiveDoubleConverter"/>
+    /// below reuses this exact same check when reading profiles.json, so a value that's invalid
+    /// for one reason (typed) is invalid for the identical reason when loaded from disk --
+    /// one rule, one place, instead of two independently hand-typed copies that could drift.
+    /// </summary>
+    public static bool TryParsePositiveDouble(string text, out double parsed)
+    {
+        if (double.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out parsed)
+            && parsed > 0
+            && CountMantissaDigits(text) <= 15)
+        {
+            return true;
+        }
+        parsed = 0;
+        return false;
+    }
+
+    /// <summary>
+    /// Counts digit characters in the mantissa of a typed number, skipping leading zeros (e.g.
+    /// "007" has 1) and ignoring anything after 'e'/'E' so a legitimately-typed exponent isn't
+    /// miscounted as extra mantissa precision.
+    /// </summary>
+    private static int CountMantissaDigits(string text)
+    {
+        int eIndex = text.IndexOfAny(new[] { 'e', 'E' });
+        ReadOnlySpan<char> mantissa = eIndex >= 0 ? text.AsSpan(0, eIndex) : text.AsSpan();
+
+        bool seenNonzero = false;
+        int count = 0;
+        foreach (char c in mantissa)
+        {
+            if (c < '0' || c > '9') continue;
+            if (c != '0') seenNonzero = true;
+            if (seenNonzero) count++;
+        }
+        return count;
+    }
+
+    /// <summary>Same idea as <see cref="TryParsePositiveDouble"/>, for the int-typed fields
+    /// (TargetScreenWidth, TargetLogicalDpi) -- a pixel width or DPI of 0 or negative is not
+    /// meaningful either.</summary>
+    public static bool TryParsePositiveInt(string text, out int parsed) =>
+        int.TryParse(text, out parsed) && parsed > 0;
+
+    /// <summary>
+    /// Reads a SensMultiplier/RegistryCurveOverride field using the exact same rule typed input
+    /// already has to pass (<see cref="TryParsePositiveDouble"/>) -- anything that isn't a real,
+    /// positive, <=15-digit number (a word, a negative number, too many digits, or just the
+    /// wrong JSON shape) is treated as if the field were left blank, instead of throwing and
+    /// taking down the whole profile load. Every kind of "invalid" is handled the identical way,
+    /// on purpose -- there's no special case for "invalid but still a number."
+    /// </summary>
+    private sealed class LenientPositiveDoubleConverter : System.Text.Json.Serialization.JsonConverter<double?>
+    {
+        public override double? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType != JsonTokenType.Number) return null;
+            string rawText = Encoding.UTF8.GetString(reader.ValueSpan);
+            return TryParsePositiveDouble(rawText, out var parsed) ? parsed : null;
+        }
+
+        public override void Write(Utf8JsonWriter writer, double? value, JsonSerializerOptions options)
+        {
+            if (value.HasValue) writer.WriteNumberValue(value.Value);
+            else writer.WriteNullValue();
+        }
+    }
+
+    /// <summary>Same idea as <see cref="LenientPositiveDoubleConverter"/>, for the int-typed
+    /// fields (WinPointerSpeed, TargetScreenWidth, TargetLogicalDpi).</summary>
+    private sealed class LenientPositiveIntConverter : System.Text.Json.Serialization.JsonConverter<int?>
+    {
+        public override int? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType != JsonTokenType.Number) return null;
+            string rawText = Encoding.UTF8.GetString(reader.ValueSpan);
+            return TryParsePositiveInt(rawText, out var parsed) ? parsed : null;
+        }
+
+        public override void Write(Utf8JsonWriter writer, int? value, JsonSerializerOptions options)
+        {
+            if (value.HasValue) writer.WriteNumberValue(value.Value);
+            else writer.WriteNullValue();
+        }
     }
 
     /// <summary>App-wide settings, persisted in the same file as profiles.</summary>

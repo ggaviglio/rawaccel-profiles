@@ -135,7 +135,7 @@
                      ToolTip.Tip="Raw Accel sensitivity multiplier. No enforced maximum — Raw Accel's own source places no bound on this field beyond standard double-precision range. Leave blank to skip." />
             <TextBlock Grid.Column="0" Classes="input-error-icon" Margin="0,0,6,0"
                        IsVisible="{Binding !IsSensitivityInputValid}"
-                       ToolTip.Tip="Rejected — must be a positive number. Sensitivity still holds its last valid value; this text isn't actually in effect." />
+                       ToolTip.Tip="Rejected — must be a positive number with at most 15 significant digits (a double can't hold more without silently losing precision). Sensitivity still holds its last valid value; this text isn't actually in effect." />
             <ToggleButton Grid.Column="1"
                           IsChecked="{Binding IsRawAutoSync, Mode=TwoWay}"
                           Content="Auto" Classes="auto-toggle"
@@ -209,7 +209,7 @@
                      ToolTip.Tip="Registry curve multiplier for EPP (SmoothMouseCurve). Practical max is roughly 10^11-10^13 (varies with DPI/pointer speed) before internal registry storage overflows. Leave blank to skip." />
             <TextBlock Grid.Column="0" Classes="input-error-icon" Margin="0,0,6,0"
                        IsVisible="{Binding !IsRegistryCurveInputValid}"
-                       ToolTip.Tip="Rejected — must be a positive number. RegistryCurveOverride still holds its last valid value; this text isn't actually in effect." />
+                       ToolTip.Tip="Rejected — must be a positive number with at most 15 significant digits (a double can't hold more without silently losing precision). RegistryCurveOverride still holds its last valid value; this text isn't actually in effect." />
             <ToggleButton Grid.Column="1"
                           IsChecked="{Binding IsRegAutoSync, Mode=TwoWay}"
                           Content="Auto" Classes="auto-toggle"

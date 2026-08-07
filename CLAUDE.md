@@ -216,6 +216,20 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     of `.RawOnly`/`.WinOnly` depends on it not doing so.
   - `CalculateCompensations()` — the apply-time math. Must stay in sync with
     `ProfileEditorViewModel`'s `ApplyAutoOSSync`/`ApplyAutoRegSync`.
+  - `TryParsePositiveDouble`/`TryParsePositiveInt`/`CountMantissaDigits` —
+    `public static`, deliberately living here and not in the ViewModel, so
+    `LenientPositiveDoubleConverter`/`LenientPositiveIntConverter` (private
+    nested `JsonConverter`s registered in `_jsonOptions.Converters`, next to
+    `JsonStringEnumConverter`) can call the *exact same* validity check
+    `ProfileEditorViewModel`'s typing handlers use. This is what makes
+    `LoadAsync()` tolerant of a malformed `profiles.json` field instead of
+    crashing the whole app on startup (see Persistence, above) — a value that
+    fails this check (not a number, negative, zero, or more than 15
+    significant digits) is read as `null`, identical to a blank field, at
+    both the typing layer and the file-loading layer. If this ever needs to
+    change, it changes once, here — don't let a second, separately-maintained
+    copy reappear in the ViewModel (already happened once tonight with a
+    load-time-only magnitude check; deleted, not kept as a second mechanism).
 - **`ViewModels/ProfileEditorViewModel.cs`** (Math Engine section, ~lines 305–440)
   - `ApplyAutoOSSync()` — Win Speed selection formula: target is
     `Effective(base) / S_target`.
@@ -229,14 +243,39 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     same category as the flat `G10`/`15`-digit guesses this file already
     warns against elsewhere. Replaced with a cap derived from the real,
     live registry-curve quantization step (`EncodeRegCurve`'s own `step`,
-    converted to a decimal-place count via `Math.Ceiling(-Math.Log10(step))`),
-    combined via `Math.Min` with the value's own round-trip precision
-    (`GetRealSignificantDigits()` — the same round-trip-search helper
-    `FormatMatchPercent` uses, factored out so the two can't drift into two
-    different digit-count guesses again). Found live: the old `G6` was
-    showing one digit beyond what the real step could distinguish (e.g.
-    `0.998785` vs `0.99878` — differ by `5e-6`, smaller than the ~`2.6e-5`
-    step — encoded identically); the fix trims exactly that fake digit.
+    converted to a decimal-place count via `Math.Ceiling(-Math.Log10(step))`).
+    Found live: the old `G6` was showing one digit beyond what the real step
+    could distinguish (e.g. `0.998785` vs `0.99878` — differ by `5e-6`,
+    smaller than the ~`2.6e-5` step — encoded identically); the fix trims
+    exactly that fake digit. `FormatRegistryCurveValue()` itself just derives
+    that step-based cap and hands off to `FormatFixedPointInput(value,
+    domainDecimalPlaces)` — the shared formatter (below) that actually builds
+    the display string, combining this domain-specific cap with the value's
+    own round-trip precision (`GetRealSignificantDigits()`).
+  - `FormatFixedPointInput(value, domainDecimalPlaces)` — shared display
+    formatter for every raw-value textbox (`SensitivityString`,
+    `RegistryCurveString`), called from `LoadProfile`, `OnSensitivityChanged`,
+    `OnRegistryCurveOverrideChanged`, `ApplyAutoRawSync`, and
+    `FormatRegistryCurveValue`. Always renders fixed-point, **never**
+    scientific "E" notation — that was the actual original bug: typing
+    `0.00001` and switching profiles away and back used to silently show
+    `1E-05` back (a plain `ToString(CultureInfo.InvariantCulture)` call
+    reformatting what was typed, not just displaying it). Shows exactly this
+    value's own real round-trip precision (`GetRealSignificantDigits`),
+    further capped by a genuine domain-specific floor when one exists (the
+    registry curve's live step, via `FormatRegistryCurveValue`); pass
+    `int.MaxValue` for `domainDecimalPlaces` when no such floor applies
+    (Sensitivity has none of its own — see the Raw Accel research note above).
+    The `50`-decimal-place cap inside this function is a UI sanity bound
+    against a pathologically tiny value producing a multi-hundred-character
+    string — unrelated to, and not a substitute for, the ~15-digit
+    round-trip-safety budget used elsewhere in this file
+    (`TryParsePositiveDouble` in `ProfileService.cs`, `FormatMatchPercent`
+    below); don't conflate the two if this function is touched again.
+    A value this large or precise should already have been rejected earlier
+    (typing) or loaded as blank (profiles.json) — see "Invalid GUI input" and
+    Persistence, above — so 50 is deliberately generous, not a precision
+    guarantee.
   - `RecalculateMatchAccuracy()` — display math. Calls
     `_profileService.GetEffectiveSensitivityFactors(_editingProfile)` and reads
     off whichever partial product each row needs (`.RawOnly`, `.WinOnly`,
@@ -269,8 +308,11 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     floor (registry curve, when real) is combined via `Math.Min` on top of
     this, never replacing it. `trueIntegerDigits` (the value's order-of-magnitude
     digit count) is deliberately **unclamped** — can be ≤ 0 for values under 1
-    (e.g. `0.05` has `trueIntegerDigits = -1`) — computed via
-    `Math.Floor(Math.Log10(absValue)) + 1`.
+    (e.g. `0.05` has `trueIntegerDigits = -1`) — computed via the shared
+    `GetTrueIntegerDigitCount(absValue)` helper (`Math.Floor(Math.Log10(absValue))
+    + 1`), also used by `FormatFixedPointInput` above — factored out after this
+    exact formula was found hand-typed in both places, one written months apart
+    from the other.
     Three real bugs were found and fixed building this, in order: (1) clamping
     `trueIntegerDigits` to "always at least 1" miscomputed decimal-place
     placement for any value under 1 (e.g. treating `0.05` as if its first
@@ -360,6 +402,28 @@ whenever the `Profiles` collection changes or a profile's
 - `ProfileService` persists `Profiles` to `profiles.json` next to the exe
   (`AppContext.BaseDirectory`), serialized with a `SemaphoreSlim` write lock to
   prevent concurrent-save truncation races.
+- **Loading tolerates a malformed numeric field instead of crashing the app.**
+  `LoadAsync()` used to deserialize the whole file with plain
+  `JsonSerializer.Deserialize<PersistedData>` — if any single field had the
+  wrong JSON shape (e.g. a string where `SensMultiplier` expects a number),
+  deserialization threw and nothing caught it (`App.axaml.cs` calls
+  `LoadAsync().GetAwaiter().GetResult()` directly, before any window exists),
+  so one bad value in the file crashed the entire app on startup. Fixed with
+  two private `JsonConverter`s registered in `_jsonOptions.Converters`
+  (`LenientPositiveDoubleConverter`/`LenientPositiveIntConverter`, next to the
+  `JsonStringEnumConverter` already there): for `double?`/`int?` fields, read
+  the raw JSON number and run it through `TryParsePositiveDouble`/
+  `TryParsePositiveInt` (the same shared check typed GUI input uses — see
+  "Invalid GUI input" above); if it doesn't pass — not a number at all,
+  negative, zero, or too many digits — the field loads as `null`, identical to
+  a blank field, instead of throwing. Every flavor of "invalid" is treated the
+  *same* way on purpose: an earlier version tried to keep a bad-but-numeric
+  value visible on load (showing the mangled number with a warning icon,
+  distinct from a non-numeric value which would just be dropped) and that was
+  deliberately simplified away — two different behaviors for "invalid"
+  depending on *how* it's invalid was worse than one consistent rule. The rest
+  of a profile (name, target associations, every other field) is unaffected
+  by one bad field — nothing about loading drops a whole profile.
 - `SettingsService` persists `AppSettings` (Raw Accel directory, templates
   directory, registry-bridge opt-in, startup/tray behavior).
 - `TemplateService` manages the library of Raw Accel `.json` curve templates
@@ -378,16 +442,26 @@ whenever the `Profiles` collection changes or a profile's
   scoped instruction to do so.
 - **Invalid GUI input (`Sensitivity`/`RegistryCurveOverride`/`TargetScreenWidth`/
   `TargetLogicalDpi`) is flagged, never silently discarded or auto-corrected.**
-  `TryParsePositiveDouble`/`TryParsePositiveInt` in `ProfileEditorViewModel.cs`
-  already refuse to write a `<= 0` parsed value into the real property (unchanged,
-  long-standing behavior — Apply always uses the last valid value, never
-  whatever's sitting unconfirmed in a textbox). What was missing was *visibility*:
-  each `On*StringChanged` handler now also sets a matching `IsXxxInputValid`
-  observable bool from that same parse result, and the View overlays a small red
-  ⚠ `TextBlock` (`Classes="input-error-icon"`) on the field when it's `false`.
-  Reset to `true` in `LoadProfile` — a freshly loaded profile's stored fields are
-  always valid (nothing invalid is ever persisted), so a stale flag from whatever
-  was being edited on the *previous* profile must not carry over.
+  `TryParsePositiveDouble`/`TryParsePositiveInt` — positive, and for the double
+  variant no more than 15 significant digits (the real budget a double can hold
+  without silently losing precision, IEEE 754, not a guess) — live as `public
+  static` methods on **`ProfileService`**, not the ViewModel. Deliberately
+  placed there: `ProfileService`'s own JSON loading (see Persistence, below)
+  needs the exact same check, so "is this value valid" has one implementation
+  used by both typing and loading, instead of two independently-maintained
+  copies that drifted apart once already (an earlier version had a second,
+  looser magnitude-only check for loaded values — replaced, not kept
+  alongside). `ProfileEditorViewModel`'s `On*StringChanged` handlers call
+  `ProfileService.TryParsePositiveDouble`/`TryParsePositiveInt` and set a
+  matching `IsXxxInputValid` observable bool from the result; the View overlays
+  a small red ⚠ `TextBlock` (`Classes="input-error-icon"`) on the field when
+  it's `false`. The underlying property is never written for a rejected value
+  (Apply always uses the last valid value, never whatever's sitting unconfirmed
+  in a textbox) — the flag only makes that already-safe behavior visible
+  instead of silent. Unconditionally reset to `true` in `LoadProfile` — loading
+  itself now guarantees a stored value is always either blank or already-valid
+  (see Persistence), so there's nothing left to check by the time a profile
+  reaches the editor.
   **Avalonia gotcha found live, twice**: a plain `Style Selector="TextBox.input-error"`
   setting `BorderBrush` was silently overridden by the theme's own `:focus`
   styling while a TextBox was actually focused (red border only appeared after
