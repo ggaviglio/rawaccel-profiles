@@ -12,7 +12,6 @@
              x:Class="MouseApp.Views.ProfileEditorView">
 
   <UserControl.Resources>
-    <converters:BoolToOpacityConverter x:Key="BoolToOpacityConverter" />
     <converters:WinPointerSpeedDisplayConverter x:Key="WinPointerSpeedDisplayConverter" />
     <converters:NullableBoolDisplayConverter x:Key="NullableBoolDisplayConverter" />
     <converters:DpiDisplayConverter x:Key="DpiDisplayConverter" />
@@ -49,7 +48,6 @@
       <Setter Property="TextTrimming" Value="CharacterEllipsis" />
       <Setter Property="Margin" Value="6,0,0,0" />
       <Setter Property="VerticalAlignment" Value="Center" />
-      <Setter Property="Opacity" Value="{Binding IsAutoSyncAvailable, Converter={StaticResource BoolToOpacityConverter}}" />
     </Style>
     <!-- Toggled via IsVisible="{Binding !IsXxxInputValid}": rejected keystrokes (e.g. a typed
          negative number) are never applied to the real value, but previously gave no visual
@@ -77,10 +75,74 @@
 
 
   <ScrollViewer Margin="0" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-    <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="8" Grid.IsSharedSizeScope="True">
+    <!-- RowSpacing intentionally not used here: it adds a gap structurally, between every row
+         slot, regardless of whether either side is actually visible. Card 3 (Auto-Match
+         Environment) is hidden by default, and RowSpacing left both its gaps behind even while
+         collapsed. Margin belongs to the element itself, so it disappears along with it. -->
+    <Grid RowDefinitions="Auto,Auto,Auto,*" Grid.IsSharedSizeScope="True">
 
-            <!-- ═══ Card 1: Raw Accel ═══ -->
-            <Border Grid.Row="0" Classes="card" Width="500" Padding="14,10,6,10">
+            <!-- ═══ Card 1: Auto-Match Environment ═══ -->
+            <!-- Moved to the top: this card is the input the auto-compensation buttons below
+                 consume (its own tooltip already says as much), so reading top-to-bottom now
+                 goes cause before effect. Only affects the power users who've deliberately
+                 enabled it in Settings, since it's hidden by default, so nobody else's
+                 experience changes. Advanced option, hidden by default (Settings > Show
+                 Auto-Match Environment), see AppSettings.ShowAutoMatchEnvironment. One Border,
+                 whole card goes with it. -->
+            <Border Grid.Row="0" Classes="card" Width="500" Padding="14,10" Margin="0,0,0,8"
+              IsVisible="{Binding IsAutoMatchEnvironmentVisible}"
+              ToolTip.Tip="This app does not change your Windows resolution or scale. These values are only used for the auto-compensation buttons. The EPP override uses this Scale value at apply-time if set; if left blank it reads your current Windows scale live instead.">
+        <Grid RowDefinitions="Auto,Auto,Auto">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" SharedSizeGroup="LabelCol" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
+                     Text="Auto-Match Environment" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Screen Width:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <!-- Width/alignment moved to this wrapper (off the ComboBox itself) so the overlaid
+               error icon's own HorizontalAlignment="Right" lines up with the ComboBox's actual
+               right edge, not the far edge of the wide "*" column it sits in. -->
+          <Grid Grid.Row="1" Grid.Column="1" Width="100" HorizontalAlignment="Left" Margin="0,0,0,6">
+            <ComboBox IsEditable="True"
+                      Classes="editable-centered"
+                      Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                      ItemsSource="{Binding ScreenWidthPresets}"
+                      PlaceholderText="Skip"
+                      ToolTip.Tip="Target screen width in pixels. Leave blank to skip. Common values: 1280, 1366, 1440, 1920, 2560, 3440, 3840, 5120, 7680." />
+            <!-- Extra right-margin (vs. the 6px on plain TextBoxes) so the icon clears the
+                 ComboBox's own built-in dropdown arrow instead of overlapping it. -->
+            <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
+                       IsVisible="{Binding !IsTargetScreenWidthInputValid}"
+                       ToolTip.Tip="Rejected — must be a positive number. TargetScreenWidth still holds its last valid value; this text isn't actually in effect." />
+          </Grid>
+
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="Scale:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <Grid Grid.Row="2" Grid.Column="1" Width="100" HorizontalAlignment="Left" Margin="0,0,0,6">
+            <ComboBox IsEditable="True"
+                      Classes="editable-centered"
+                      Text="{Binding TargetLogicalDpiString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                      ItemsSource="{Binding DpiPresets}"
+                      PlaceholderText="Skip"
+                      ToolTip.Tip="Windows display scale (found in Display Settings). Type a custom DPI value or pick a preset. Leave blank to skip.">
+              <ComboBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding ., Converter={StaticResource DpiDisplayConverter}}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <!-- Extra right-margin (vs. the 6px on plain TextBoxes) so the icon clears the
+                 ComboBox's own built-in dropdown arrow instead of overlapping it. -->
+            <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
+                       IsVisible="{Binding !IsTargetLogicalDpiInputValid}"
+                       ToolTip.Tip="Rejected — must be a positive number. TargetLogicalDpi still holds its last valid value; this text isn't actually in effect." />
+          </Grid>
+        </Grid>
+      </Border>
+
+            <!-- ═══ Card 2: Raw Accel ═══ -->
+            <Border Grid.Row="1" Classes="card" Width="500" Padding="14,10,6,10" Margin="0,0,0,8">
         <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
           <!-- Header -->
           <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
@@ -139,9 +201,8 @@
             <ToggleButton Grid.Column="1"
                           IsChecked="{Binding IsRawAutoSync, Mode=TwoWay}"
                           Content="Auto" Classes="auto-toggle"
-                          Opacity="{Binding IsAutoSyncAvailable, Converter={StaticResource BoolToOpacityConverter}}"
-                          IsHitTestVisible="{Binding IsAutoSyncAvailable}"
-                          ToolTip.Tip="Auto-compute sensitivity to match the Default profile. This row shows how well raw accel sensitivity alone offsets the environmental delta, before Win Speed or Registry Bridge contribute." />
+                          IsVisible="{Binding IsRawAutoAvailable}"
+                          ToolTip.Tip="Auto-compute sensitivity to match the Default profile. This row shows how well raw accel sensitivity alone offsets the environmental delta, before Win Speed or Registry Bridge contribute. Needs Auto-Match Environment enabled in Settings -- without an environment difference to compensate for, this would just always match the Default's Sensitivity exactly." />
             <TextBlock Grid.Column="2"
                        Classes="match-percent"
                        Text="{Binding RawAccelMatchAccuracy}"
@@ -151,8 +212,8 @@
       </Border>
 
             <!-- ═══ Card 3: Windows Pointer ═══ -->
-            <Border Grid.Row="1" Classes="card" Width="500" Padding="14,10">
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+            <Border Grid.Row="2" Classes="card" Width="500" Padding="14,10" Margin="0,0,0,8">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" SharedSizeGroup="LabelCol" />
             <ColumnDefinition Width="*" />
@@ -176,8 +237,7 @@
             <ToggleButton Grid.Column="1"
                           IsChecked="{Binding IsOSAutoSync, Mode=TwoWay}"
                           Content="Auto" Classes="auto-toggle"
-                          Opacity="{Binding IsAutoSyncAvailable, Converter={StaticResource BoolToOpacityConverter}}"
-                          IsHitTestVisible="{Binding IsAutoSyncAvailable}"
+                          IsVisible="{Binding IsAutoSyncAvailable}"
                           ToolTip.Tip="Auto-compute Win Pointer Speed to compensate environment delta. This row shows how close Raw Accel + Win Pointer Speed gets you, before the registry bridge." />
             <TextBlock Grid.Column="2"
                        Classes="match-percent"
@@ -186,11 +246,11 @@
           </Grid>
 
           <!-- EPP dropdown: Skip / Enable / Disable -->
-          <TextBlock Grid.Row="4" Grid.Column="0" Text="EPP:" VerticalAlignment="Center" Margin="0,0,10,6" />
-          <ComboBox Grid.Row="4" Grid.Column="1"
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="EPP:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <ComboBox Grid.Row="2" Grid.Column="1"
                     ItemsSource="{Binding EppOptions}"
                     SelectedItem="{Binding EppOverride, Mode=TwoWay}"
-                    MinWidth="125" HorizontalAlignment="Left" Margin="0,2,0,6"
+                    MinWidth="125" HorizontalAlignment="Left" Margin="0,0,0,6"
                     ToolTip.Tip="Enhance Pointer Precision override. Skip = leave system setting unchanged; Enable = force on; Disable = force off.">
             <ComboBox.ItemTemplate>
               <DataTemplate>
@@ -200,8 +260,14 @@
           </ComboBox>
 
           <!-- EPP Override (Registry Curve) row moved here -->
-          <TextBlock Grid.Row="5" Grid.Column="0" Text="EPP Override:" VerticalAlignment="Center" Margin="0,0,10,6" />
-          <Grid Grid.Row="5" Grid.Column="1" ColumnDefinitions="Auto,Auto,*" Margin="0,0,0,6" VerticalAlignment="Center">
+          <!-- Advanced option, hidden by default (Settings > Show EPP Override), see
+               AppSettings.ShowEppOverride. Label and content are separate sibling elements
+               sharing this Grid.Row (not one container), so both need the binding for the
+               row to actually collapse instead of leaving the label behind. -->
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="EPP Override:" VerticalAlignment="Center" Margin="0,0,10,6"
+                     IsVisible="{Binding IsEppOverrideVisible}" />
+          <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="Auto,Auto,*" Margin="0,0,0,6" VerticalAlignment="Center"
+                IsVisible="{Binding IsEppOverrideVisible}">
             <TextBox Grid.Column="0"
                      Text="{Binding RegistryCurveString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Width="180" Watermark="Skip"
@@ -213,8 +279,7 @@
             <ToggleButton Grid.Column="1"
                           IsChecked="{Binding IsRegAutoSync, Mode=TwoWay}"
                           Content="Auto" Classes="auto-toggle"
-                          Opacity="{Binding IsAutoSyncAvailable, Converter={StaticResource BoolToOpacityConverter}}"
-                          IsHitTestVisible="{Binding IsAutoSyncAvailable}"
+                          IsVisible="{Binding IsAutoSyncAvailable}"
                           ToolTip.Tip="Auto-compute registry curve to cover exact remainder gap. This row shows the final accuracy after all three compensation layers — 100.00% = exact match with the Default profile." />
             <TextBlock Grid.Column="2"
                        Classes="match-percent"
@@ -224,59 +289,7 @@
         </Grid>
       </Border>
 
-            <!-- ═══ Card 4: Auto-Match Environment ═══ -->
-            <Border Grid.Row="2" Classes="card" Width="500" Padding="14,10"
-              ToolTip.Tip="This app does not change your Windows resolution or scale. These values are only used for the auto-compensation buttons. The EPP override uses this Scale value at apply-time if set; if left blank it reads your current Windows scale live instead.">
-        <Grid RowDefinitions="Auto,Auto,Auto">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" SharedSizeGroup="LabelCol" />
-            <ColumnDefinition Width="*" />
-          </Grid.ColumnDefinitions>
-          <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
-                     Text="Auto-Match Environment" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
-
-          <TextBlock Grid.Row="1" Grid.Column="0" Text="Screen Width:" VerticalAlignment="Center" Margin="0,0,10,6" />
-          <!-- Width/alignment moved to this wrapper (off the ComboBox itself) so the overlaid
-               error icon's own HorizontalAlignment="Right" lines up with the ComboBox's actual
-               right edge, not the far edge of the wide "*" column it sits in. -->
-          <Grid Grid.Row="1" Grid.Column="1" Width="100" HorizontalAlignment="Left" Margin="0,0,0,6">
-            <ComboBox IsEditable="True"
-                      Classes="editable-centered"
-                      Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                      ItemsSource="{Binding ScreenWidthPresets}"
-                      PlaceholderText="Skip"
-                      ToolTip.Tip="Target screen width in pixels. Leave blank to skip. Common values: 1280, 1366, 1440, 1920, 2560, 3440, 3840, 5120, 7680." />
-            <!-- Extra right-margin (vs. the 6px on plain TextBoxes) so the icon clears the
-                 ComboBox's own built-in dropdown arrow instead of overlapping it. -->
-            <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
-                       IsVisible="{Binding !IsTargetScreenWidthInputValid}"
-                       ToolTip.Tip="Rejected — must be a positive number. TargetScreenWidth still holds its last valid value; this text isn't actually in effect." />
-          </Grid>
-
-          <TextBlock Grid.Row="2" Grid.Column="0" Text="Scale:" VerticalAlignment="Center" Margin="0,0,10,6" />
-          <Grid Grid.Row="2" Grid.Column="1" Width="100" HorizontalAlignment="Left" Margin="0,0,0,6">
-            <ComboBox IsEditable="True"
-                      Classes="editable-centered"
-                      Text="{Binding TargetLogicalDpiString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                      ItemsSource="{Binding DpiPresets}"
-                      PlaceholderText="Skip"
-                      ToolTip.Tip="Windows display scale (found in Display Settings). Type a custom DPI value or pick a preset. Leave blank to skip.">
-              <ComboBox.ItemTemplate>
-                <DataTemplate>
-                  <TextBlock Text="{Binding ., Converter={StaticResource DpiDisplayConverter}}" />
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-            <!-- Extra right-margin (vs. the 6px on plain TextBoxes) so the icon clears the
-                 ComboBox's own built-in dropdown arrow instead of overlapping it. -->
-            <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
-                       IsVisible="{Binding !IsTargetLogicalDpiInputValid}"
-                       ToolTip.Tip="Rejected — must be a positive number. TargetLogicalDpi still holds its last valid value; this text isn't actually in effect." />
-          </Grid>
-        </Grid>
-      </Border>
-
-            <!-- ═══ Card 5: Target Associations (hidden for Default profile) ═══ -->
+            <!-- ═══ Card 4: Target Associations (hidden for Default profile) ═══ -->
             <Border Grid.Row="3" Classes="card" Width="500" Padding="14,10" MinHeight="64">
         <StackPanel Spacing="6">
           <StackPanel Orientation="Horizontal" Spacing="10">

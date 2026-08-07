@@ -75,15 +75,18 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     // Three-way sync modes: Auto, Manual, Skip
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRawAutoSync))]
     private SyncMode rawSyncMode;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOSAutoSync))]
     private SyncMode oSSyncMode;
 
     [ObservableProperty]
     private int? winPointerSpeed;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRegAutoSync))]
     private SyncMode regSyncMode;
 
     [ObservableProperty]
@@ -126,6 +129,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsAutoSyncAvailable))]
+    [NotifyPropertyChangedFor(nameof(IsRawAutoAvailable))]
+    [NotifyPropertyChangedFor(nameof(IsRawAutoSync))]
+    [NotifyPropertyChangedFor(nameof(IsOSAutoSync))]
+    [NotifyPropertyChangedFor(nameof(IsRegAutoSync))]
     private bool isDefault;
 
     // ── Derived display ─────────────────────────────────────────────────────
@@ -163,9 +170,53 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// </summary>
     public bool IsAutoSyncAvailable => !IsDefault;
 
+    /// <summary>
+    /// Advanced-option visibility, gated behind Settings (hidden by default -- see
+    /// AppSettings.ShowAutoMatchEnvironment/ShowEppOverride). Read straight from
+    /// _profileService.Settings rather than cached locally, and refreshed via the
+    /// SettingsChanged subscription in the constructor, so toggling either Settings switch
+    /// updates an already-open Profile Editor immediately, no restart needed.
+    /// </summary>
+    public bool IsAutoMatchEnvironmentVisible => _profileService.Settings.ShowAutoMatchEnvironment;
+
+    /// <summary>Same idea as <see cref="IsAutoMatchEnvironmentVisible"/>, for the EPP Override row.</summary>
+    public bool IsEppOverrideVisible => _profileService.Settings.ShowEppOverride;
+
+    /// <summary>
+    /// Raw Accel's own Auto toggle specifically needs Auto-Match Environment too, unlike Windows
+    /// Pointer's and EPP's Auto toggles. Raw Accel's Auto solves "what Sensitivity cancels the
+    /// *environment* difference" -- with no environment configured anywhere (ShowAutoMatchEnvironment
+    /// off), that always trivializes to "= the Default's Sensitivity," a meaningless no-op to
+    /// present as a working feature. Windows Pointer's/EPP's Auto instead solve "what compensates
+    /// whatever Sensitivity turned out to be," which stays meaningful regardless of environment,
+    /// so they don't need this same gating. Drives IsVisible on the toggle itself only -- the
+    /// match% text next to it stays visible regardless (it's useful information about the
+    /// current value either way, auto-computed or manually typed). Using real IsVisible here
+    /// instead of the Opacity-based approach an earlier version used matters for exactly this:
+    /// the toggle's Auto-sized column properly collapses to nothing when hidden, so match% sits
+    /// directly next to the textbox instead of leaving a reserved-but-empty gap where the button
+    /// used to be.
+    /// </summary>
+    public bool IsRawAutoAvailable => IsAutoSyncAvailable && _profileService.Settings.ShowAutoMatchEnvironment;
+
+    /// <summary>
+    /// Reports Auto as engaged only when it's actually available too (ShowAutoMatchEnvironment
+    /// on), not just when RawSyncMode happens to be Auto. RawSyncMode itself is deliberately never
+    /// reset just because Environment gets hidden -- ApplyAutoRawSync's guard already stops it
+    /// from recomputing while unavailable, and doing it here too (in the getter, not the stored
+    /// value) means re-enabling the setting resumes Auto automatically, with nothing to
+    /// re-select. This one property already drives both the toggle's checked state and (via
+    /// !IsRawAutoSync in the View) the Sensitivity textbox's lock state, so folding the
+    /// availability check in here fixes both at once -- found live: without it, a profile with
+    /// Auto on when Environment got hidden left the textbox permanently locked with no way to
+    /// reach the one control (the now-dimmed, unclickable toggle) that could unlock it. Adding a
+    /// second parallel property for the textbox alone would have meant duplicating the same
+    /// change-notification wiring (OnRawSyncModeChanged, LoadProfile, SettingsChanged) a second
+    /// time for no real benefit.
+    /// </summary>
     public bool IsRawAutoSync
     {
-        get => !IsDefault && RawSyncMode == SyncMode.Auto;
+        get => !IsDefault && RawSyncMode == SyncMode.Auto && _profileService.Settings.ShowAutoMatchEnvironment;
         set
         {
             if (value)
@@ -231,6 +282,30 @@ public partial class ProfileEditorViewModel : ViewModelBase
         for (int i = 1; i <= 20; i++) WinPointerOptions.Add(i);
 
         _profileService.Profiles.CollectionChanged += OnProfilesCollectionChanged;
+        _profileService.SettingsChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(IsAutoMatchEnvironmentVisible));
+            OnPropertyChanged(nameof(IsEppOverrideVisible));
+            OnPropertyChanged(nameof(IsRawAutoAvailable));
+            OnPropertyChanged(nameof(IsRawAutoSync));
+
+            // The four notifications above only refresh what's already displayed -- they don't
+            // recompute anything. A profile whose Auto mode was guarded off while a section was
+            // hidden (ApplyAutoRawSync/ApplyAutoRegSync's guards) doesn't get its value filled
+            // back in just because the toggle reappears; nothing else was going to trigger that
+            // until the next unrelated edit or a profile switch. Found live: re-enabling
+            // Auto-Match Environment brought the toggle back checked, but left Sensitivity empty
+            // until switching profiles and back. Re-running the same cascade LoadProfile already
+            // uses (not a full reset -- this won't discard any other unsaved edit in progress)
+            // fixes it for both Raw Accel and EPP Override at once, since ApplyAutoOSSync already
+            // cascades through both.
+            if (_editingProfile != null)
+            {
+                ApplyAutoOSSync();
+                AutoPersist();
+                RecalculateMatchAccuracy();
+            }
+        };
 
         SaveCommand              = new AsyncRelayCommand(ExecuteSaveAsync);
         ApplyCommand             = new AsyncRelayCommand(ExecuteApplyAsync, () => _editingProfile != null);
@@ -287,9 +362,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         RefreshAssociationsSummary();
         OpenTargetManagerCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(IsRawAutoSync));
-        OnPropertyChanged(nameof(IsOSAutoSync));
-        OnPropertyChanged(nameof(IsRegAutoSync));
+        // IsRawAutoSync/IsOSAutoSync/IsRegAutoSync already got notified above, declaratively, by
+        // the RawSyncMode/OSSyncMode/RegSyncMode/IsDefault assignments themselves.
         ApplyAutoOSSync();         // re-run with correct IsDefault + all loaded values
         RecalculateMatchAccuracy();
     }
@@ -355,7 +429,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
         ApplyAutoOSSync();
         AutoPersist();
         RecalculateMatchAccuracy();
-        OnPropertyChanged(nameof(IsOSAutoSync));
+        // IsOSAutoSync already notified declaratively by the OSSyncMode assignment that triggered
+        // this callback in the first place -- see [NotifyPropertyChangedFor] on oSSyncMode.
     }
 
     partial void OnWinPointerSpeedChanged(int? oldValue, int? newValue)
@@ -394,7 +469,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
         ApplyAutoRegSync();
         AutoPersist();
         RecalculateMatchAccuracy();
-        OnPropertyChanged(nameof(IsRegAutoSync));
+        // IsRegAutoSync already notified declaratively by the RegSyncMode assignment that
+        // triggered this callback in the first place -- see [NotifyPropertyChangedFor] on
+        // regSyncMode.
     }
 
     partial void OnRegistryCurveOverrideChanged(double? oldValue, double? newValue)
@@ -523,7 +600,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
             SensitivityString = string.Empty;
             _isSyncing = false;
         }
-        OnPropertyChanged(nameof(IsRawAutoSync));
+        // IsRawAutoSync already notified declaratively by the RawSyncMode assignment that
+        // triggered this callback in the first place -- see [NotifyPropertyChangedFor] on
+        // rawSyncMode.
         ApplyAutoOSSync();
         AutoPersist();
         RecalculateMatchAccuracy();
@@ -541,10 +620,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
     {
         if (_isSyncing || _editingProfile == null) return;
 
-        OnPropertyChanged(nameof(IsAutoSyncAvailable));
-        OnPropertyChanged(nameof(IsRawAutoSync));
-        OnPropertyChanged(nameof(IsOSAutoSync));
-        OnPropertyChanged(nameof(IsRegAutoSync));
+        // IsAutoSyncAvailable/IsRawAutoAvailable/IsRawAutoSync/IsOSAutoSync/IsRegAutoSync are all
+        // declaratively wired to IsDefault via [NotifyPropertyChangedFor] on the isDefault field
+        // above -- no manual OnPropertyChanged calls needed here, the generated setter already
+        // raised them before this callback even started running.
 
         if (newValue)
         {
@@ -593,11 +672,27 @@ public partial class ProfileEditorViewModel : ViewModelBase
         return r == 0 ? 1.0 : r;
     }
 
-    /// <summary>TargetScreenWidth of the Default profile. Null if not declared.</summary>
-    private int? GetBaseScreenWidth() => GetBaseProfile()?.TargetScreenWidth;
+    /// <summary>TargetScreenWidth of the Default profile. Null if not declared, or if
+    /// Settings.ShowAutoMatchEnvironment is off (see ProfileService.GetEffectiveTargetScreenWidth
+    /// -- this delegation is what makes every Auto-sync function below treat a hidden Environment
+    /// section as though no profile had ever set these fields, without each function needing its
+    /// own check).</summary>
+    private int? GetBaseScreenWidth() => _profileService.GetEffectiveTargetScreenWidth(GetBaseProfile());
 
-    /// <summary>TargetLogicalDpi of the Default profile. Null if not declared (no DPI normalization).</summary>
-    private int? GetBaseLogicalDpi() => GetBaseProfile()?.TargetLogicalDpi;
+    /// <summary>Same idea as <see cref="GetBaseScreenWidth"/>, for TargetLogicalDpi.</summary>
+    private int? GetBaseLogicalDpi() => _profileService.GetEffectiveTargetLogicalDpi(GetBaseProfile());
+
+    /// <summary>
+    /// This profile's own TargetLogicalDpi, or null whenever Settings.ShowAutoMatchEnvironment is
+    /// off -- same idea as <see cref="GetBaseLogicalDpi"/>, but for the profile currently being
+    /// edited. TargetLogicalDpi here is this ViewModel's own live property (kept in sync with the
+    /// editing MouseProfile via LoadProfile/AutoPersist), not a MouseProfile object, so it can't
+    /// route through ProfileService's MouseProfile-parameterized helper directly.
+    /// </summary>
+    private int? EffectiveTargetLogicalDpi => _profileService.Settings.ShowAutoMatchEnvironment ? TargetLogicalDpi : null;
+
+    /// <summary>Same idea as <see cref="EffectiveTargetLogicalDpi"/>, for TargetScreenWidth.</summary>
+    private int? EffectiveTargetScreenWidth => _profileService.Settings.ShowAutoMatchEnvironment ? TargetScreenWidth : null;
 
 
     /// <summary>
@@ -607,17 +702,25 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// </summary>
     private void ApplyAutoRawSync()
     {
-        if (IsDefault || RawSyncMode != SyncMode.Auto) return;
+        // ShowAutoMatchEnvironment off means the Auto toggle is dimmed/unavailable in the GUI
+        // (see IsRawAutoAvailable) -- so don't keep silently recomputing and overwriting
+        // Sensitivity in the background while it's unavailable, same reasoning as
+        // ApplyAutoRegSync's guard. Without this, RawSyncMode staying Auto (nothing ever resets
+        // it) would both lock the Sensitivity textbox and immediately overwrite anything typed
+        // into it the next time this runs -- found live: exactly this happened, a profile got
+        // stuck with Sensitivity locked to the Default's value with no way to edit it short of
+        // re-enabling the setting.
+        if (IsDefault || RawSyncMode != SyncMode.Auto || !_profileService.Settings.ShowAutoMatchEnvironment) return;
 
         var sBase  = GetBaseSens();
         var bp     = GetBaseProfile();
 
         var useEpp     = EppOverride ?? bp?.UseEnhancePointerPrecision;
-        var logicalDpi = TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
+        var logicalDpi = EffectiveTargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
 
         double envScreenRatio = 1.0;
         var baseW   = GetBaseScreenWidth();
-        var activeW = TargetScreenWidth ?? baseW;
+        var activeW = EffectiveTargetScreenWidth ?? baseW;
         if (baseW.HasValue && activeW.HasValue && baseW.Value > 0)
             envScreenRatio = (double)baseW.Value / activeW.Value;
 
@@ -659,9 +762,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
             // as much of the cross-environment delta as the 20 discrete steps allow.
             // envCorr = dpi/96 × activeW/baseW — the inverse of what GetEffectiveSensitivity divides by.
             var activeEppRaw = EppOverride ?? bp?.UseEnhancePointerPrecision;
-            var activeDpiRaw = TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
+            var activeDpiRaw = EffectiveTargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
             var baseWRaw     = GetBaseScreenWidth();
-            var activeWRaw   = TargetScreenWidth ?? baseWRaw;
+            var activeWRaw   = EffectiveTargetScreenWidth ?? baseWRaw;
             double envCorrWin = 1.0;
             if (activeEppRaw != false) envCorrWin *= (double)activeDpiRaw / 96.0;
             if (baseWRaw.HasValue && activeWRaw.HasValue && baseWRaw.Value > 0)
@@ -692,7 +795,12 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// </summary>
     private void ApplyAutoRegSync()
     {
-        if (IsDefault) return;
+        // ShowEppOverride off means the field is hidden and functionally inert (see
+        // ProfileService.GetEffectiveRegistryCurveOverride's doc comment) -- so don't keep
+        // silently recomputing and overwriting RegistryCurveOverride in the background while
+        // it's hidden. The stored value just stays exactly as last set until the section is
+        // shown again; nothing reads it as meaningful in the meantime either way.
+        if (IsDefault || !_profileService.Settings.ShowEppOverride) return;
 
         if (RegSyncMode == SyncMode.Auto)
         {
@@ -709,9 +817,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
             var raw       = (sTarget * winMult) == 0 ? 1.0 : baseEff / (sTarget * winMult);
 
             // Env correction: scale regResult so that GetEffectiveSensitivity(active) == GetEffectiveSensitivity(base).
-            var activeDpi = TargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
+            var activeDpi = EffectiveTargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
             var baseW     = GetBaseScreenWidth();
-            var activeW   = TargetScreenWidth ?? baseW;
+            var activeW   = EffectiveTargetScreenWidth ?? baseW;
 
             var useEppReg = EppOverride ?? bp?.UseEnhancePointerPrecision;
             double envCorrection = (useEppReg != false) ? (double)activeDpi / 96.0 : 1.0;

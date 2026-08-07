@@ -45,6 +45,17 @@
       <TextBlock Text="Start Minimized to Tray" VerticalAlignment="Center" />
     </StackPanel>
 
+    <TextBlock Text="Advanced Profile Editor Options" FontWeight="SemiBold" Margin="0,4,0,0" />
+    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+      <ToggleSwitch IsChecked="{Binding ShowAutoMatchEnvironment, Mode=TwoWay}" />
+      <TextBlock Text="Show Auto-Match Environment" VerticalAlignment="Center" />
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+      <ToggleSwitch IsChecked="{Binding ShowEppOverride, Mode=TwoWay}" />
+      <TextBlock Text="Show EPP Override" VerticalAlignment="Center" />
+    </StackPanel>
+
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
       <Button Content="Cancel" Command="{Binding CancelCommand}" />
       <Button Content="Save" Command="{Binding SaveCommand}" IsDefault="True" />

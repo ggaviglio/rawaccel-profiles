@@ -32,6 +32,8 @@ public partial class SettingsViewModel : ViewModelBase
             RunAtStartup         = source.RunAtStartup,
             StartMinimized       = source.StartMinimized,
             CloseToTray          = source.CloseToTray,
+            ShowAutoMatchEnvironment = source.ShowAutoMatchEnvironment,
+            ShowEppOverride          = source.ShowEppOverride,
         };
 
         // Ensure RunAtStartup reflects actual system state (HKCU Run) rather than last-saved state.
@@ -147,6 +149,28 @@ public partial class SettingsViewModel : ViewModelBase
         }
     }
 
+    public bool ShowAutoMatchEnvironment
+    {
+        get => Settings.ShowAutoMatchEnvironment;
+        set
+        {
+            if (value == Settings.ShowAutoMatchEnvironment) return;
+            Settings.ShowAutoMatchEnvironment = value;
+            OnPropertyChanged(nameof(ShowAutoMatchEnvironment));
+        }
+    }
+
+    public bool ShowEppOverride
+    {
+        get => Settings.ShowEppOverride;
+        set
+        {
+            if (value == Settings.ShowEppOverride) return;
+            Settings.ShowEppOverride = value;
+            OnPropertyChanged(nameof(ShowEppOverride));
+        }
+    }
+
     public IAsyncRelayCommand BrowseRawAccelDirCommand  { get; }
     public IAsyncRelayCommand BrowseRawAccelSettingsDirCommand { get; }
     public IRelayCommand      SaveCommand               { get; }
@@ -161,6 +185,8 @@ public partial class SettingsViewModel : ViewModelBase
         target.RunAtStartup         = Settings.RunAtStartup;
         target.StartMinimized       = Settings.StartMinimized;
         target.CloseToTray          = Settings.CloseToTray;
+        target.ShowAutoMatchEnvironment = Settings.ShowAutoMatchEnvironment;
+        target.ShowEppOverride          = Settings.ShowEppOverride;
         _profileService.Save();
 
         if (OperatingSystem.IsWindows())
