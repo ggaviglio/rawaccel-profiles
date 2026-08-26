@@ -20,12 +20,26 @@ public partial class MainWindow : Window
         // either side breaks. The sidebar's action-bar buttons declare MinWidth="28" each
         // (a real usability floor, not a guess) via their style — measuring that here means
         // the window's minimum is derived from an actual constraint, not another guess.
+        //
+        // sidebarMinWidth itself is a one-time calculation (the action bar's own buttons never
+        // change at runtime, so this part can't go stale), but MainContentHost's natural width
+        // is NOT static -- it depends on the Profile Editor's card content (its CardWidth
+        // SharedSizeGroup, match-percent text that can grow on an overflow value, etc.). The old
+        // code read MainContentHost.Bounds.Width once, here in Opened, and never again; found
+        // live that this let MinWidth go stale while the action bar's own equal-* columns keep
+        // resizing to whatever's actually available right now, so the two sides could visibly
+        // drift out of sync after the content column's width changed post-launch. Subscribing to
+        // MainContentHost's Bounds instead keeps MinWidth continuously accurate. GetObservable
+        // emits the current value immediately on subscribe, so this also covers the initial
+        // assignment the old code did separately.
         Opened += (_, _) =>
         {
             ActionBar.Measure(Size.Infinity);
             var sidebarPadding = SidebarHost.Padding.Left + SidebarHost.Padding.Right;
             var sidebarMinWidth = ActionBar.DesiredSize.Width + sidebarPadding;
-            MinWidth = MainContentHost.Bounds.Width + sidebarMinWidth;
+
+            MainContentHost.GetObservable(Visual.BoundsProperty)
+                .Subscribe(new AnonymousObserver<Rect>(bounds => MinWidth = bounds.Width + sidebarMinWidth));
         };
     }
 
@@ -47,6 +61,18 @@ public partial class MainWindow : Window
         {
             tb.GetObservable(Visual.IsVisibleProperty).Subscribe(new IsVisibleObserver(tb));
         }
+    }
+
+    /// <summary>Generic <see cref="IObserver{T}"/> adapter so a plain lambda can be passed to
+    /// <c>Subscribe</c> -- Avalonia's own <see cref="IObservable{T}"/> here doesn't carry the
+    /// Rx.NET <c>Subscribe(Action&lt;T&gt;)</c> extension this codebase doesn't otherwise
+    /// reference, so this is the same pattern <see cref="IsVisibleObserver"/> below already
+    /// uses, just reusable for any value type instead of one written per call site.</summary>
+    private sealed class AnonymousObserver<T>(Action<T> onNext) : IObserver<T>
+    {
+        public void OnNext(T value) => onNext(value);
+        public void OnCompleted() { }
+        public void OnError(Exception error) { }
     }
 
     private sealed class IsVisibleObserver(TextBox tb) : IObserver<bool>
@@ -72,6 +98,13 @@ public partial class MainWindow : Window
                 profile.IsEditing = false;
                 _currentlyEditing = null;
                 e.Handled = true;
+
+                // Escape doesn't save: it's a cancel, though since the TwoWay binding already
+                // applied the partially-typed text live, there's no clean "revert" available
+                // either way -- matches this handler's pre-existing behavior, just now made
+                // explicit instead of accidentally not-saving via a missing call.
+                if (e.Key == Key.Enter && DataContext is ViewModels.MainWindowViewModel vm)
+                    vm.SaveProfiles();
             }
         }
     }
@@ -83,6 +116,9 @@ public partial class MainWindow : Window
             profile.IsEditing = false;
             if (_currentlyEditing == profile)
                 _currentlyEditing = null;
+
+            if (DataContext is ViewModels.MainWindowViewModel vm)
+                vm.SaveProfiles();
         }
     }
 }

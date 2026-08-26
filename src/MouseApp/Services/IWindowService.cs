@@ -25,5 +25,5 @@ public interface IWindowService
     /// view-model reflecting the currently-committed settings.
     /// The returned Task completes when the window is closed.
     /// </summary>
-    Task ShowSettingsAsync(ProfileService profileService, IStorageService storageService);
+    Task ShowSettingsAsync(ProfileService profileService, IStorageService storageService, IMouseService mouseService);
 }

@@ -46,14 +46,16 @@ public partial class WindowEntry : ObservableObject
     /// <summary>Window title with a fallback, shown as the secondary line in the Active Windows picker.</summary>
     public string TitleDisplay => string.IsNullOrEmpty(Title) ? "[No Title]" : Title;
 
-    /// <summary>Multi-line tooltip shown in the Active Windows picker.</summary>
+    /// <summary>Multi-line tooltip shown in the Active Windows picker. Includes Title -- found
+    /// live that with horizontal scrolling disabled on the list, a long title trims with no
+    /// other way to read the full text short of resizing the whole window.</summary>
     public string DetailTooltip
     {
         get
         {
             var path = string.IsNullOrEmpty(FullPath) ? "(path unavailable)" : FullPath;
             var cls  = string.IsNullOrEmpty(ClassName) ? "(unknown)" : ClassName;
-            return $"Path:  {path}\nClass: {cls}";
+            return $"Title: {TitleDisplay}\nPath:  {path}\nClass: {cls}";
         }
     }
 }
@@ -207,11 +209,17 @@ public partial class TargetManagerViewModel : ViewModelBase
         if (associations.Count == 0)
         {
             foreach (var e in ActiveWindows) e.IsMatched = false;
-            MatchSummary = "No associations defined — add targets first.";
+            MatchSummary = "0 matched";
             return;
         }
 
-        // Pass 1 — highlight entries already in the visible Active Windows list.
+        // Highlight entries in the visible Active Windows list. There used to be a second pass
+        // scanning ALL windows (including hidden/tray) and reporting them as part of "profile
+        // would activate on any of these" -- that claim was false for hidden windows:
+        // ProcessWatcher (the actual runtime matcher) only acts on EVENT_SYSTEM_FOREGROUND, a
+        // Win32 event that can't fire for a window that isn't visible, so a hidden/tray window
+        // can never actually trigger a profile switch. Removed rather than reworded, since a
+        // hidden-window match is never actionable information for this feature.
         int visibleMatches = 0;
         foreach (var entry in ActiveWindows)
         {
@@ -219,40 +227,10 @@ public partial class TargetManagerViewModel : ViewModelBase
             if (entry.IsMatched) visibleMatches++;
         }
 
-        // Pass 2 — scan ALL windows (including hidden/tray) to catch apps that matched
-        // ProcessWatcher but are currently hidden via ShowWindow(SW_HIDE).
-        // We don't add these to the display list; we just count them for the summary.
-        var visibleHwnds = new HashSet<IntPtr>(ActiveWindows.Select(e => e.Hwnd));
-        int hiddenMatches = 0;
-
-        WindowResolver.EnumWindows((hWnd, _) =>
-        {
-            if (visibleHwnds.Contains(hWnd)) return true; // already counted above
-
-            var className = WindowResolver.GetClassName(hWnd);
-            if (WindowResolver.SystemNoiseClasses.Contains(className)) return true;
-
-            var attrs = WindowResolver.Resolve(hWnd);
-            if (WindowResolver.MatchesAssociations(attrs, associations))
-                hiddenMatches++;
-
-            return true;
-        }, IntPtr.Zero);
-
-        int total = visibleMatches + hiddenMatches;
-        if (total == 0)
-        {
-            MatchSummary = "No open windows match the current associations.";
-        }
-        else
-        {
-            var parts = new List<string>();
-            if (visibleMatches > 0)
-                parts.Add($"{visibleMatches} visible");
-            if (hiddenMatches > 0)
-                parts.Add($"{hiddenMatches} hidden/tray");
-            MatchSummary = $"{string.Join(" + ", parts)} window(s) match — profile would activate on any of these.";
-        }
+        // Same "N matched" format whether or not there are associations to test (see the
+        // associations.Count == 0 branch above) -- one consistent short message instead of a
+        // separate long sentence for the no-associations case.
+        MatchSummary = $"{visibleMatches} matched";
     }
 
     /// <summary>Delegates to <see cref="WindowResolver.MatchesAssociations"/> using the entry's attributes.</summary>
@@ -313,10 +291,20 @@ public partial class TargetManagerViewModel : ViewModelBase
     private void ExecuteAddManual()
     {
         if (string.IsNullOrWhiteSpace(ManualValue)) return;
+
+        var value = ManualValue.Trim();
+        // ExeName matching is an exact string compare against WindowResolver's ExeName, which
+        // always ends in ".exe" (see that file) -- a manually-typed value missing it can never
+        // match anything, silently, with no feedback. There's no legitimate case where a bare
+        // name without ".exe" is what someone actually wants here, so fix it once at the source
+        // (here, when the value is first saved) rather than re-normalizing on every match check.
+        if (SelectedManualType == TargetMatchType.ExeName && !value.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            value += ".exe";
+
         AddAssociation(new TargetAssociation
         {
             MatchType = SelectedManualType,
-            Value     = ManualValue.Trim()
+            Value     = value
         });
         ManualValue = string.Empty;
     }

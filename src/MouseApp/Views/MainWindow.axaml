@@ -19,10 +19,6 @@
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
-    <Window.Resources>
-        <vm:BoolToFontWeightConverter x:Key="BoolToFontWeightConverter" />
-    </Window.Resources>
-
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
@@ -34,18 +30,24 @@
             <Grid RowDefinitions="*,Auto">
 
                 <!-- Row 0: All profiles -->
-                <Border Grid.Row="0"
-                        Classes="card"
-                        ClipToBounds="True"
-                        Padding="0">
-                    <Grid RowDefinitions="Auto,*">
-                        <TextBox Grid.Row="0"
-                                 Text="{Binding SearchText, Mode=TwoWay}"
-                                 Watermark="Search profiles..."
-                                 Margin="4,4,4,2"
-                                 CornerRadius="0" />
-                        <ListBox Grid.Row="1"
-                                 ItemsSource="{Binding FilteredProfiles}"
+                <!-- Search box and list are no longer inside one shared card: the list's own
+                     ListBox.Styles/ItemTemplate below is unchanged, only which Border wraps it
+                     changed. Sharing one card previously meant the ListBox's scrollbar only
+                     spanned its own row (below the search box), so it reached the card's
+                     bottom-right corner cleanly but stopped short of the top-right corner,
+                     found live via screenshot. Giving the list its own dedicated card fixes that,
+                     and the search box's own Margin gives it a real visible gap above the list
+                     instead of relying on the shared card's internal row spacing for separation. -->
+                <Grid Grid.Row="0" RowDefinitions="Auto,*">
+                    <TextBox Grid.Row="0"
+                             Text="{Binding SearchText, Mode=TwoWay}"
+                             Watermark="Search profiles..."
+                             Margin="0,0,0,8" />
+                    <Border Grid.Row="1"
+                            Classes="card"
+                            ClipToBounds="True"
+                            Padding="0">
+                        <ListBox ItemsSource="{Binding FilteredProfiles}"
                              SelectedItem="{Binding SelectedProfile, Mode=TwoWay}"
                              Background="Transparent"
                              BorderThickness="0"
@@ -60,22 +62,41 @@
                         </ListBox.Styles>
                         <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="models:MouseProfile">
-                            <Grid ColumnDefinitions="Auto,Auto,*" Margin="0">
+                            <Grid ColumnDefinitions="Auto,Auto,Auto,*" Margin="0">
                                 <!-- Active indicator dot -->
-                                <Ellipse Grid.Column="0"
+                                <CheckBox Grid.Column="0"
+                                          IsChecked="{Binding AutoSwitchEnabled, Mode=TwoWay}"
+                                          VerticalAlignment="Center"
+                                          ToolTip.Tip="Enable automatic profile switching for this profile"
+                                          Margin="0,0,6,0" />
+                                <!-- Active/Default markers grouped together after the checkbox
+                                     (the row's one interactive control), instead of split apart
+                                     by it, since both are passive status glyphs, so keeping them
+                                     adjacent reads as one cluster instead of alternating between
+                                     control and indicator. -->
+                                <Ellipse Grid.Column="1"
                                          Width="8" Height="8"
                                          Fill="{DynamicResource MatchIndicatorBrush}"
                                          Margin="0,0,6,0"
                                          VerticalAlignment="Center"
                                          IsVisible="{Binding IsActive}" />
-                                <CheckBox Grid.Column="1"
-                                          IsChecked="{Binding AutoSwitchEnabled, Mode=TwoWay}"
-                                          VerticalAlignment="Center"
-                                          ToolTip.Tip="Enable automatic profile switching for this profile"
-                                          Margin="0,0,6,0" />
+                                <!-- Default marker: placed before the name (not after) so it can't
+                                     get squeezed out by truncation the way a trailing marker
+                                     could. Replaces the old FontWeight-based marker, which was
+                                     confirmed too subtle in this font at this size (same issue
+                                     already found for the Settings window's section headers).
+                                     Reuses the same home glyph already on the "Set as Default"
+                                     button rather than a text badge, since a wider badge would
+                                     put more pressure on the name needing to truncate in this
+                                     already-tight row. -->
                                 <TextBlock Grid.Column="2"
+                                           Text="🏠"
+                                           Margin="0,0,6,0"
+                                           VerticalAlignment="Center"
+                                           IsVisible="{Binding IsDefault}"
+                                           ToolTip.Tip="Default profile" />
+                                <TextBlock Grid.Column="3"
                                            Text="{Binding ProfileName}"
-                                           FontWeight="{Binding IsDefault, Converter={StaticResource BoolToFontWeightConverter}}"
                                            VerticalAlignment="Center"
                                            HorizontalAlignment="Stretch"
                                            Background="Transparent"
@@ -83,7 +104,7 @@
                                            Padding="0,2"
                                            IsVisible="{Binding !IsEditing}"
                                            DoubleTapped="ProfileName_DoubleTapped" />
-                                <TextBox Grid.Column="2"
+                                <TextBox Grid.Column="3"
                                          Text="{Binding ProfileName, Mode=TwoWay}"
                                          IsVisible="{Binding IsEditing}"
                                          Padding="2,4"
@@ -96,8 +117,8 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
-                    </Grid>
-                </Border>
+                    </Border>
+                </Grid>
 
                 <!-- Row 1: Action bar -->
                 <Grid x:Name="ActionBar" Grid.Row="1" Margin="0,8,0,0"

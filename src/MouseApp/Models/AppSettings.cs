@@ -12,10 +12,9 @@ public class AppSettings
     /// </summary>
     public string RawAccelSettingsDirectory { get; set; } = string.Empty;
 
-    public bool EnableRegistryBridge { get; set; } = false;
     public bool RunAtStartup { get; set; } = false;
     public bool StartMinimized { get; set; } = false;
-    public bool CloseToTray { get; set; } = true;
+    public bool CloseToTray { get; set; } = false;
 
     /// <summary>
     /// Advanced Profile Editor options, hidden by default so a new user isn't confronted with

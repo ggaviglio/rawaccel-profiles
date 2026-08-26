@@ -21,6 +21,12 @@
     <Style Selector="ComboBox.editable-centered /template/ TextBox#PART_EditableTextBox">
       <Setter Property="Padding" Value="8,0,0,0" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
+      <!-- SimpleTheme's ComboBox only shows PlaceholderText when !IsEditable (confirmed against
+           Avalonia's source, v11.3.12); these two are IsEditable="True", so their own
+           PlaceholderText="Skip" never rendered. PART_EditableTextBox is a real TextBox, so its
+           native Watermark works normally; set directly here instead since both instances of
+           this class want the same literal text. -->
+      <Setter Property="Watermark" Value="Skip" />
     </Style>
     <!-- SimpleTheme's own ComboBox.xaml only styles BorderBrush for :pointerover, never :focus
          (confirmed against Avalonia's source, v11.3.12) — unlike TextBox.xaml, which styles both
@@ -43,8 +49,19 @@
       <Setter Property="Padding" Value="6,2" />
       <Setter Property="Margin" Value="6,0,0,0" />
     </Style>
+    <!-- Shared width for Raw Accel's Settings/Sensitivity boxes and Windows Pointer's EPP
+         Override box, so the three stay in sync as one group instead of three independently
+         hardcoded Width values that can silently drift apart. Two selectors (ComboBox + TextBox)
+         under one class name since Settings is a ComboBox and Sensitivity/EPP Override are
+         TextBoxes. -->
+    <Style Selector="ComboBox.value-box">
+      <Setter Property="Width" Value="166" />
+    </Style>
+    <Style Selector="TextBox.value-box">
+      <Setter Property="Width" Value="166" />
+    </Style>
     <Style Selector="TextBlock.match-percent">
-      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontSize" Value="10" />
       <Setter Property="TextTrimming" Value="CharacterEllipsis" />
       <Setter Property="Margin" Value="6,0,0,0" />
       <Setter Property="VerticalAlignment" Value="Center" />
@@ -71,6 +88,19 @@
       <Setter Property="HorizontalAlignment" Value="Right" />
       <Setter Property="IsHitTestVisible" Value="False" />
     </Style>
+    <!-- Local to this file, not App.axaml's shared "settings-section-header": that class is
+         also used by SettingsWindow, where headers aren't nested above anything smaller, so
+         bumping its size there wasn't warranted. "Settings"/"Context" here group cards whose own
+         headers are FontSize="14", so they need to read as one level above that, not smaller than
+         it (found live: with no FontSize set, they inherited the app's default text size, smaller
+         than the 14px card headers they're supposedly grouping). Margin left=14 also matches the
+         cards' own Padding="14,10", so this text starts at the same X as "Raw Accel"/"Windows
+         Pointer"/etc. instead of flush with the card's outer border. -->
+    <Style Selector="TextBlock.group-header">
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="14,0,0,8" />
+    </Style>
   </UserControl.Styles>
 
 
@@ -79,71 +109,50 @@
          slot, regardless of whether either side is actually visible. Card 3 (Auto-Match
          Environment) is hidden by default, and RowSpacing left both its gaps behind even while
          collapsed. Margin belongs to the element itself, so it disappears along with it. -->
-    <Grid RowDefinitions="Auto,Auto,Auto,*" Grid.IsSharedSizeScope="True">
+    <Grid RowDefinitions="Auto,*">
+      <!-- Cards 1-3 share a "CardWidth" column, in their own nested IsSharedSizeScope, so they
+           auto-size to the widest one (the Raw Accel card's icon row) instead of a hand-measured
+           hardcoded Width, the same SharedSizeGroup trick as "LabelCol" below, just for the
+           outer card width instead of the inner label column. Card 4 (Target Associations) is
+           deliberately NOT a member of this scope: its target-value text is arbitrary user data
+           (file paths, window titles) with no fixed upper bound, and joining the scope directly
+           creates a real feedback loop with its own Width binding below (confirmed live: it grew
+           on an overflow value and then never shrank back down after the value was fixed, because
+           it was both contributing to and consuming from the same shared measurement). Nesting it
+           has to be a genuinely separate Grid, not just an explicit Width on a same-scope cell,
+           since an explicit Width still counts as that cell's contribution to the shared max. -->
+      <!-- Two labeled groups within one shared-sizing scope: "Settings" (Raw Accel, Windows
+           Pointer, the only two cards that actually write real state to the system) and
+           "Context" (Auto-Match Environment, Target Associations, inputs the math/matching
+           consumes, not applied directly). Context sits second/last specifically so Target
+           Associations, the one card whose content can actually grow, ends up in the page's
+           growable bottom slot; the others have fixed-size content that wouldn't use extra room
+           anyway. Trade-off, accepted deliberately: this reverses the previous "cause before
+           effect" ordering (Auto-Match Environment's Screen Width/Scale used to read before the
+           Auto-sync buttons that consume them); the growable-space win was judged worth it. -->
+      <Grid Grid.Row="0" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Grid.IsSharedSizeScope="True">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="CardWidth" />
+        </Grid.ColumnDefinitions>
 
-            <!-- ═══ Card 1: Auto-Match Environment ═══ -->
-            <!-- Moved to the top: this card is the input the auto-compensation buttons below
-                 consume (its own tooltip already says as much), so reading top-to-bottom now
-                 goes cause before effect. Only affects the power users who've deliberately
-                 enabled it in Settings, since it's hidden by default, so nobody else's
-                 experience changes. Advanced option, hidden by default (Settings > Show
-                 Auto-Match Environment), see AppSettings.ShowAutoMatchEnvironment. One Border,
-                 whole card goes with it. -->
-            <Border Grid.Row="0" Classes="card" Width="500" Padding="14,10" Margin="0,0,0,8"
-              IsVisible="{Binding IsAutoMatchEnvironmentVisible}"
-              ToolTip.Tip="This app does not change your Windows resolution or scale. These values are only used for the auto-compensation buttons. The EPP override uses this Scale value at apply-time if set; if left blank it reads your current Windows scale live instead.">
+        <!-- Deliberately NOT height-matched to the sidebar's search box: tried, then reverted,
+             since matching the box height didn't make it look aligned, given "Search profiles..."
+             is a bordered box and this is bare text with nothing around it. Same class as the
+             "Context" header below (see Style Selector="TextBlock.group-header" above for why
+             it's its own class, not the shared "settings-section-header"). -->
+        <TextBlock Grid.Row="0" Classes="group-header" Text="Settings" />
+
+            <!-- ═══ Card 2: Raw Accel ═══ -->
+            <Border x:Name="RawAccelCard" Grid.Row="1" Classes="card" Padding="14,10" Margin="0,0,0,8">
+        <!-- Column 0 joins the "LabelCol" SharedSizeGroup (also used by Card 3, Windows Pointer,
+             directly below): unlike the earlier Screen Width case, these two cards are adjacent
+             and each has multiple real label rows, so syncing their label column widths creates
+             an actual visible aligned column across both cards instead of accidental coupling. -->
         <Grid RowDefinitions="Auto,Auto,Auto">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" SharedSizeGroup="LabelCol" />
             <ColumnDefinition Width="*" />
           </Grid.ColumnDefinitions>
-          <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
-                     Text="Auto-Match Environment" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
-
-          <TextBlock Grid.Row="1" Grid.Column="0" Text="Screen Width:" VerticalAlignment="Center" Margin="0,0,10,6" />
-          <!-- Width/alignment moved to this wrapper (off the ComboBox itself) so the overlaid
-               error icon's own HorizontalAlignment="Right" lines up with the ComboBox's actual
-               right edge, not the far edge of the wide "*" column it sits in. -->
-          <Grid Grid.Row="1" Grid.Column="1" Width="100" HorizontalAlignment="Left" Margin="0,0,0,6">
-            <ComboBox IsEditable="True"
-                      Classes="editable-centered"
-                      Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                      ItemsSource="{Binding ScreenWidthPresets}"
-                      PlaceholderText="Skip"
-                      ToolTip.Tip="Target screen width in pixels. Leave blank to skip. Common values: 1280, 1366, 1440, 1920, 2560, 3440, 3840, 5120, 7680." />
-            <!-- Extra right-margin (vs. the 6px on plain TextBoxes) so the icon clears the
-                 ComboBox's own built-in dropdown arrow instead of overlapping it. -->
-            <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
-                       IsVisible="{Binding !IsTargetScreenWidthInputValid}"
-                       ToolTip.Tip="Rejected — must be a positive number. TargetScreenWidth still holds its last valid value; this text isn't actually in effect." />
-          </Grid>
-
-          <TextBlock Grid.Row="2" Grid.Column="0" Text="Scale:" VerticalAlignment="Center" Margin="0,0,10,6" />
-          <Grid Grid.Row="2" Grid.Column="1" Width="100" HorizontalAlignment="Left" Margin="0,0,0,6">
-            <ComboBox IsEditable="True"
-                      Classes="editable-centered"
-                      Text="{Binding TargetLogicalDpiString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                      ItemsSource="{Binding DpiPresets}"
-                      PlaceholderText="Skip"
-                      ToolTip.Tip="Windows display scale (found in Display Settings). Type a custom DPI value or pick a preset. Leave blank to skip.">
-              <ComboBox.ItemTemplate>
-                <DataTemplate>
-                  <TextBlock Text="{Binding ., Converter={StaticResource DpiDisplayConverter}}" />
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-            <!-- Extra right-margin (vs. the 6px on plain TextBoxes) so the icon clears the
-                 ComboBox's own built-in dropdown arrow instead of overlapping it. -->
-            <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
-                       IsVisible="{Binding !IsTargetLogicalDpiInputValid}"
-                       ToolTip.Tip="Rejected — must be a positive number. TargetLogicalDpi still holds its last valid value; this text isn't actually in effect." />
-          </Grid>
-        </Grid>
-      </Border>
-
-            <!-- ═══ Card 2: Raw Accel ═══ -->
-            <Border Grid.Row="1" Classes="card" Width="500" Padding="14,10,6,10" Margin="0,0,0,8">
-        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
           <!-- Header -->
           <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
                      Text="Raw Accel" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
@@ -151,7 +160,7 @@
           <!-- Settings row -->
           <TextBlock Grid.Row="1" Grid.Column="0" Text="Settings:" VerticalAlignment="Center" Margin="0,0,10,6" />
           <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
-            <ComboBox ItemsSource="{Binding RawAccelSettingsFiles}" SelectedItem="{Binding SelectedRawAccelSettingsFile, Mode=TwoWay}" Width="210">
+            <ComboBox Classes="value-box" ItemsSource="{Binding RawAccelSettingsFiles}" SelectedItem="{Binding SelectedRawAccelSettingsFile, Mode=TwoWay}">
               <ComboBox.ItemTemplate>
                 <DataTemplate>
                   <TextBlock Text="{Binding ., TargetNullValue=(Skip)}" />
@@ -165,7 +174,7 @@
             </Button>
             <Button Classes="icon-btn"
                     Command="{Binding ImportCurrentSettingsCommand}"
-                    ToolTip.Tip="Import current Raw Accel settings.json into the settings library">
+                    ToolTip.Tip="Import current Raw Accel settings.json as a new preset">
               <TextBlock Text="📥" FontSize="14" TextAlignment="Center" VerticalAlignment="Center" />
             </Button>
             <Button Classes="icon-btn"
@@ -180,7 +189,7 @@
             </Button>
             <Button Classes="icon-btn"
                     Command="{Binding DeleteRawAccelSettingsCommand}"
-                    ToolTip.Tip="Delete selected settings file from library">
+                    ToolTip.Tip="Delete selected preset">
               <TextBlock Text="🗑" FontSize="14" TextAlignment="Center" VerticalAlignment="Center" />
             </Button>
           </StackPanel>
@@ -190,9 +199,9 @@
           <TextBlock Grid.Row="2" Grid.Column="0" Text="Sensitivity:" VerticalAlignment="Center" Margin="0,0,10,6" />
           <!-- Sensitivity row with Auto and Match % right-aligned -->
           <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="Auto,Auto,*" Margin="0,0,0,6" VerticalAlignment="Center">
-            <TextBox Grid.Column="0"
+            <TextBox Grid.Column="0" Classes="value-box"
                      Text="{Binding SensitivityString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     Width="210" Watermark="Skip"
+                     Watermark="Skip"
                      IsEnabled="{Binding !IsRawAutoSync}"
                      ToolTip.Tip="Raw Accel sensitivity multiplier. No enforced maximum — Raw Accel's own source places no bound on this field beyond standard double-precision range. Leave blank to skip." />
             <TextBlock Grid.Column="0" Classes="input-error-icon" Margin="0,0,6,0"
@@ -212,7 +221,7 @@
       </Border>
 
             <!-- ═══ Card 3: Windows Pointer ═══ -->
-            <Border Grid.Row="2" Classes="card" Width="500" Padding="14,10" Margin="0,0,0,8">
+            <Border Grid.Row="2" Classes="card" Padding="14,10" Margin="0,0,0,8">
         <Grid RowDefinitions="Auto,Auto,Auto,Auto">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" SharedSizeGroup="LabelCol" />
@@ -268,9 +277,9 @@
                      IsVisible="{Binding IsEppOverrideVisible}" />
           <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="Auto,Auto,*" Margin="0,0,0,6" VerticalAlignment="Center"
                 IsVisible="{Binding IsEppOverrideVisible}">
-            <TextBox Grid.Column="0"
+            <TextBox Grid.Column="0" Classes="value-box"
                      Text="{Binding RegistryCurveString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     Width="180" Watermark="Skip"
+                     Watermark="Skip"
                      IsEnabled="{Binding !IsRegAutoSync}"
                      ToolTip.Tip="Registry curve multiplier for EPP (SmoothMouseCurve). Practical max is roughly 10^11-10^13 (varies with DPI/pointer speed) before internal registry storage overflows. Leave blank to skip." />
             <TextBlock Grid.Column="0" Classes="input-error-icon" Margin="0,0,6,0"
@@ -289,8 +298,82 @@
         </Grid>
       </Border>
 
+        <!-- Same class as "Settings" above, no per-instance Margin override; the
+             Windows Pointer -> Context gap is the same as every other card-to-card gap on this
+             page (from Windows Pointer's own trailing margin), not a distinct "bigger" section
+             break value. -->
+        <TextBlock Grid.Row="3" Classes="group-header" Text="Context" />
+
+            <!-- ═══ Card 1: Auto-Match Environment ═══ -->
+            <!-- Moved down into the "Context" group (see this scope's own comment above): only
+                 affects the power users who've deliberately enabled it in Settings, since it's
+                 hidden by default, so nobody else's experience changes. Advanced option, hidden
+                 by default (Settings > Show Auto-Match Environment), see
+                 AppSettings.ShowAutoMatchEnvironment. One Border, whole card goes with it. -->
+            <Border Grid.Row="4" Classes="card" Padding="14,10" Margin="0,0,0,8"
+              IsVisible="{Binding IsAutoMatchEnvironmentVisible}"
+              ToolTip.Tip="This app does not change your Windows resolution or scale. These values are only used for the auto-compensation buttons. The EPP override uses this Scale value at apply-time if set; if left blank it reads your current Windows scale live instead.">
+        <Grid RowDefinitions="Auto,Auto">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" SharedSizeGroup="LabelCol" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
+                     Text="Auto-Match Environment" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+          <!-- Screen Width now joins the shared "LabelCol" group (see Card 2/Card 3 above) via
+               plain Grid.Column="0" placement, matching every other row in this file, so it
+               lines up with "Settings:"/"Sensitivity:"/"Pointer Speed:" down the page. Scale
+               stays paired with its own box in Grid.Column="1", right-aligned to the card's
+               right edge via an inner Auto,*,Auto grid, the same trick this file uses to
+               right-align the "Auto"/match-percent badges on the Sensitivity and Pointer Speed
+               rows. -->
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Screen Width:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
+            <Grid Grid.Column="0" Width="125" HorizontalAlignment="Left">
+              <ComboBox IsEditable="True"
+                        Classes="editable-centered"
+                        Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        ItemsSource="{Binding ScreenWidthPresets}"
+                        ToolTip.Tip="Target screen width in pixels. Leave blank to skip. Common values: 1280, 1366, 1440, 1920, 2560, 3440, 3840, 5120, 7680." />
+              <!-- Extra right-margin (vs. the 6px on plain TextBoxes) so the icon clears the
+                   ComboBox's own built-in dropdown arrow instead of overlapping it. -->
+              <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
+                         IsVisible="{Binding !IsTargetScreenWidthInputValid}"
+                         ToolTip.Tip="Rejected — must be a positive number. TargetScreenWidth still holds its last valid value; this text isn't actually in effect." />
+            </Grid>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="Scale:" VerticalAlignment="Center" />
+              <Grid Width="125" HorizontalAlignment="Left">
+                <ComboBox IsEditable="True"
+                          Classes="editable-centered"
+                          Text="{Binding TargetLogicalDpiString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                          ItemsSource="{Binding DpiPresets}"
+                          ToolTip.Tip="Windows display scale (found in Display Settings). Type a custom DPI value or pick a preset. Leave blank to skip.">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding ., Converter={StaticResource DpiDisplayConverter}}" />
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+                <!-- Extra right-margin (vs. the 6px on plain TextBoxes) so the icon clears the
+                     ComboBox's own built-in dropdown arrow instead of overlapping it. -->
+                <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
+                           IsVisible="{Binding !IsTargetLogicalDpiInputValid}"
+                           ToolTip.Tip="Rejected — must be a positive number. TargetLogicalDpi still holds its last valid value; this text isn't actually in effect." />
+              </Grid>
+            </StackPanel>
+          </Grid>
+        </Grid>
+      </Border>
+      </Grid>
+
             <!-- ═══ Card 4: Target Associations (hidden for Default profile) ═══ -->
-            <Border Grid.Row="3" Classes="card" Width="500" Padding="14,10" MinHeight="64">
+            <!-- Width is bound to Card 2 (Raw Accel)'s actual rendered width. Card 4 is a sibling
+                 of the "CardWidth" scope above, not a member of it (see that scope's comment for
+                 why membership caused a stuck-wide bug), so this binding can only ever consume the
+                 already-resolved size, never contribute to or inflate it. -->
+            <Border Grid.Row="1" Classes="card" Width="{Binding #RawAccelCard.Bounds.Width}" Padding="14,10" MinHeight="64">
         <StackPanel Spacing="6">
           <StackPanel Orientation="Horizontal" Spacing="10">
             <TextBlock Text="Target Associations"

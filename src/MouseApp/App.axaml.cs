@@ -57,6 +57,9 @@ public partial class App : Application
             // Give the ProfileEditor direct access to the hardware service for manual Apply.
             profileEditorVm.WireMouseService(mouseService);
 
+            // Give Settings access too, for the "revert to Windows default curve" action.
+            mainVm.WireMouseService(mouseService);
+
             // Start the foreground-window watcher.  The same profileService instance is used
             // (singleton by construction) so profile collections are always in sync.
             _processWatcher = new ProcessWatcher(profileService, profile =>
@@ -88,13 +91,21 @@ public partial class App : Application
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
             var mainWindow = new Views.MainWindow { DataContext = mainVm };
-            desktop.MainWindow = mainWindow;
 
             TrayIcon? tray = null;
             bool shuttingDown = false;
 
+            // desktop.MainWindow is deliberately NOT assigned here. Avalonia's own
+            // ClassicDesktopStyleApplicationLifetime.StartCore() unconditionally calls
+            // .Show() on whatever is assigned to desktop.MainWindow once Start() runs
+            // (after this method returns) -- independent of any show/hide decision this
+            // app makes. Assigning it eagerly silently defeats StartMinimized regardless
+            // of what the check below decides. It's assigned lazily below, only at the
+            // point the window is actually meant to become visible.
             void ShowMainWindow()
             {
+                if (desktop.MainWindow != mainWindow)
+                    desktop.MainWindow = mainWindow;
                 mainWindow.Show();
                 mainWindow.Activate();
                 if (mainWindow.WindowState == WindowState.Minimized)

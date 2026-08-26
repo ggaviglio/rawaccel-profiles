@@ -34,5 +34,22 @@
             <Setter Property="Height" Value="28" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
+
+        <!-- Consistent width for dialog action buttons (Save/Cancel/OK), so they don't
+             auto-size to their own label length: a 2-letter "OK" next to a 6-letter
+             "Cancel" looked mismatched. 75px matches the standard Windows dialog button width. -->
+        <Style Selector="Button.dialog-action">
+            <Setter Property="MinWidth" Value="75" />
+        </Style>
+
+        <!-- Shared look for every settings-window section header (e.g. "App Behavior",
+             "Advanced Profile Editor Options"). The surrounding gap between sections is
+             controlled by the section container's own Spacing, not by margin on the header
+             itself (a small header-only margin bump was tried and didn't read as a real
+             section break next to bulky controls like ToggleSwitch; see CLAUDE.md's styling
+             note). -->
+        <Style Selector="TextBlock.settings-section-header">
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
     </Application.Styles>
 </Application>

@@ -13,14 +13,16 @@ public partial class SettingsViewModel : ViewModelBase
 {
     private readonly ProfileService  _profileService;
     private readonly IStorageService _storageService;
+    private readonly IMouseService   _mouseService;
 
     /// <summary>Raised after Save or Cancel so the window can close itself.</summary>
     public event Action? RequestClose;
 
-    public SettingsViewModel(ProfileService profileService, IStorageService storageService)
+    public SettingsViewModel(ProfileService profileService, IStorageService storageService, IMouseService mouseService)
     {
         _profileService = profileService ?? throw new ArgumentNullException(nameof(profileService));
         _storageService = storageService ?? throw new ArgumentNullException(nameof(storageService));
+        _mouseService   = mouseService ?? throw new ArgumentNullException(nameof(mouseService));
 
         // Stage a copy so Cancel can discard edits without ever touching the committed settings.
         var source = _profileService.Settings ?? new AppSettings();
@@ -28,7 +30,6 @@ public partial class SettingsViewModel : ViewModelBase
         {
             RawAccelDirectory    = source.RawAccelDirectory,
             RawAccelSettingsDirectory   = source.RawAccelSettingsDirectory,
-            EnableRegistryBridge = source.EnableRegistryBridge,
             RunAtStartup         = source.RunAtStartup,
             StartMinimized       = source.StartMinimized,
             CloseToTray          = source.CloseToTray,
@@ -65,6 +66,7 @@ public partial class SettingsViewModel : ViewModelBase
 
         SaveCommand   = new RelayCommand(ExecuteSave);
         CancelCommand = new RelayCommand(() => RequestClose?.Invoke());
+        RevertCurveCommand = new AsyncRelayCommand(ExecuteRevertCurveAsync);
 
         BrowseRawAccelDirCommand = new AsyncRelayCommand(async () =>
         {
@@ -102,17 +104,6 @@ public partial class SettingsViewModel : ViewModelBase
             if (value == Settings.RawAccelSettingsDirectory) return;
             Settings.RawAccelSettingsDirectory = value ?? string.Empty;
             OnPropertyChanged(nameof(RawAccelSettingsDirectory));
-        }
-    }
-
-    public bool EnableRegistryBridge
-    {
-        get => Settings.EnableRegistryBridge;
-        set
-        {
-            if (value == Settings.EnableRegistryBridge) return;
-            Settings.EnableRegistryBridge = value;
-            OnPropertyChanged(nameof(EnableRegistryBridge));
         }
     }
 
@@ -175,13 +166,30 @@ public partial class SettingsViewModel : ViewModelBase
     public IAsyncRelayCommand BrowseRawAccelSettingsDirCommand { get; }
     public IRelayCommand      SaveCommand               { get; }
     public IRelayCommand      CancelCommand             { get; }
+    public IAsyncRelayCommand RevertCurveCommand        { get; }
+
+    private string? _revertCurveStatusMessage;
+
+    /// <summary>Transient confirmation text shown after Reset Mouse Curve; auto-clears itself.</summary>
+    public string? RevertCurveStatusMessage
+    {
+        get => _revertCurveStatusMessage;
+        private set
+        {
+            if (value == _revertCurveStatusMessage) return;
+            _revertCurveStatusMessage = value;
+            OnPropertyChanged(nameof(RevertCurveStatusMessage));
+            OnPropertyChanged(nameof(IsRevertCurveStatusVisible));
+        }
+    }
+
+    public bool IsRevertCurveStatusVisible => !string.IsNullOrEmpty(_revertCurveStatusMessage);
 
     private void ExecuteSave()
     {
         var target = _profileService.Settings;
         target.RawAccelDirectory    = Settings.RawAccelDirectory;
         target.RawAccelSettingsDirectory   = Settings.RawAccelSettingsDirectory;
-        target.EnableRegistryBridge = Settings.EnableRegistryBridge;
         target.RunAtStartup         = Settings.RunAtStartup;
         target.StartMinimized       = Settings.StartMinimized;
         target.CloseToTray          = Settings.CloseToTray;
@@ -195,6 +203,47 @@ public partial class SettingsViewModel : ViewModelBase
         }
 
         RequestClose?.Invoke();
+    }
+
+    /// <summary>
+    /// Restores Windows' own stock EPP curve, undoing whatever this app has written to
+    /// SmoothMouseXCurve/YCurve. Immediate, unconfirmed hardware action -- same pattern as
+    /// "Apply Now" in the Profile Editor -- not staged behind Save/Cancel like the rest of this
+    /// window, since it isn't a persisted preference. Must also clear MouseService's cached
+    /// last-applied state, or the next profile reselect could be wrongly skipped as a no-op by
+    /// the dedup check and leave the reverted curve stuck in place -- see CLAUDE.md's
+    /// MouseService dedup-check note for the same class of bug.
+    /// Runs on a background thread via Task.Run: RevertToWindowsDefaultCurve ends in the same
+    /// SystemParametersInfo(..., SPIF_SENDCHANGE) broadcast ApplyRegistryBridge uses, which
+    /// blocks until every top-level window on the system has handled WM_SETTINGCHANGE -- doing
+    /// that directly on the UI thread freezes the window (the button stays visually pressed)
+    /// until it returns. ApplyProfileAsync already avoids this via ConfigureAwait(false) on an
+    /// earlier await; this command has no such earlier await, so it needs Task.Run instead.
+    /// No ConfigureAwait(false) on the Task.Run await itself, though -- the status-message
+    /// updates below need to run back on the UI thread to be safely observed by bindings.
+    /// </summary>
+    private async Task ExecuteRevertCurveAsync()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        bool success = await Task.Run(() =>
+        {
+            try
+            {
+                MouseRegistryBridge.RevertToWindowsDefaultCurve();
+                _mouseService.InvalidateAppliedState();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        });
+
+        RevertCurveStatusMessage = success ? "Reverted to Windows default." : "Reset failed.";
+        await Task.Delay(2500);
+        RevertCurveStatusMessage = null;
     }
 
     private void ApplyRunAtStartup(bool enable)

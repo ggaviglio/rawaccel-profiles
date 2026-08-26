@@ -16,6 +16,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly IWindowService? _windowService;
     private readonly IStorageService? _storageService;
 
+    /// <summary>Injected after construction via <see cref="WireMouseService"/>. Null until wired.</summary>
+    private IMouseService? _mouseService;
+
     /// <summary>The Profile Editor, always shown in the main content area.</summary>
     public ProfileEditorViewModel? ProfileEditor => _profileEditor;
 
@@ -115,8 +118,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
         OpenSettingsCommand = new AsyncRelayCommand(async () =>
         {
-            if (_windowService != null && _profileService != null && _storageService != null)
-                await _windowService.ShowSettingsAsync(_profileService, _storageService);
+            if (_windowService != null && _profileService != null && _storageService != null && _mouseService != null)
+                await _windowService.ShowSettingsAsync(_profileService, _storageService, _mouseService);
         });
         AddProfileCommand = new RelayCommand(ExecuteAddProfile);
         DeleteProfileCommand = new RelayCommand(ExecuteDeleteProfile, CanDeleteProfile);
@@ -149,6 +152,11 @@ public partial class MainWindowViewModel : ViewModelBase
             Dispatcher.UIThread.Post(() => ActiveProfile = profile);
     }
 
+    public void WireMouseService(IMouseService mouseService)
+    {
+        _mouseService = mouseService ?? throw new ArgumentNullException(nameof(mouseService));
+    }
+
     /// <summary>
     /// Called by <see cref="ProcessWatcher"/> (background thread) when a process match
     /// auto-activates a profile.  Marshals back to the UI thread before updating the
@@ -169,6 +177,22 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (_profileEditor?.ApplyCommand is { } cmd && cmd.CanExecute(null))
             cmd.Execute(null);
+    }
+
+    /// <summary>
+    /// Persists <see cref="Profiles"/> to disk. Called from <c>MainWindow.axaml.cs</c>'s inline
+    /// rename handlers (<c>ProfileNameEdit_KeyDown</c>/<c>ProfileNameEdit_LostFocus</c>) after a
+    /// rename commits -- found live: those handlers only ever flipped <c>IsEditing</c> back off,
+    /// never actually saved, so a renamed profile updated in memory (the TwoWay binding already
+    /// applied it) but silently reverted the next time anything else triggered a save from
+    /// scratch, or was just never written to profiles.json at all. Public specifically so the
+    /// View's code-behind has something to call without reaching into the private
+    /// <see cref="_profileService"/> field directly.
+    /// </summary>
+    public async void SaveProfiles()
+    {
+        if (_profileService == null) return;
+        await _profileService.SaveAsync().ConfigureAwait(false);
     }
 
     private bool CanSetAsDefault() =>

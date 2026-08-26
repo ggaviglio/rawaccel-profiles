@@ -138,6 +138,72 @@ public static class MouseRegistryBridge
             throw new System.ComponentModel.Win32Exception(err, "SystemParametersInfo(SPI_SETMOUSE) failed");
     }
 
+    // Windows' own stock EPP curve, HKCU\Control Panel\Mouse\SmoothMouseXCurve/YCurve
+    // (X: 00,00,00,00,00,00,00,00,15,6e,00,00,00,00,00,00,00,40,01,00,00,00,00,00,29,dc,03,00,00,00,00,00,00,00,28,00,00,00,00,00
+    //  Y: 00,00,00,00,00,00,00,00,fd,11,01,00,00,00,00,00,00,24,04,00,00,00,00,00,00,fc,12,00,00,00,00,00,00,c0,bb,01,00,00,00,00).
+    // Community-documented and confirmed byte-for-byte identical to a live read of
+    // HKEY_USERS\.DEFAULT\Control Panel\Mouse during development. Used only as a fallback --
+    // RevertToWindowsDefaultCurve() below reads the live .DEFAULT values first, since that
+    // reflects this machine's actual shipped default rather than a value baked into the app.
+    private static readonly byte[] DefaultXCurveFallback =
+    {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x15, 0x6e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x40, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x29, 0xdc, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x00, 0x00,
+    };
+
+    private static readonly byte[] DefaultYCurveFallback =
+    {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xfd, 0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x24, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0xfc, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0xc0, 0xbb, 0x01, 0x00, 0x00, 0x00, 0x00,
+    };
+
+    /// <summary>
+    /// Restores Windows' own stock EPP acceleration curve, undoing whatever
+    /// <see cref="ApplyRegistryBridge"/> has written. Only the curve is touched -- EPP on/off
+    /// state (MouseSpeed/thresholds) is left exactly as the user has it.
+    /// </summary>
+    public static void RevertToWindowsDefaultCurve()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        byte[]? xBytes;
+        byte[]? yBytes;
+        using (var defaultKey = Registry.Users.OpenSubKey(@".DEFAULT\Control Panel\Mouse", writable: false))
+        {
+            xBytes = defaultKey?.GetValue("SmoothMouseXCurve") as byte[];
+            yBytes = defaultKey?.GetValue("SmoothMouseYCurve") as byte[];
+        }
+        xBytes ??= DefaultXCurveFallback;
+        yBytes ??= DefaultYCurveFallback;
+
+        using var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Mouse", writable: true)
+                       ?? Registry.CurrentUser.CreateSubKey(@"Control Panel\Mouse", writable: true);
+
+        if (key == null)
+            throw new InvalidOperationException("Unable to open or create registry key HKCU\\Control Panel\\Mouse");
+
+        key.SetValue("SmoothMouseXCurve", xBytes, RegistryValueKind.Binary);
+        key.SetValue("SmoothMouseYCurve", yBytes, RegistryValueKind.Binary);
+        Debug.WriteLine("[RegistryBridge] Reverted to Windows default curve.");
+
+        // Broadcast to make Windows re-read the curves live -- same tail as ApplyRegistryBridge.
+        // Read current EPP state so this call doesn't accidentally toggle it.
+        bool currentEpp = ReadEnhancePointerPrecision() ?? false;
+        int accel = currentEpp ? 1 : 0;
+        bool ok = SystemParametersInfo(SPI_SETMOUSE, 0, new int[] { 6, 10, accel }, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+        int err = Marshal.GetLastWin32Error();
+        Debug.WriteLine($"[RegistryBridge] SPI_SETMOUSE(accel={accel}) result={ok} Win32Error={err}");
+        if (!ok)
+            throw new System.ComponentModel.Win32Exception(err, "SystemParametersInfo(SPI_SETMOUSE) failed");
+    }
+
     /// <summary>
     /// Rounds a value to its 16.16 fixed-point long representation, matching exactly what gets
     /// written to the registry for a single curve node. Never lets a genuinely nonzero value

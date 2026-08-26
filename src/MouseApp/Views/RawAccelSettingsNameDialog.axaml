@@ -12,8 +12,8 @@
     <TextBox Name="NameTextBox"
              Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button Content="Cancel" Command="{Binding CancelCommand}" />
-      <Button Content="OK" Command="{Binding OkCommand}" IsDefault="True" />
+      <Button Classes="dialog-action" Content="Cancel" Command="{Binding CancelCommand}" />
+      <Button Classes="dialog-action" Content="Save" Command="{Binding OkCommand}" IsDefault="True" />
     </StackPanel>
   </StackPanel>
 </Window>

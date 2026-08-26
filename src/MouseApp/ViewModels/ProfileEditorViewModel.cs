@@ -672,6 +672,12 @@ public partial class ProfileEditorViewModel : ViewModelBase
         return r == 0 ? 1.0 : r;
     }
 
+    /// <summary>Same resolution as <see cref="ProfileService.ResolveEpp"/>, for this ViewModel's
+    /// own live-edit state (<see cref="EppOverride"/>) instead of a stored MouseProfile -- this
+    /// profile's own value, else the Default's, else false (EPP off) if neither specifies one.
+    /// See ProfileService.ResolveEpp's doc comment for why false is the correct final tier.</summary>
+    private bool GetEffectiveEpp() => EppOverride ?? GetBaseProfile()?.UseEnhancePointerPrecision ?? false;
+
     /// <summary>TargetScreenWidth of the Default profile. Null if not declared, or if
     /// Settings.ShowAutoMatchEnvironment is off (see ProfileService.GetEffectiveTargetScreenWidth
     /// -- this delegation is what makes every Auto-sync function below treat a hidden Environment
@@ -715,7 +721,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var sBase  = GetBaseSens();
         var bp     = GetBaseProfile();
 
-        var useEpp     = EppOverride ?? bp?.UseEnhancePointerPrecision;
+        var useEpp     = GetEffectiveEpp();
         var logicalDpi = EffectiveTargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
 
         double envScreenRatio = 1.0;
@@ -761,7 +767,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             // Env correction: DPI and screen width change the feel, so Win Speed should absorb
             // as much of the cross-environment delta as the 20 discrete steps allow.
             // envCorr = dpi/96 × activeW/baseW — the inverse of what GetEffectiveSensitivity divides by.
-            var activeEppRaw = EppOverride ?? bp?.UseEnhancePointerPrecision;
+            var activeEppRaw = GetEffectiveEpp();
             var activeDpiRaw = EffectiveTargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
             var baseWRaw     = GetBaseScreenWidth();
             var activeWRaw   = EffectiveTargetScreenWidth ?? baseWRaw;
@@ -821,7 +827,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             var baseW     = GetBaseScreenWidth();
             var activeW   = EffectiveTargetScreenWidth ?? baseW;
 
-            var useEppReg = EppOverride ?? bp?.UseEnhancePointerPrecision;
+            var useEppReg = GetEffectiveEpp();
             double envCorrection = (useEppReg != false) ? (double)activeDpi / 96.0 : 1.0;
             if (baseW.HasValue && activeW.HasValue && baseW.Value > 0)
                 envCorrection *= (double)activeW.Value / baseW.Value;
@@ -987,8 +993,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
         // Still needed directly (not part of the shared formula): useEpp gates whether the
         // Full Match row's decimal precision responds to the registry curve's live step below,
         // and rawRegCurve is the raw (unencoded) value EncodeRegCurve needs to derive that step.
-        var useEpp      = EppOverride ?? bp?.UseEnhancePointerPrecision;
-        var rawRegCurve = RegistryCurveOverride ?? 1.0;
+        var useEpp      = GetEffectiveEpp();
+        var rawRegCurve = RegistryCurveOverride ?? GetBaseRegCurve();
 
         var winEff  = factors.WinOnly;
         var fullEff = factors.Full;

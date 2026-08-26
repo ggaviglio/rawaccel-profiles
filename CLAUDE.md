@@ -58,14 +58,14 @@ reference, a sensitivity multiplier, Windows Pointer Speed, a Registry curve
 override, target DPI/screen-width, an EPP (Enhance Pointer Precision) toggle,
 and a list of `TargetAssociation`s (exe name / full path / window class /
 window title) used to auto-match foreground windows to the profile. Nearly
-every numeric/bool field is nullable — **null means "inherit from the Global
+every numeric/bool field is nullable — **null means "inherit from the
 Default"**, and each field has its own `SyncMode` (`Auto` / `Manual` / `Skip`)
 governing whether it's computed automatically, set explicitly, or skipped.
 
-The **Global Default** is a sentinel profile (`IsGlobalDefault = true`) that
-acts as the mathematical anchor/baseline every other profile's compensation is
-computed against. `ProfileService.NormalizeGlobalDefault` enforces invariants
-on it (e.g. it can never carry `Auto`-computed OS/Registry values) on every
+The **Default** profile is a sentinel (`IsDefault = true`) that acts as the
+mathematical anchor/baseline every other profile's compensation is computed
+against. `ProfileService.NormalizeDefault` enforces invariants on it (e.g.
+it can never carry `Auto`-computed OS/Registry values) on every
 load/save.
 
 ### The math engine (compensation pipeline) — precision-critical
@@ -90,9 +90,9 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
    don't reintroduce a second one in the ViewModel.
 2. `ProfileService.CalculateCompensations(activeProfile)` — when a profile's
    `OSSyncMode`/`RegSyncMode` is `Auto`, solves backwards from
-   `Effective(GlobalDefault)` to pick the closest discrete Windows Pointer Speed
+   `Effective(Default)` to pick the closest discrete Windows Pointer Speed
    step, then the exact Registry curve value that makes the profile's effective
-   sensitivity match the Global Default's.
+   sensitivity match the Default's.
 3. `MouseService.ApplyProfileAsync` applies the result to hardware, in a fixed
    order that matters: Raw Accel template + sensitivity (`RawAccelService`,
    invokes Raw Accel's `writer.exe`) → Windows Pointer Speed via
@@ -214,8 +214,67 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     multiplies `RegCurve` in) becomes `NaN`; the other partial products stay
     real numbers. Don't go back to letting this method throw — every caller
     of `.RawOnly`/`.WinOnly` depends on it not doing so.
+  - `sens`/`winIndex` (the `SensMultiplier`/`WinPointerSpeed` factors) follow
+    the same three-tier priority as every other factor in this function: the
+    profile's own value, then the Default's, then a hardcoded neutral
+    (`1.0`× / WinPointerSpeed `10`) only if *both* are blank. They used to
+    jump straight to the hardcoded neutral, skipping the Default-inheritance
+    step DPI/screen width/registry curve already had. That contradicted this
+    function's own doc comment ("fully-null profile yields 100% match by
+    definition") — the promise only held when the Default itself
+    happened to be neutral. A Default with a real, non-neutral
+    `WinPointerSpeed` (e.g. `5`) made a completely blank profile show a
+    266.67% match instead of 100%, because the code compared the Default's
+    real 0.375× against an assumed-neutral 1.0×. Found live; confirmed via
+    `git blame` to be original code from the very first commit that built
+    this math engine, not a regression from any later change. The correct
+    pattern already existed elsewhere in this codebase —
+    `ProfileEditorViewModel.GetBaseSens()`/`GetBaseWinPointerSpeed()`, used by
+    `ApplyAutoOSSync`/`ApplyAutoRegSync` — it had just never been reconciled
+    with this function.
   - `CalculateCompensations()` — the apply-time math. Must stay in sync with
-    `ProfileEditorViewModel`'s `ApplyAutoOSSync`/`ApplyAutoRegSync`.
+    `ProfileEditorViewModel`'s `ApplyAutoOSSync`/`ApplyAutoRegSync`. Its own
+    `sTarget` (`activeProfile.SensMultiplier ?? ...`) had the identical
+    jump-straight-to-neutral bug as `sens` above, fixed the same way
+    (`?? baseProfile.SensMultiplier ?? 1.0`) — this is the one function
+    explicitly required to stay in sync with the ViewModel's
+    `GetBaseSens()`-based Auto-sync functions, so it needed the same fix even
+    though no profile in live testing happened to trigger a visible mismatch
+    from it yet (only reachable when `SensMultiplier` is blank *and*
+    `OSSyncMode`/`RegSyncMode` is `Auto` on the same profile).
+  - A follow-up line-by-line audit of every fallback in these two functions
+    (prompted by the fixes above) found three more instances of the same
+    "profile → base → hardcoded default" chain being incomplete:
+    - **EPP** (`UseEnhancePointerPrecision`) had a *correct* profile→base
+      chain but no explicit final tier — `profile.UseEnhancePointerPrecision
+      ?? baseProfile?.UseEnhancePointerPrecision` left a totally-unspecified
+      EPP as `null`, and every downstream `useEpp != false` check silently
+      treated `null` as "on" (an artifact of C# nullable-bool comparison —
+      `null != false` is `true` — not a deliberate default). Fixed via a new
+      single-source-of-truth helper, `ResolveEpp(profile, baseProfile)`,
+      which adds the missing `?? false` tier: false matches Windows' own
+      out-of-the-box EPP default, and matches what `MouseService`'s real
+      apply path already does when EPP is unspecified everywhere (it leaves
+      the registry alone rather than writing anything — see
+      `MouseService.ApplyProfileAsync` below). Used at both `useEpp`
+      call sites in this file; `ProfileEditorViewModel` has its own parallel
+      `GetEffectiveEpp()` for its four call sites (its own live-edit
+      `EppOverride` property stands in for `profile.UseEnhancePointerPrecision`,
+      same reasoning otherwise — see that file's Math Engine section below).
+    - `rawRegValue` (the registry curve input) skipped the `baseProfile` tier
+      entirely — `GetEffectiveRegistryCurveOverride(profile) ?? 1.0`, unlike
+      the DPI line immediately above it. Fixed to
+      `GetEffectiveRegistryCurveOverride(profile) ??
+      GetEffectiveRegistryCurveOverride(baseProfile) ?? 1.0`.
+    - `CalculateCompensations`'s `currentWinMult` lookup (inside the
+      `RegSyncMode == Auto` step) used `winSpeedResult ?? 10`, skipping
+      `baseProfile.WinPointerSpeed` — reachable whenever `RegSyncMode` is
+      `Auto` but `OSSyncMode` isn't, on a profile with a blank
+      `WinPointerSpeed`. This one is explicitly a sync-with-the-ViewModel
+      bug: `ProfileEditorViewModel.ApplyAutoRegSync` already did this
+      correctly (`WinPointerSpeed ?? GetBaseWinPointerSpeed()`), so
+      `CalculateCompensations` was the one side actually out of sync with
+      what CLAUDE.md already required it to match.
   - `TryParsePositiveDouble`/`TryParsePositiveInt`/`CountMantissaDigits` —
     `public static`, deliberately living here and not in the ViewModel, so
     `LenientPositiveDoubleConverter`/`LenientPositiveIntConverter` (private
@@ -231,6 +290,19 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     copy reappear in the ViewModel (already happened once tonight with a
     load-time-only magnitude check; deleted, not kept as a second mechanism).
 - **`ViewModels/ProfileEditorViewModel.cs`** (Math Engine section, ~lines 305–440)
+  - `GetBaseSens()`/`GetBaseWinPointerSpeed()`/`GetBaseRegCurve()`/
+    `GetEffectiveEpp()` — this file's own base-inheritance resolvers, parallel
+    to `ProfileService`'s `GetEffectiveSensitivityFactors` doing the same
+    resolution for a stored `MouseProfile` (these read the ViewModel's own
+    live-edit properties instead). `GetEffectiveEpp()` mirrors
+    `ProfileService.ResolveEpp` exactly (profile's own value → base's →
+    `false`) — see that function's doc comment for why `false` is the
+    correct last resort. Used by `ApplyAutoRawSync`/`ApplyAutoOSSync`/
+    `ApplyAutoRegSync`/`RecalculateMatchAccuracy` instead of each hand-typing
+    `EppOverride ?? bp?.UseEnhancePointerPrecision` (which is what all four
+    did until the fallback-chain audit below — none of them had the final
+    `?? false` tier either, same bug as `ProfileService`, found at the same
+    time).
   - `ApplyAutoOSSync()` — Win Speed selection formula: target is
     `Effective(base) / S_target`.
   - `ApplyAutoRegSync()` — Registry remainder formula: target is
@@ -375,7 +447,7 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     corruption on profile load.
 - **`Services/MouseService.cs`** — the dedup check in `ApplyProfileAsync`
   compares computed `(winSpeed, regResult, template, sens, epp)` values, not
-  object identity. Reverting to `ReferenceEquals` means Global Default changes
+  object identity. Reverting to `ReferenceEquals` means Default changes
   won't propagate to already-active profiles.
 - **`Models/MouseProfile.cs`** — field types for `SensMultiplier` (`double?`),
   `WinPointerSpeed` (`int?`), `RegistryCurveOverride` (`double?`). If these
@@ -391,7 +463,7 @@ lookups; window title — substring scan) built from `TargetAssociation`s across
 all profiles with `AutoSwitchEnabled`. On foreground change it applies the
 matching profile; on window destroy it implements "Last Man Standing": if no
 other visible window still matches the currently-active profile, it reverts to
-the Global Default. This revert is suppressed during system logoff/shutdown
+the Default. This revert is suppressed during system logoff/shutdown
 (`NotifySessionEnding`, wired to `desktop.ShutdownRequested`) so quitting apps
 during shutdown doesn't spuriously revert registry state. The index is rebuilt
 whenever the `Profiles` collection changes or a profile's
@@ -425,7 +497,7 @@ whenever the `Profiles` collection changes or a profile's
   of a profile (name, target associations, every other field) is unaffected
   by one bad field — nothing about loading drops a whole profile.
 - `SettingsService` persists `AppSettings` (Raw Accel directory, templates
-  directory, registry-bridge opt-in, startup/tray behavior).
+  directory, startup/tray behavior).
 - `TemplateService` manages the library of Raw Accel `.json` curve templates
   (import/rename/delete), stored under `AppSettings.TemplatesDirectory`
   (defaults to the portable app folder).
@@ -435,6 +507,18 @@ whenever the `Profiles` collection changes or a profile's
 
 ## Working style notes
 
+- **Avalonia styling: define shared `Style Selector="X.class-name"` rules in
+  `App.axaml` for anything repeated across multiple elements — font weight,
+  spacing, sizing — instead of hardcoding the same values inline on each
+  one.** Repeated inline values drift out of sync the moment one gets tuned
+  and the others don't. Happened for real in `SettingsWindow.axaml`: each
+  section header independently hardcoded `FontWeight="SemiBold"
+  Margin="0,4,0,0"`, and the toggle-vs-folder-picker rows each hardcoded
+  their own spacing — the exact mistake `Button.dialog-action` was already
+  introduced earlier to avoid, just not carried through consistently. A
+  genuinely one-off value on a single element is fine; the tell that
+  something belongs in a shared style is the same value getting
+  copy-pasted onto more than one element.
 - No code-behind logic in Views — implement behavior in ViewModels and Commands.
 - Nullable fields on `MouseProfile` follow the fallback pattern
   `profile.Field ?? globalDefault.Field ?? hardcodedFallback`.

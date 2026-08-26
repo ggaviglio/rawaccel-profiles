@@ -75,6 +75,8 @@ public class MouseService : IMouseService
         }
     }
 
+    public void InvalidateAppliedState() => _lastAppliedState = default;
+
     public async Task ApplyProfileAsync(MouseProfile profile)
     {
         Debug.WriteLine($"[MouseService] ApplyProfileAsync entered for '{profile?.ProfileName}'.");

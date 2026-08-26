@@ -46,10 +46,18 @@ public class ProfileService
     /// below reuses this exact same check when reading profiles.json, so a value that's invalid
     /// for one reason (typed) is invalid for the identical reason when loaded from disk --
     /// one rule, one place, instead of two independently hand-typed copies that could drift.
+    /// Also requires <see cref="double.IsFinite"/>: a typed value like "1e999" has only one
+    /// mantissa digit (passes the 15-digit check) but <see cref="double.TryParse"/> silently
+    /// converts an out-of-range literal to <see cref="double.PositiveInfinity"/> instead of
+    /// failing. That used to pass this check, get stored on the profile, and then crash the app
+    /// on the next save -- <see cref="LenientPositiveDoubleConverter.Write"/> hands Infinity to
+    /// <c>Utf8JsonWriter.WriteNumberValue</c>, which throws, since JSON has no representation for
+    /// it. Found live via that exact crash.
     /// </summary>
     public static bool TryParsePositiveDouble(string text, out double parsed)
     {
         if (double.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out parsed)
+            && double.IsFinite(parsed)
             && parsed > 0
             && CountMantissaDigits(text) <= 15)
         {
@@ -154,7 +162,16 @@ public class ProfileService
 
     public async Task LoadAsync()
     {
-        if (!File.Exists(_dataFile))
+        var json = File.Exists(_dataFile)
+            ? await File.ReadAllTextAsync(_dataFile).ConfigureAwait(false)
+            : string.Empty;
+
+        // An empty/whitespace-only file gets the same fallback as a missing one -- reachable if
+        // a previous save was ever interrupted mid-write and left a truncated file behind (see
+        // SaveAsync/Save's temp-file-then-replace pattern, added specifically so this can't
+        // happen going forward; this branch is what makes recovering from an old one possible
+        // instead of crashing JsonDocument.Parse on an empty string at startup).
+        if (string.IsNullOrWhiteSpace(json))
         {
             // Create a sensible Default starting point
             var defaultProfile = new MouseProfile
@@ -173,8 +190,6 @@ public class ProfileService
             await SaveAsync().ConfigureAwait(false);
             return;
         }
-
-        var json = await File.ReadAllTextAsync(_dataFile).ConfigureAwait(false);
 
         List<MouseProfile> list;
         using (var doc = JsonDocument.Parse(json))
@@ -213,6 +228,18 @@ public class ProfileService
             Profiles.Add(p);
     }
 
+    /// <summary>
+    /// Writes to a "<c>.tmp</c>" sibling first, only replacing the real file once that write
+    /// fully succeeds -- found live: the old code called <see cref="File.Create(string)"/>
+    /// directly on <see cref="_dataFile"/>, which truncates it to empty immediately, before any
+    /// of the new content is written. When <c>JsonSerializer.SerializeAsync</c> then threw
+    /// partway through (an unrelated bug, since fixed, in <see cref="TryParsePositiveDouble"/>
+    /// letting a non-finite value reach the writer), the file was left permanently empty --
+    /// every previously-saved profile gone, with nothing to recover from, since nothing else in
+    /// this codebase kept a backup. <see cref="File.Move(string, string, bool)"/>'s overwrite is
+    /// atomic on the same volume, so a save that fails now leaves the previous good file exactly
+    /// as it was, for ANY reason it might fail, not just this one already-fixed case.
+    /// </summary>
     public async Task SaveAsync()
     {
         await _saveLock.WaitAsync().ConfigureAwait(false);
@@ -221,9 +248,13 @@ public class ProfileService
             var data = BuildPersistedData();
             EnsureDirectoryExists();
 
-            using var fs = File.Create(_dataFile);
-            await JsonSerializer.SerializeAsync(fs, data, _jsonOptions).ConfigureAwait(false);
-            await fs.FlushAsync().ConfigureAwait(false);
+            var tempFile = _dataFile + ".tmp";
+            using (var fs = File.Create(tempFile))
+            {
+                await JsonSerializer.SerializeAsync(fs, data, _jsonOptions).ConfigureAwait(false);
+                await fs.FlushAsync().ConfigureAwait(false);
+            }
+            File.Move(tempFile, _dataFile, overwrite: true);
         }
         finally
         {
@@ -231,7 +262,8 @@ public class ProfileService
         }
     }
 
-    /// <summary>Synchronous save for settings-driven changes (checkbox toggles, folder pickers).</summary>
+    /// <summary>Synchronous save for settings-driven changes (checkbox toggles, folder pickers).
+    /// Same temp-file-then-replace pattern as <see cref="SaveAsync"/> -- see its doc comment.</summary>
     public void Save()
     {
         _saveLock.Wait();
@@ -240,7 +272,9 @@ public class ProfileService
             var data = BuildPersistedData();
             EnsureDirectoryExists();
 
-            File.WriteAllText(_dataFile, JsonSerializer.Serialize(data, _jsonOptions));
+            var tempFile = _dataFile + ".tmp";
+            File.WriteAllText(tempFile, JsonSerializer.Serialize(data, _jsonOptions));
+            File.Move(tempFile, _dataFile, overwrite: true);
         }
         finally
         {
@@ -390,6 +424,20 @@ public class ProfileService
         Settings.ShowEppOverride ? profile?.RegistryCurveOverride : null;
 
     /// <summary>
+    /// Resolves whether EPP is active: the profile's own value, else the Global Default's, else
+    /// <c>false</c> if neither specifies one. The final tier matters: previously every call site
+    /// wrote <c>profile.UseEnhancePointerPrecision ?? baseProfile?.UseEnhancePointerPrecision</c>
+    /// with no explicit last resort, so a totally-unspecified EPP stayed <c>null</c> -- and every
+    /// downstream <c>useEpp != false</c> check silently treated <c>null</c> as "on" (an accident
+    /// of C# nullable-bool comparison, not a deliberate default). <c>false</c> matches Windows'
+    /// own out-of-the-box default and what <see cref="MouseService"/>'s real apply path already
+    /// converges to when EPP is untouched everywhere (it leaves the registry alone rather than
+    /// writing anything). Single implementation so all callers resolve EPP identically.
+    /// </summary>
+    public static bool ResolveEpp(MouseProfile? profile, MouseProfile? baseProfile) =>
+        profile?.UseEnhancePointerPrecision ?? baseProfile?.UseEnhancePointerPrecision ?? false;
+
+    /// <summary>
     /// Computes the five independent multipliers that make up a profile's effective sensitivity,
     /// without combining them. This is the single implementation of the math — both
     /// <see cref="GetEffectiveSensitivity"/> (the real, apply-time number) and the Profile Editor's
@@ -403,19 +451,20 @@ public class ProfileService
 
         var baseProfile = Profiles.FirstOrDefault(p => p.IsDefault) ?? Profiles.FirstOrDefault();
 
-        var sens     = profile.SensMultiplier ?? 1.0;
-        var winIndex = Math.Clamp((profile.WinPointerSpeed ?? 10) - 1, 0, WinMultipliers.Length - 1);
+        var sens     = profile.SensMultiplier ?? baseProfile?.SensMultiplier ?? 1.0;
+        var winIndex = Math.Clamp((profile.WinPointerSpeed ?? baseProfile?.WinPointerSpeed ?? 10) - 1, 0, WinMultipliers.Length - 1);
         var winMult  = WinMultipliers[winIndex];
 
         // EPP/DPI compensation — only applies when EPP is active.
         // Windows scales SmoothMouseCurve output by (logicalDpi / 96) internally,
         // so we divide by that factor to keep the effective value environment-neutral.
-        var useEpp     = profile.UseEnhancePointerPrecision ?? baseProfile?.UseEnhancePointerPrecision;
+        var useEpp     = ResolveEpp(profile, baseProfile);
         var logicalDpi = GetEffectiveTargetLogicalDpi(profile) ?? GetEffectiveTargetLogicalDpi(baseProfile) ?? 96;
 
-        // Registry curve fallback is 1.0 (neutral). DPI compensation is handled separately below
-        // via a dedicated factor so the two corrections are never compounded.
-        double rawRegValue = GetEffectiveRegistryCurveOverride(profile) ?? 1.0;
+        // Registry curve: profile's own value, else the Global Default's, else neutral (1.0) if
+        // neither specifies one. DPI compensation is handled separately below via a dedicated
+        // factor so the two corrections are never compounded.
+        double rawRegValue = GetEffectiveRegistryCurveOverride(profile) ?? GetEffectiveRegistryCurveOverride(baseProfile) ?? 1.0;
 
         // When EPP is explicitly disabled, the curve has no effect — treat reg factor as 1.0.
         // EncodeRegCurve throws if rawRegValue is extreme enough to overflow 16.16 fixed-point
@@ -472,7 +521,7 @@ public class ProfileService
         var baseEffectiveSens = GetEffectiveSensitivity(baseProfile);
         if (baseEffectiveSens == 0) baseEffectiveSens = 1.0;
 
-        var sTarget = activeProfile.SensMultiplier ?? 1.0;
+        var sTarget = activeProfile.SensMultiplier ?? baseProfile.SensMultiplier ?? 1.0;
         if (sTarget == 0) sTarget = 1.0;
 
         // Effective environment values, computed once and reused by both steps below. Previously
@@ -482,7 +531,7 @@ public class ProfileService
         // silently drifted. Routed through GetEffectiveTargetLogicalDpi/GetEffectiveTargetScreenWidth
         // so a value is treated as absent whenever Settings.ShowAutoMatchEnvironment is off,
         // exactly like a genuinely-blank field already behaves — see those helpers' doc comments.
-        var useEppWin    = activeProfile.UseEnhancePointerPrecision ?? baseProfile?.UseEnhancePointerPrecision;
+        var useEppWin    = ResolveEpp(activeProfile, baseProfile);
         var effectiveDpi = GetEffectiveTargetLogicalDpi(activeProfile) ?? GetEffectiveTargetLogicalDpi(baseProfile) ?? 96;
         var baseWidth    = GetEffectiveTargetScreenWidth(baseProfile);
         var activeWidth  = GetEffectiveTargetScreenWidth(activeProfile) ?? baseWidth;
@@ -521,7 +570,7 @@ public class ProfileService
         // so that S_target × WinMult × RegCurve == Effective(base) exactly.
         if (activeProfile.RegSyncMode == SyncMode.Auto)
         {
-            var currentWinMult = WinMultipliers[Math.Clamp((winSpeedResult ?? 10) - 1, 0, WinMultipliers.Length - 1)];
+            var currentWinMult = WinMultipliers[Math.Clamp((winSpeedResult ?? baseProfile.WinPointerSpeed ?? 10) - 1, 0, WinMultipliers.Length - 1)];
             var raw = (sTarget * currentWinMult) == 0 ? 1.0 : baseEffectiveSens / (sTarget * currentWinMult);
 
             // Env correction: the stored regResult must compensate for the active profile's DPI
