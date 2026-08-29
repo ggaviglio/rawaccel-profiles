@@ -90,9 +90,9 @@
                                      put more pressure on the name needing to truncate in this
                                      already-tight row. -->
                                 <TextBlock Grid.Column="2"
-                                           Text="🏠"
+                                           Classes="icon-glyph"
+                                           Text="&#xE80F;"
                                            Margin="0,0,6,0"
-                                           VerticalAlignment="Center"
                                            IsVisible="{Binding IsDefault}"
                                            ToolTip.Tip="Default profile" />
                                 <TextBlock Grid.Column="3"
@@ -136,52 +136,42 @@
                     <Button Grid.Column="0"
                             ToolTip.Tip="Apply selected profile"
                             Command="{Binding ApplySelectedCommand}">
-                        <TextBlock Text="▶" FontSize="14"
-                                   TextAlignment="Center"
-                                   VerticalAlignment="Center" />
+                        <TextBlock Classes="icon-glyph" Text="&#xE768;" FontSize="14" />
                     </Button>
                     <Button Grid.Column="1"
                             ToolTip.Tip="Set as Default — the baseline every other profile's Auto-sync compensates against, and the fallback applied when no profile's targets match the active window."
                             Command="{Binding SetAsDefaultCommand}">
-                        <TextBlock Text="🏠" FontSize="14"
-                                   TextAlignment="Center"
-                                   VerticalAlignment="Center" />
+                        <TextBlock Classes="icon-glyph" Text="&#xE80F;" FontSize="14" />
                     </Button>
                     <Button Grid.Column="2"
                             ToolTip.Tip="Clone selected profile"
                             Command="{Binding CloneProfileCommand}">
-                        <TextBlock Text="⧉" FontSize="14"
-                                   TextAlignment="Center"
-                                   VerticalAlignment="Center" />
+                        <TextBlock Classes="icon-glyph" Text="&#xE8C8;" FontSize="14" />
                     </Button>
-                    <Button Grid.Column="3" Content="+"
-                            FontSize="16" FontWeight="Bold"
+                    <Button Grid.Column="3"
                             ToolTip.Tip="Add profile"
-                            Command="{Binding AddProfileCommand}" />
-                    <Button Grid.Column="4" Content="−"
-                            FontSize="16" FontWeight="Bold"
+                            Command="{Binding AddProfileCommand}">
+                        <TextBlock Classes="icon-glyph" Text="&#xE710;" FontSize="14" />
+                    </Button>
+                    <Button Grid.Column="4"
                             ToolTip.Tip="Delete selected profile"
-                            Command="{Binding DeleteProfileCommand}" />
+                            Command="{Binding DeleteProfileCommand}">
+                        <TextBlock Classes="icon-glyph" Text="&#xE738;" FontSize="14" />
+                    </Button>
                     <Button Grid.Column="5"
                             ToolTip.Tip="Move selected profile up"
                             Command="{Binding MoveProfileUpCommand}">
-                        <TextBlock Text="↑" FontSize="14"
-                                   TextAlignment="Center"
-                                   VerticalAlignment="Center" />
+                        <TextBlock Classes="icon-glyph" Text="&#xE74A;" FontSize="14" />
                     </Button>
                     <Button Grid.Column="6"
                             ToolTip.Tip="Move selected profile down"
                             Command="{Binding MoveProfileDownCommand}">
-                        <TextBlock Text="↓" FontSize="14"
-                                   TextAlignment="Center"
-                                   VerticalAlignment="Center" />
+                        <TextBlock Classes="icon-glyph" Text="&#xE74B;" FontSize="14" />
                     </Button>
                     <Button Grid.Column="7"
                             ToolTip.Tip="Global Settings"
                             Command="{Binding OpenSettingsCommand}">
-                        <TextBlock Text="⚙" FontSize="16"
-                                   TextAlignment="Center"
-                                   VerticalAlignment="Center" />
+                        <TextBlock Classes="icon-glyph" Text="&#xE713;" FontSize="16" />
                     </Button>
                 </Grid>
             </Grid>

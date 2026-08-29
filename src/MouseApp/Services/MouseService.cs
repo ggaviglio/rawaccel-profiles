@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using MouseApp.Models;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
@@ -29,51 +28,6 @@ public class MouseService : IMouseService
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, IntPtr pvParam, uint fWinIni);
-
-    private static bool IsRunningAsAdministrator()
-    {
-        if (!OperatingSystem.IsWindows())
-            return false;
-
-        try
-        {
-            var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
-            var principal = new System.Security.Principal.WindowsPrincipal(identity);
-            return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    public static void RestartElevated()
-    {
-        if (!OperatingSystem.IsWindows())
-            return;
-
-        var exePath = Process.GetCurrentProcess().MainModule?.FileName;
-        if (string.IsNullOrEmpty(exePath))
-            return;
-
-        var psi = new ProcessStartInfo(exePath)
-        {
-            UseShellExecute = true,
-            Verb = "runas",
-            Arguments = "",
-            WorkingDirectory = AppContext.BaseDirectory
-        };
-
-        try
-        {
-            Process.Start(psi);
-            Environment.Exit(0);
-        }
-        catch (Win32Exception)
-        {
-            // user cancelled UAC
-        }
-    }
 
     public void InvalidateAppliedState() => _lastAppliedState = default;
 

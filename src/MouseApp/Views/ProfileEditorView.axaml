@@ -88,18 +88,35 @@
       <Setter Property="HorizontalAlignment" Value="Right" />
       <Setter Property="IsHitTestVisible" Value="False" />
     </Style>
-    <!-- Local to this file, not App.axaml's shared "settings-section-header": that class is
-         also used by SettingsWindow, where headers aren't nested above anything smaller, so
-         bumping its size there wasn't warranted. "Settings"/"Context" here group cards whose own
-         headers are FontSize="14", so they need to read as one level above that, not smaller than
-         it (found live: with no FontSize set, they inherited the app's default text size, smaller
-         than the 14px card headers they're supposedly grouping). Margin left=14 also matches the
-         cards' own Padding="14,10", so this text starts at the same X as "Raw Accel"/"Windows
-         Pointer"/etc. instead of flush with the card's outer border. -->
-    <Style Selector="TextBlock.group-header">
-      <Setter Property="FontSize" Value="16" />
+    <!-- "Settings"/"Context" group headers as their own bounded bar, not floating text: a plain
+         TextBlock (tried first, twice, at two different font sizes) never read as a real section
+         header no matter how it was sized relative to the cards below it; it was competing with
+         "Raw Accel"/"Windows Pointer" on typography alone instead of being a genuinely distinct UI
+         element; a filled/bordered bar, full card-width, doesn't need to win on font size, it wins
+         by being its own visible object, the same way a labeled section bar reads in most settings
+         UIs (a title row sitting above a group, not a caption floating in whitespace). Background
+         uses ThemeControlMidBrush, the same brush this file already uses for the small type-label
+         badges, so it reads as "a filled UI chrome element" rather than introducing a new color. -->
+    <!-- Height="28" matches the sidebar search box's own live-measured rendered height
+         (confirmed via a temporary debug print of SearchBox.Bounds.Height, not a guess), so the
+         two boxes now top-align across the sidebar/content split the same way the search box
+         and profile list card already do. Padding drops to horizontal-only since a fixed Height
+         plus top/bottom padding would just fight each other; vertical centering instead comes
+         from the TextBlock's own VerticalAlignment below, the same "wrap the fixed-height element,
+         center the child" pattern already used elsewhere in this app (a fixed-Height element
+         can't center its own text via its own VerticalAlignment). -->
+    <Style Selector="Border.group-header-bar">
+      <Setter Property="Background" Value="{DynamicResource ThemeControlMidBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderMidBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Padding" Value="14,0" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+    <Style Selector="Border.group-header-bar TextBlock">
+      <Setter Property="FontSize" Value="14" />
       <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Margin" Value="14,0,0,8" />
+      <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
   </UserControl.Styles>
 
@@ -138,9 +155,11 @@
         <!-- Deliberately NOT height-matched to the sidebar's search box: tried, then reverted,
              since matching the box height didn't make it look aligned, given "Search profiles..."
              is a bordered box and this is bare text with nothing around it. Same class as the
-             "Context" header below (see Style Selector="TextBlock.group-header" above for why
+             "Context" bar below (see Style Selector="Border.group-header-bar" above for why
              it's its own class, not the shared "settings-section-header"). -->
-        <TextBlock Grid.Row="0" Classes="group-header" Text="Settings" />
+        <Border Grid.Row="0" Classes="group-header-bar">
+          <TextBlock Text="Settings" />
+        </Border>
 
             <!-- ═══ Card 2: Raw Accel ═══ -->
             <Border x:Name="RawAccelCard" Grid.Row="1" Classes="card" Padding="14,10" Margin="0,0,0,8">
@@ -170,27 +189,27 @@
             <Button Classes="icon-btn"
                     Command="{Binding OpenRawAccelGuiCommand}"
                     ToolTip.Tip="Open the Raw Accel GUI (rawaccel.exe)">
-              <TextBlock Text="🔧" FontSize="14" TextAlignment="Center" VerticalAlignment="Center" />
+              <TextBlock Classes="icon-glyph" Text="&#xE90F;" FontSize="14" />
             </Button>
             <Button Classes="icon-btn"
                     Command="{Binding ImportCurrentSettingsCommand}"
                     ToolTip.Tip="Import current Raw Accel settings.json as a new preset">
-              <TextBlock Text="📥" FontSize="14" TextAlignment="Center" VerticalAlignment="Center" />
+              <TextBlock Classes="icon-glyph" Text="&#xE896;" FontSize="14" />
             </Button>
             <Button Classes="icon-btn"
                     Command="{Binding DuplicateRawAccelSettingsCommand}"
                     ToolTip.Tip="Duplicate selected settings file under a new name">
-              <TextBlock Text="⧉" FontSize="14" TextAlignment="Center" VerticalAlignment="Center" />
+              <TextBlock Classes="icon-glyph" Text="&#xE8C8;" FontSize="14" />
             </Button>
             <Button Classes="icon-btn"
                     Command="{Binding RenameRawAccelSettingsCommand}"
                     ToolTip.Tip="Rename selected settings file (updates any profiles that reference it)">
-              <TextBlock Text="✏" FontSize="14" TextAlignment="Center" VerticalAlignment="Center" />
+              <TextBlock Classes="icon-glyph" Text="&#xE70F;" FontSize="14" />
             </Button>
             <Button Classes="icon-btn"
                     Command="{Binding DeleteRawAccelSettingsCommand}"
                     ToolTip.Tip="Delete selected preset">
-              <TextBlock Text="🗑" FontSize="14" TextAlignment="Center" VerticalAlignment="Center" />
+              <TextBlock Classes="icon-glyph" Text="&#xE74D;" FontSize="14" />
             </Button>
           </StackPanel>
 
@@ -302,7 +321,9 @@
              Windows Pointer -> Context gap is the same as every other card-to-card gap on this
              page (from Windows Pointer's own trailing margin), not a distinct "bigger" section
              break value. -->
-        <TextBlock Grid.Row="3" Classes="group-header" Text="Context" />
+        <Border Grid.Row="3" Classes="group-header-bar">
+          <TextBlock Text="Context" />
+        </Border>
 
             <!-- ═══ Card 1: Auto-Match Environment ═══ -->
             <!-- Moved down into the "Context" group (see this scope's own comment above): only

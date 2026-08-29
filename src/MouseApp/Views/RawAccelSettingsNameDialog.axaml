@@ -7,7 +7,7 @@
         Width="360" SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
-  <StackPanel Margin="16" Spacing="12">
+  <StackPanel Margin="8" Spacing="12">
     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
     <TextBox Name="NameTextBox"
              Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />

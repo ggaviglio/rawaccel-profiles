@@ -9,11 +9,13 @@
         x:DataType="vm:TargetManagerViewModel"
         x:Class="MouseApp.Views.TargetManagerWindow"
         Title="Target Manager"
-        Width="1070" Height="640"
-        MinHeight="440"
         WindowStartupLocation="CenterOwner"
         CanResize="True">
 
+  <!-- Width, Height, and MinHeight are deliberately not set here: TargetManagerWindow.axaml.cs's
+       constructor computes and sets all three, from real measured content, before this window is
+       ever shown. Declaring placeholder values here would just be dead code; they'd be
+       overwritten before the first frame ever renders. -->
   <Grid RowDefinitions="*,Auto" Margin="12" >
 
     <!-- ════ Main 3-column pane ════ -->
@@ -69,27 +71,39 @@
       </Grid>
 
       <!-- CENTER: Action buttons -->
-      <StackPanel Grid.Column="1"
-                  VerticalAlignment="Center"
-                  Spacing="8"
-                  Margin="12,0">
-        <Button Content="→ Add as EXE"
-                Command="{Binding AddAsExeCommand}"
-                HorizontalAlignment="Stretch"
-                Padding="10,6" />
-        <Button Content="→ Add as Path"
-                Command="{Binding AddAsPathCommand}"
-                HorizontalAlignment="Stretch"
-                Padding="10,6" />
-        <Button Content="→ Add as Class"
-                Command="{Binding AddAsClassCommand}"
-                HorizontalAlignment="Stretch"
-                Padding="10,6" />
-        <Button Content="→ Add as Title"
-                Command="{Binding AddAsTitleCommand}"
-                HorizontalAlignment="Stretch"
-                Padding="10,6" />
-      </StackPanel>
+      <!-- Row 0 is an invisible spacer matching the left/right columns' own header row (the
+           "Active Windows"/"Refresh" row); copies that row's real markup instead of a guessed
+           pixel height, so it can't drift out of sync if that row's content ever changes.
+           Opacity="0" (not IsVisible) so it still reserves its layout space; IsHitTestVisible
+           ="False" so it can't intercept clicks. Without this, CenterButtons centered across the
+           *entire* column height including this header space, pushing the buttons up above where
+           the lists visually start; found live, from a screenshot showing the button stack
+           reaching the very top of the window instead of stopping level with the lists. -->
+      <Grid x:Name="CenterColumn" Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="6" Margin="12,0">
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Opacity="0" IsHitTestVisible="False">
+          <TextBlock Text="Active Windows" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <Button Content="Refresh" Padding="8,3" />
+        </StackPanel>
+
+        <StackPanel x:Name="CenterButtons" Grid.Row="1" VerticalAlignment="Center" Spacing="8">
+          <Button Content="→ Add as EXE"
+                  Command="{Binding AddAsExeCommand}"
+                  HorizontalAlignment="Stretch"
+                  Padding="10,6" />
+          <Button Content="→ Add as Path"
+                  Command="{Binding AddAsPathCommand}"
+                  HorizontalAlignment="Stretch"
+                  Padding="10,6" />
+          <Button Content="→ Add as Class"
+                  Command="{Binding AddAsClassCommand}"
+                  HorizontalAlignment="Stretch"
+                  Padding="10,6" />
+          <Button Content="→ Add as Title"
+                  Command="{Binding AddAsTitleCommand}"
+                  HorizontalAlignment="Stretch"
+                  Padding="10,6" />
+        </StackPanel>
+      </Grid>
 
       <!-- RIGHT: Current Associations -->
       <!-- MatchSummary lives inline in the header row now, not a separate bottom row: an
@@ -148,12 +162,13 @@
 
                   <!-- Delete -->
                   <Button Grid.Column="2"
-                          Content="✕"
                           Padding="6,2"
                           Margin="6,0,0,0"
                           VerticalAlignment="Center"
                           Command="{Binding $parent[Window].((vm:TargetManagerViewModel)DataContext).RemoveCommand}"
-                          CommandParameter="{Binding}" />
+                          CommandParameter="{Binding}">
+                    <TextBlock Classes="icon-glyph" Text="&#xE711;" FontSize="12" />
+                  </Button>
                 </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>
@@ -163,7 +178,8 @@
     </Grid>
 
     <!-- ════ Manual entry + Save / Cancel ════ -->
-    <Border Grid.Row="1"
+    <Border x:Name="BottomRowContainer"
+            Grid.Row="1"
             BorderBrush="{DynamicResource ThemeBorderMidBrush}"
             BorderThickness="0,1,0,0"
             Padding="0,8,0,0">
@@ -174,7 +190,7 @@
                     SelectedItem="{Binding SelectedManualType, Mode=TwoWay}"
                     Width="110" />
           <TextBox Text="{Binding ManualValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                   Width="274" />
+                   Width="280" />
           <Button Classes="dialog-action" Content="Add" Command="{Binding AddManualCommand}" />
         </StackPanel>
 

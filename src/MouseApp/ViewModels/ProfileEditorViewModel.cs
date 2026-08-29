@@ -47,7 +47,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
 
     /// <summary>Preset numeric DPI values for the editable LogicalDpi ComboBox.</summary>
-    public string[] DpiPresets { get; } = { "96", "120", "144", "168", "192", "240", "288" };
+    public string[] DpiPresets { get; } = { "96", "120", "144", "168", "192", "216", "240", "288" };
 
     /// <summary>Common screen widths for the editable ScreenWidth ComboBox.</summary>
     public string[] ScreenWidthPresets { get; } = { "1280", "1366", "1440", "1600", "1920", "2560", "3440", "3840", "5120", "7680" };

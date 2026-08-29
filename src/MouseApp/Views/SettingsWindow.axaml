@@ -12,72 +12,89 @@
         CanResize="False"
         WindowStartupLocation="CenterOwner">
 
-  <!-- Each block below is its own StackPanel with a tight inner Spacing (setting-to-setting
-       within one group). The outer container has no uniform Spacing of its own; each block
-       carries its own top Margin instead, so there's a real gap (20) before a section header,
-       and none before the first block. Raw Accel App Folder and Raw Accel Presets Folder are
-       each their own block but without the settings-section-header class: they're plain
-       labels, not bold section headings, matching each other. -->
-  <StackPanel Margin="16">
+  <!-- Same card styling as the Profile Editor page (Border Classes="card", 14,10 padding): each
+       group is its own bordered box with a bold settings-section-header at 14px, matching that
+       page's card headers, instead of plain text section breaks with no visual container. Gaps
+       between cards come from this outer StackPanel's own Spacing, the same mechanism the
+       Profile Editor uses between its cards, not a per-block Margin like the old floating-header
+       layout needed. -->
+  <StackPanel Margin="8" Spacing="8">
 
-    <StackPanel Spacing="8">
-      <TextBlock Text="Raw Accel App Folder" />
-      <StackPanel Orientation="Horizontal" Spacing="6">
-        <TextBox Width="420" Watermark="(default: app folder)" Text="{Binding RawAccelDirectory, Mode=TwoWay}" />
-        <Button Content="Browse" Command="{Binding BrowseRawAccelDirCommand}" />
+    <Border Classes="card" Padding="14,10">
+      <StackPanel Spacing="8">
+        <TextBlock Text="Folders" Classes="settings-section-header" />
+        <StackPanel Spacing="8">
+          <TextBlock Text="Raw Accel App Folder" />
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBox Width="420" Watermark="(default: app folder)" Text="{Binding RawAccelDirectory, Mode=TwoWay}" />
+            <Button Content="Browse" Command="{Binding BrowseRawAccelDirCommand}" />
+          </StackPanel>
+        </StackPanel>
+        <StackPanel Spacing="8">
+          <TextBlock Text="Raw Accel Presets Folder" />
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBox Width="420" Watermark="(default: app folder)" Text="{Binding RawAccelSettingsDirectory, Mode=TwoWay}" />
+            <Button Content="Browse" Command="{Binding BrowseRawAccelSettingsDirCommand}" />
+          </StackPanel>
+        </StackPanel>
       </StackPanel>
-    </StackPanel>
+    </Border>
 
-    <StackPanel Spacing="8" Margin="0,20,0,0">
-      <TextBlock Text="Raw Accel Presets Folder" />
-      <StackPanel Orientation="Horizontal" Spacing="6">
-        <TextBox Width="420" Watermark="(default: app folder)" Text="{Binding RawAccelSettingsDirectory, Mode=TwoWay}" />
-        <Button Content="Browse" Command="{Binding BrowseRawAccelSettingsDirCommand}" />
+    <Border Classes="card" Padding="14,10">
+      <StackPanel Spacing="8">
+        <TextBlock Text="App Behavior" Classes="settings-section-header" />
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <ToggleSwitch IsChecked="{Binding RunAtStartup, Mode=TwoWay}" />
+          <TextBlock Text="Run At Startup" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <ToggleSwitch IsChecked="{Binding CloseToTray, Mode=TwoWay}" />
+          <TextBlock Text="Close to Tray" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <ToggleSwitch IsChecked="{Binding StartMinimized, Mode=TwoWay}" />
+          <TextBlock Text="Start in Tray" VerticalAlignment="Center" />
+        </StackPanel>
       </StackPanel>
-    </StackPanel>
+    </Border>
 
-    <StackPanel Spacing="8" Margin="0,20,0,0">
-      <TextBlock Text="App Behavior" Classes="settings-section-header" />
-      <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-        <ToggleSwitch IsChecked="{Binding RunAtStartup, Mode=TwoWay}" />
-        <TextBlock Text="Run At Startup" VerticalAlignment="Center" />
+    <Border Classes="card" Padding="14,10">
+      <StackPanel Spacing="8">
+        <TextBlock Text="Advanced Profile Editor Options" Classes="settings-section-header" />
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <ToggleSwitch IsChecked="{Binding ShowEppOverride, Mode=TwoWay}" />
+          <TextBlock Text="Show EPP Override" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <ToggleSwitch IsChecked="{Binding ShowAutoMatchEnvironment, Mode=TwoWay}" />
+          <TextBlock Text="Show Auto-Match Environment" VerticalAlignment="Center" />
+        </StackPanel>
       </StackPanel>
-      <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-        <ToggleSwitch IsChecked="{Binding CloseToTray, Mode=TwoWay}" />
-        <TextBlock Text="Close to Tray" VerticalAlignment="Center" />
-      </StackPanel>
-      <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-        <ToggleSwitch IsChecked="{Binding StartMinimized, Mode=TwoWay}" />
-        <TextBlock Text="Start in Tray" VerticalAlignment="Center" />
-      </StackPanel>
-    </StackPanel>
+    </Border>
 
-    <StackPanel Spacing="8" Margin="0,20,0,0">
-      <TextBlock Text="Advanced Profile Editor Options" Classes="settings-section-header" />
-      <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-        <ToggleSwitch IsChecked="{Binding ShowAutoMatchEnvironment, Mode=TwoWay}" />
-        <TextBlock Text="Show Auto-Match Environment" VerticalAlignment="Center" />
+    <Border Classes="card" Padding="14,10">
+      <StackPanel Spacing="8">
+        <TextBlock Text="Troubleshooting" Classes="settings-section-header" />
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <Button Content="Reset Mouse Curve to Windows Default" Command="{Binding RevertCurveCommand}" />
+          <TextBlock Text="{Binding RevertCurveStatusMessage}"
+                     IsVisible="{Binding IsRevertCurveStatusVisible}"
+                     FontSize="12" Opacity="0.8" VerticalAlignment="Center" />
+        </StackPanel>
       </StackPanel>
-      <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-        <ToggleSwitch IsChecked="{Binding ShowEppOverride, Mode=TwoWay}" />
-        <TextBlock Text="Show EPP Override" VerticalAlignment="Center" />
-      </StackPanel>
-    </StackPanel>
+    </Border>
 
-    <StackPanel Spacing="8" Margin="0,20,0,0">
-      <TextBlock Text="Troubleshooting" Classes="settings-section-header" />
-      <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-        <Button Content="Reset Mouse Curve to Windows Default" Command="{Binding RevertCurveCommand}" />
-        <TextBlock Text="{Binding RevertCurveStatusMessage}"
-                   IsVisible="{Binding IsRevertCurveStatusVisible}"
-                   FontSize="12" Opacity="0.8" VerticalAlignment="Center" />
+    <!-- Same divider treatment as Target Manager's Cancel/Save row: a top border caps off the
+         content above it, so the empty space to these buttons' left reads as a deliberate footer
+         area instead of leftover space. -->
+    <Border BorderBrush="{DynamicResource ThemeBorderMidBrush}"
+            BorderThickness="0,1,0,0"
+            Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button Classes="dialog-action" Content="Cancel" Command="{Binding CancelCommand}" />
+        <Button Classes="dialog-action" Content="Save" Command="{Binding SaveCommand}" IsDefault="True" />
       </StackPanel>
-    </StackPanel>
-
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,20,0,0">
-      <Button Classes="dialog-action" Content="Cancel" Command="{Binding CancelCommand}" />
-      <Button Classes="dialog-action" Content="Save" Command="{Binding SaveCommand}" IsDefault="True" />
-    </StackPanel>
+    </Border>
 
   </StackPanel>
 

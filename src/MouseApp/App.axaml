@@ -6,6 +6,11 @@
 
     <Application.Resources>
         <SolidColorBrush x:Key="MatchIndicatorBrush" Color="#4CAF50" />
+        <!-- Segoe MDL2 Assets, not the newer Segoe Fluent Icons: this app needs to keep working
+             on Windows 10, where MDL2 is the icon font guaranteed present (Fluent Icons is
+             Windows 11-only). One resource so every icon glyph in the app references the same
+             font name instead of repeating the string per element. -->
+        <FontFamily x:Key="IconFontFamily">Segoe MDL2 Assets</FontFamily>
     </Application.Resources>
 
     <Application.Styles>
@@ -49,7 +54,28 @@
              section break next to bulky controls like ToggleSwitch; see CLAUDE.md's styling
              note). -->
         <Style Selector="TextBlock.settings-section-header">
+            <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <!-- Every symbolic button icon in the app (Play/Home/Copy/Add/Remove/Up/Down/Settings/
+             Repair/Download/Edit/Delete/Cancel) renders through this one class instead of ad hoc
+             Unicode/emoji characters in the app's own Cascadia Code font. Real, confirmed bug
+             this replaces: plain symbol/arrow characters (▶ ↑ ↓ ⧉ ✏ −) aren't guaranteed to be
+             optically centered within their own character cell the way a purpose-built icon
+             font's glyphs are; found live via zoomed screenshots (Play/Up/Down/Duplicate/Edit
+             were all visibly off-center even though HorizontalContentAlignment/
+             VerticalContentAlignment="Center" were correctly centering the cell itself). True
+             color emoji (🔧 📥 🗑 🏠 originally) didn't have this problem, since they render via
+             Segoe UI Emoji, itself a purpose-built centered icon set; but mixing full-color
+             emoji next to plain monochrome glyphs was its own inconsistency, so everything now
+             goes through one icon font instead of two different fixes for two different button
+             styles. Codepoints are verified against Microsoft's own Segoe MDL2 Assets icon list,
+             not guessed. -->
+        <Style Selector="TextBlock.icon-glyph">
+            <Setter Property="FontFamily" Value="{StaticResource IconFontFamily}" />
+            <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
     </Application.Styles>
 </Application>
