@@ -92,6 +92,77 @@ public partial class App : Application
 
             var mainWindow = new Views.MainWindow { DataContext = mainVm };
 
+            // Restore the last remembered window size. Position is intentionally not part of
+            // this -- it's what goes stale after a monitor is unplugged/reconfigured, whereas
+            // size just needs clamping to whatever screen is actually available now. Applied
+            // before Show() so there's no visible jump from the XAML default to the saved size.
+            var savedWidth = profileService.Settings?.WindowWidth;
+            var savedHeight = profileService.Settings?.WindowHeight;
+            if (savedWidth is > 0 && savedHeight is > 0)
+            {
+                var screen = mainWindow.Screens?.Primary;
+                var maxWidth = screen != null ? screen.WorkingArea.Width / screen.Scaling : double.MaxValue;
+                var maxHeight = screen != null ? screen.WorkingArea.Height / screen.Scaling : double.MaxValue;
+                mainWindow.Width = Math.Clamp(savedWidth.Value, mainWindow.MinWidth, maxWidth);
+                mainWindow.Height = Math.Clamp(savedHeight.Value, mainWindow.MinHeight, maxHeight);
+            }
+
+            // Restore maximized state. Applied after the size above so the underlying Normal
+            // bounds are already correct for whenever the window is later un-maximized.
+            if (profileService.Settings?.WindowMaximized == true)
+                mainWindow.WindowState = WindowState.Maximized;
+
+            // Track Normal <-> Maximized transitions so they persist alongside size. Minimized
+            // is deliberately ignored -- never saved, never restored -- so exiting (or clicking
+            // Open from tray) while minimized doesn't reopen the window minimized next launch.
+            // Maximize/restore is a discrete, infrequent action (not a continuous drag like
+            // resize), so this saves immediately rather than going through the debounce timer
+            // below; ProfileService.SaveAsync is safe to call concurrently with it either way.
+            mainWindow.PropertyChanged += (_, e) =>
+            {
+                if (e.Property != Window.WindowStateProperty)
+                    return;
+
+                if (mainWindow.WindowState == WindowState.Maximized)
+                {
+                    profileService.Settings!.WindowMaximized = true;
+                    _ = profileService.SaveAsync();
+                }
+                else if (mainWindow.WindowState == WindowState.Normal)
+                {
+                    profileService.Settings!.WindowMaximized = false;
+                    _ = profileService.SaveAsync();
+                }
+            };
+
+            // Persist window size on resize instead of at exit -- this app can be exited via
+            // the tray "Exit" menu item, which calls desktop.Shutdown() directly and never
+            // fires mainWindow.Closing (see exitItem.Click below), so an exit-only hook would
+            // silently miss that path. Debounced so a drag-resize doesn't write to disk on
+            // every intermediate frame; gated to WindowState.Normal (checked both when the
+            // resize starts and when the timer fires) so a maximize/restore is never saved as
+            // the remembered size -- only the timer-fire check matters in practice, but the
+            // early check avoids arming the timer at all for the common maximize case.
+            var windowSizeSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(750) };
+            windowSizeSaveTimer.Tick += (_, _) =>
+            {
+                windowSizeSaveTimer.Stop();
+                if (mainWindow.WindowState != WindowState.Normal)
+                    return;
+
+                profileService.Settings!.WindowWidth = mainWindow.Width;
+                profileService.Settings!.WindowHeight = mainWindow.Height;
+                _ = profileService.SaveAsync();
+            };
+            mainWindow.Resized += (_, _) =>
+            {
+                if (mainWindow.WindowState != WindowState.Normal)
+                    return;
+
+                windowSizeSaveTimer.Stop();
+                windowSizeSaveTimer.Start();
+            };
+
             TrayIcon? tray = null;
             bool shuttingDown = false;
 

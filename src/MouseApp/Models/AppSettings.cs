@@ -27,4 +27,22 @@ public class AppSettings
     /// <summary>Same idea as <see cref="ShowAutoMatchEnvironment"/>, for the EPP Override
     /// (registry curve) field.</summary>
     public bool ShowEppOverride { get; set; } = false;
+
+    /// <summary>
+    /// Last remembered main-window size (Normal state only -- never the maximized size).
+    /// Null means "no saved size yet," in which case MainWindow.axaml's own Width/Height
+    /// apply. Position is deliberately not persisted: it's what most invites going stale
+    /// after a monitor is unplugged/reconfigured, whereas size degrades gracefully (it's
+    /// clamped to the current primary screen's working area on load).
+    /// </summary>
+    public double? WindowWidth { get; set; }
+    public double? WindowHeight { get; set; }
+
+    /// <summary>
+    /// Whether the main window was maximized (vs. a resizable Normal window) last time it was
+    /// closed. Null means "no saved state yet." Deliberately only ever Normal/Maximized --
+    /// Minimized is never persisted or restored (see App.axaml.cs), since opening straight into
+    /// a minimized window would be confusing.
+    /// </summary>
+    public bool? WindowMaximized { get; set; }
 }
