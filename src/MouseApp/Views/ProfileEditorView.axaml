@@ -233,6 +233,7 @@
                           ToolTip.Tip="Auto-compute sensitivity to match the Default profile. This row shows how well raw accel sensitivity alone offsets the environmental delta, before Win Speed or Registry Bridge contribute. Needs Auto-Match Environment enabled in Settings -- without an environment difference to compensate for, this would just always match the Default's Sensitivity exactly." />
             <TextBlock Grid.Column="2"
                        Classes="match-percent"
+                       IsVisible="{Binding !IsDefault}"
                        Text="{Binding RawAccelMatchAccuracy}"
                        ToolTip.Tip="{Binding RawAccelMatchAccuracy}" />
           </Grid>
@@ -269,16 +270,23 @@
                           ToolTip.Tip="Auto-compute Win Pointer Speed to compensate environment delta. This row shows how close Raw Accel + Win Pointer Speed gets you, before the registry bridge." />
             <TextBlock Grid.Column="2"
                        Classes="match-percent"
+                       IsVisible="{Binding !IsDefault}"
                        Text="{Binding WinSpeedMatchAccuracy}"
                        ToolTip.Tip="{Binding WinSpeedMatchAccuracy}" />
           </Grid>
 
           <!-- EPP dropdown: Skip / Enable / Disable -->
-          <TextBlock Grid.Row="2" Grid.Column="0" Text="EPP:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <!-- Advanced option, hidden by default (Settings > Show EPP), see AppSettings.ShowEpp.
+               Label and content are separate sibling elements sharing this Grid.Row (not one
+               container), so both need the binding for the row to actually collapse instead of
+               leaving the label behind, same pattern as the EPP Override row below. -->
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="EPP:" VerticalAlignment="Center" Margin="0,0,10,6"
+                     IsVisible="{Binding IsEppVisible}" />
           <ComboBox Grid.Row="2" Grid.Column="1"
                     ItemsSource="{Binding EppOptions}"
                     SelectedItem="{Binding EppOverride, Mode=TwoWay}"
                     MinWidth="125" HorizontalAlignment="Left" Margin="0,0,0,6"
+                    IsVisible="{Binding IsEppVisible}"
                     ToolTip.Tip="Enhance Pointer Precision override. Skip = leave system setting unchanged; Enable = force on; Disable = force off.">
             <ComboBox.ItemTemplate>
               <DataTemplate>
@@ -311,6 +319,7 @@
                           ToolTip.Tip="Auto-compute registry curve to cover exact remainder gap. This row shows the final accuracy after all three compensation layers — 100.00% = exact match with the Default profile." />
             <TextBlock Grid.Column="2"
                        Classes="match-percent"
+                       IsVisible="{Binding !IsDefault}"
                        Text="{Binding MatchAccuracy}"
                        ToolTip.Tip="{Binding MatchAccuracy}" />
           </Grid>

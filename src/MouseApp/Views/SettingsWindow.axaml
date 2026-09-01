@@ -62,6 +62,10 @@
       <StackPanel Spacing="8">
         <TextBlock Text="Advanced Profile Editor Options" Classes="settings-section-header" />
         <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <ToggleSwitch IsChecked="{Binding ShowEpp, Mode=TwoWay}" />
+          <TextBlock Text="Show EPP" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
           <ToggleSwitch IsChecked="{Binding ShowEppOverride, Mode=TwoWay}" />
           <TextBlock Text="Show EPP Override" VerticalAlignment="Center" />
         </StackPanel>

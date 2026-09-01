@@ -46,13 +46,6 @@ public static class MouseRegistryBridge
         8.0      // 524288 / 65536  (exact in 16.16 fixed-point)
     };
 
-    // Windows Pointer Speed multiplier table — index 0 = speed 1, index 9 = speed 10 (1.0×), index 19 = speed 20.
-    private static readonly double[] WinSpeedMultipliers =
-    {
-        0.03125, 0.0625, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0,
-        1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25, 3.5
-    };
-
     // Win32 constants
     private const uint SPI_SETMOUSE = 0x0004;
     private const uint SPIF_UPDATEINIFILE = 0x01;
@@ -271,6 +264,10 @@ public static class MouseRegistryBridge
     /// <summary>
     /// Reads the current Windows Pointer Speed multiplier from HKCU\Control Panel\Mouse\MouseSensitivity.
     /// The stored value is 1–20 (default 10 = 1.0×). Falls back to 1.0 if the key is missing or invalid.
+    /// Uses <see cref="ProfileService.WinMultipliers"/> — the single source of truth for this table
+    /// (see CLAUDE.md) — instead of a second, separately-maintained copy; the two used to be
+    /// independent hand-typed arrays that happened to still agree, a real drift risk even though
+    /// they were never actually found to have diverged.
     /// </summary>
     public static double ReadWindowsPointerSpeedMultiplier()
     {
@@ -279,8 +276,8 @@ public static class MouseRegistryBridge
         if (key == null) return 1.0;
         var val = key.GetValue("MouseSensitivity") as string;
         if (val == null || !int.TryParse(val, out int speed)) return 1.0;
-        int index = Math.Clamp(speed - 1, 0, WinSpeedMultipliers.Length - 1);
-        return WinSpeedMultipliers[index];
+        int index = Math.Clamp(speed - 1, 0, ProfileService.WinMultipliers.Length - 1);
+        return ProfileService.WinMultipliers[index];
     }
 
     private const int LOGPIXELSX = 88;

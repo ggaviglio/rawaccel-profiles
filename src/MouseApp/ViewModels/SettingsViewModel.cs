@@ -35,6 +35,7 @@ public partial class SettingsViewModel : ViewModelBase
             CloseToTray          = source.CloseToTray,
             ShowAutoMatchEnvironment = source.ShowAutoMatchEnvironment,
             ShowEppOverride          = source.ShowEppOverride,
+            ShowEpp                  = source.ShowEpp,
         };
 
         // Ensure RunAtStartup reflects actual system state (HKCU Run) rather than last-saved state.
@@ -162,6 +163,17 @@ public partial class SettingsViewModel : ViewModelBase
         }
     }
 
+    public bool ShowEpp
+    {
+        get => Settings.ShowEpp;
+        set
+        {
+            if (value == Settings.ShowEpp) return;
+            Settings.ShowEpp = value;
+            OnPropertyChanged(nameof(ShowEpp));
+        }
+    }
+
     public IAsyncRelayCommand BrowseRawAccelDirCommand  { get; }
     public IAsyncRelayCommand BrowseRawAccelSettingsDirCommand { get; }
     public IRelayCommand      SaveCommand               { get; }
@@ -195,6 +207,7 @@ public partial class SettingsViewModel : ViewModelBase
         target.CloseToTray          = Settings.CloseToTray;
         target.ShowAutoMatchEnvironment = Settings.ShowAutoMatchEnvironment;
         target.ShowEppOverride          = Settings.ShowEppOverride;
+        target.ShowEpp                  = Settings.ShowEpp;
         _profileService.Save();
 
         if (OperatingSystem.IsWindows())

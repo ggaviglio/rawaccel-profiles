@@ -16,9 +16,11 @@
     <Application.Styles>
         <SimpleTheme />
 
-        <!-- App-wide monospace font. -->
+        <!-- App-wide monospace font and window icon, so every window (present and future)
+             gets both without repeating them per file. -->
         <Style Selector="Window">
             <Setter Property="FontFamily" Value="Cascadia Code" />
+            <Setter Property="Icon" Value="/Assets/avalonia-logo.ico" />
         </Style>
 
         <!-- Shared look for every card/panel box in the app. Change CornerRadius here

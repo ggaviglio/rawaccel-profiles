@@ -28,6 +28,10 @@ public class AppSettings
     /// (registry curve) field.</summary>
     public bool ShowEppOverride { get; set; } = false;
 
+    /// <summary>Same idea as <see cref="ShowAutoMatchEnvironment"/>, for the base EPP
+    /// (Skip/Enable/Disable) dropdown.</summary>
+    public bool ShowEpp { get; set; } = false;
+
     /// <summary>
     /// Last remembered main-window size (Normal state only -- never the maximized size).
     /// Null means "no saved size yet," in which case MainWindow.axaml's own Width/Height

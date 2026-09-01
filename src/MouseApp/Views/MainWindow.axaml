@@ -12,7 +12,6 @@
         MinWidth="732"
         x:Class="MouseApp.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/avalonia-logo.ico"
         Title="MouseApp">
 
     <Design.DataContext>

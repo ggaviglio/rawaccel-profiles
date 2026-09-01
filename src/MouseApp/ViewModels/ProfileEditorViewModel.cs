@@ -50,7 +50,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     public string[] DpiPresets { get; } = { "96", "120", "144", "168", "192", "216", "240", "288" };
 
     /// <summary>Common screen widths for the editable ScreenWidth ComboBox.</summary>
-    public string[] ScreenWidthPresets { get; } = { "1280", "1366", "1440", "1600", "1920", "2560", "3440", "3840", "5120", "7680" };
+    public string[] ScreenWidthPresets { get; } = { "640", "800", "1024", "1152", "1280", "1366", "1440", "1600", "1680", "1920", "2560", "3440", "3840", "5120", "7680" };
 
     // ── Profile fields ──────────────────────────────────────────────────────
     [ObservableProperty]
@@ -182,6 +182,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>Same idea as <see cref="IsAutoMatchEnvironmentVisible"/>, for the EPP Override row.</summary>
     public bool IsEppOverrideVisible => _profileService.Settings.ShowEppOverride;
 
+    /// <summary>Same idea as <see cref="IsAutoMatchEnvironmentVisible"/>, for the base EPP row.</summary>
+    public bool IsEppVisible => _profileService.Settings.ShowEpp;
+
     /// <summary>
     /// Raw Accel's own Auto toggle specifically needs Auto-Match Environment too, unlike Windows
     /// Pointer's and EPP's Auto toggles. Raw Accel's Auto solves "what Sensitivity cancels the
@@ -286,6 +289,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         {
             OnPropertyChanged(nameof(IsAutoMatchEnvironmentVisible));
             OnPropertyChanged(nameof(IsEppOverrideVisible));
+            OnPropertyChanged(nameof(IsEppVisible));
             OnPropertyChanged(nameof(IsRawAutoAvailable));
             OnPropertyChanged(nameof(IsRawAutoSync));
 
