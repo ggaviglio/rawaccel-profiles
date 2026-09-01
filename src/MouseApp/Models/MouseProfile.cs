@@ -64,6 +64,9 @@ public partial class MouseProfile : ObservableObject
     public partial int? TargetScreenWidth { get; set; }
 
     [ObservableProperty]
+    public partial int? TargetScreenHeight { get; set; }
+
+    [ObservableProperty]
     public partial bool? UseEnhancePointerPrecision { get; set; }
 
     [ObservableProperty]

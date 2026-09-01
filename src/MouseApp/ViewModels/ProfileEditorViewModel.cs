@@ -49,6 +49,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>Common screen widths for the editable ScreenWidth ComboBox.</summary>
     public string[] ScreenWidthPresets { get; } = { "640", "800", "1024", "1152", "1280", "1366", "1440", "1600", "1680", "1920", "2560", "3440", "3840", "5120", "7680" };
 
+    /// <summary>Common screen heights for the editable ScreenHeight ComboBox.</summary>
+    public string[] ScreenHeightPresets { get; } = { "480", "600", "720", "768", "800", "864", "900", "1024", "1050", "1080", "1200", "1440", "2160", "4320" };
+
     // ── Profile fields ──────────────────────────────────────────────────────
     [ObservableProperty]
     private string profileName = string.Empty;
@@ -108,6 +111,17 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>Same idea as <see cref="IsSensitivityInputValid"/>, for TargetScreenWidthString.</summary>
     [ObservableProperty]
     private bool isTargetScreenWidthInputValid = true;
+
+    // TargetScreenHeight (int?) + string proxy for TextBox binding
+    [ObservableProperty]
+    private int? targetScreenHeight;
+
+    [ObservableProperty]
+    private string targetScreenHeightString = string.Empty;
+
+    /// <summary>Same idea as <see cref="IsSensitivityInputValid"/>, for TargetScreenHeightString.</summary>
+    [ObservableProperty]
+    private bool isTargetScreenHeightInputValid = true;
 
     // EPP override — null = inherit, true = on, false = off
     [ObservableProperty]
@@ -331,6 +345,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
             RegistryCurveString   = profile.RegistryCurveOverride is { } regVal ? FormatFixedPointInput(regVal, int.MaxValue) : string.Empty;
             TargetScreenWidth       = profile.TargetScreenWidth;
             TargetScreenWidthString = profile.TargetScreenWidth?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            TargetScreenHeight       = profile.TargetScreenHeight;
+            TargetScreenHeightString = profile.TargetScreenHeight?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             EppOverride             = profile.UseEnhancePointerPrecision;
             IsDefault       = profile.IsDefault;
 
@@ -341,6 +357,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             IsSensitivityInputValid       = true;
             IsRegistryCurveInputValid     = true;
             IsTargetScreenWidthInputValid = true;
+            IsTargetScreenHeightInputValid = true;
         }
         finally
         {
@@ -526,6 +543,41 @@ public partial class ProfileEditorViewModel : ViewModelBase
         {
             _isSyncing = true;
             TargetScreenWidth = parsed;
+            _isSyncing = false;
+        }
+
+        ApplyAutoOSSync();
+        AutoPersist();
+        RecalculateMatchAccuracy();
+    }
+
+    partial void OnTargetScreenHeightChanged(int? oldValue, int? newValue)
+    {
+        if (_isSyncing) return;
+        _isSyncing = true;
+        TargetScreenHeightString = newValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        _isSyncing = false;
+        ApplyAutoOSSync();
+        AutoPersist();
+        RecalculateMatchAccuracy();
+    }
+
+    partial void OnTargetScreenHeightStringChanged(string? oldValue, string newValue)
+    {
+        if (_isSyncing) return;
+
+        if (string.IsNullOrWhiteSpace(newValue))
+        {
+            IsTargetScreenHeightInputValid = true;
+            TargetScreenHeight = null;
+            return;
+        }
+
+        IsTargetScreenHeightInputValid = ProfileService.TryParsePositiveInt(newValue, out var parsedHeight);
+        if (IsTargetScreenHeightInputValid)
+        {
+            _isSyncing = true;
+            TargetScreenHeight = parsedHeight;
             _isSyncing = false;
         }
 
@@ -1080,6 +1132,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         _editingProfile.RegSyncMode           = RegSyncMode;
         _editingProfile.RegistryCurveOverride = RegistryCurveOverride;
         _editingProfile.TargetScreenWidth             = TargetScreenWidth;
+        _editingProfile.TargetScreenHeight            = TargetScreenHeight;
         _editingProfile.UseEnhancePointerPrecision    = EppOverride;
         // IsDefault is intentionally NOT written here.
         // It is exclusively managed by OnIsDefaultChanged → SetDefaultAsync,

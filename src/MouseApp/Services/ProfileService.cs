@@ -418,6 +418,12 @@ public class ProfileService
     public int? GetEffectiveTargetScreenWidth(MouseProfile? profile) =>
         Settings.ShowAutoMatchEnvironment ? profile?.TargetScreenWidth : null;
 
+    /// <summary>Same idea as <see cref="GetEffectiveTargetScreenWidth"/>, for TargetScreenHeight.
+    /// Not yet consumed by the math engine -- plumbing only, added ahead of the aspect-ratio
+    /// compensation feature it's meant to support.</summary>
+    public int? GetEffectiveTargetScreenHeight(MouseProfile? profile) =>
+        Settings.ShowAutoMatchEnvironment ? profile?.TargetScreenHeight : null;
+
     /// <summary>Same idea as <see cref="GetEffectiveTargetScreenWidth"/>, for RegistryCurveOverride
     /// (gated on ShowEppOverride instead of ShowAutoMatchEnvironment).</summary>
     public double? GetEffectiveRegistryCurveOverride(MouseProfile? profile) =>
