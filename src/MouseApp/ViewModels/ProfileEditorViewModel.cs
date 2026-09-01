@@ -99,6 +99,20 @@ public partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     private bool isRegistryCurveInputValid = true;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsYXRatioAutoSync))]
+    private SyncMode yXRatioSyncMode;
+
+    [ObservableProperty]
+    private double? yXRatioOverride;
+
+    [ObservableProperty]
+    private string yXRatioString = string.Empty;
+
+    /// <summary>Same idea as <see cref="IsSensitivityInputValid"/>, for YXRatioString.</summary>
+    [ObservableProperty]
+    private bool isYXRatioInputValid = true;
+
     // ── Environment fields ──────────────────────────────────────────────────
 
     // TargetScreenWidth (int?) + string proxy for TextBox binding
@@ -256,6 +270,21 @@ public partial class ProfileEditorViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Same idea as <see cref="IsRawAutoSync"/> -- gated on ShowAutoMatchEnvironment
+    /// since the Y/X ratio is causally derived from Width/Height, which are already gated by it.</summary>
+    public bool IsYXRatioAutoSync
+    {
+        get => !IsDefault && YXRatioSyncMode == SyncMode.Auto && _profileService.Settings.ShowAutoMatchEnvironment;
+        set
+        {
+            if (value)
+                YXRatioSyncMode = SyncMode.Auto;
+            else
+                YXRatioSyncMode = YXRatioOverride.HasValue ? SyncMode.Manual : SyncMode.Skip;
+            OnPropertyChanged();
+        }
+    }
+
     /// <summary>True when the current profile has no target associations.</summary>
     public bool IsTargetAssociationsEmpty => TargetAssociationsSummary.Count == 0;
 
@@ -292,6 +321,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             OnPropertyChanged(nameof(IsEppVisible));
             OnPropertyChanged(nameof(IsRawAutoAvailable));
             OnPropertyChanged(nameof(IsRawAutoSync));
+            OnPropertyChanged(nameof(IsYXRatioAutoSync));
 
             // The four notifications above only refresh what's already displayed -- they don't
             // recompute anything. A profile whose Auto mode was guarded off while a section was
@@ -306,6 +336,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             if (_editingProfile != null)
             {
                 ApplyAutoOSSync();
+                ApplyAutoYXRatioSync();
                 AutoPersist();
                 RecalculateMatchAccuracy();
             }
@@ -347,6 +378,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
             TargetScreenWidthString = profile.TargetScreenWidth?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             TargetScreenHeight       = profile.TargetScreenHeight;
             TargetScreenHeightString = profile.TargetScreenHeight?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            YXRatioSyncMode = profile.YXRatioSyncMode;
+            YXRatioOverride = profile.YXRatioOverride;
+            YXRatioString   = profile.YXRatioOverride is { } yxVal ? FormatFixedPointInput(yxVal, int.MaxValue) : string.Empty;
             EppOverride             = profile.UseEnhancePointerPrecision;
             IsDefault       = profile.IsDefault;
 
@@ -358,6 +392,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             IsRegistryCurveInputValid     = true;
             IsTargetScreenWidthInputValid = true;
             IsTargetScreenHeightInputValid = true;
+            IsYXRatioInputValid           = true;
         }
         finally
         {
@@ -366,9 +401,11 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
         RefreshAssociationsSummary();
         OpenTargetManagerCommand.NotifyCanExecuteChanged();
-        // IsRawAutoSync/IsOSAutoSync/IsRegAutoSync already got notified above, declaratively, by
-        // the RawSyncMode/OSSyncMode/RegSyncMode/IsDefault assignments themselves.
+        // IsRawAutoSync/IsOSAutoSync/IsRegAutoSync/IsYXRatioAutoSync already got notified above,
+        // declaratively, by the RawSyncMode/OSSyncMode/RegSyncMode/YXRatioSyncMode/IsDefault
+        // assignments themselves.
         ApplyAutoOSSync();         // re-run with correct IsDefault + all loaded values
+        ApplyAutoYXRatioSync();
         RecalculateMatchAccuracy();
     }
 
@@ -516,6 +553,61 @@ public partial class ProfileEditorViewModel : ViewModelBase
         RecalculateMatchAccuracy();
     }
 
+    partial void OnYXRatioSyncModeChanged(SyncMode oldValue, SyncMode newValue)
+    {
+        if (_isSyncing) return;
+        if (newValue == SyncMode.Skip)
+        {
+            _isSyncing = true;
+            YXRatioOverride = null;
+            YXRatioString   = string.Empty;
+            _isSyncing = false;
+        }
+        ApplyAutoYXRatioSync();
+        AutoPersist();
+        RecalculateMatchAccuracy();
+        // IsYXRatioAutoSync already notified declaratively by the YXRatioSyncMode assignment
+        // that triggered this callback -- see [NotifyPropertyChangedFor] on yXRatioSyncMode.
+    }
+
+    partial void OnYXRatioOverrideChanged(double? oldValue, double? newValue)
+    {
+        if (_isSyncing) return;
+        _isSyncing = true;
+        YXRatioString = newValue is { } yxVal ? FormatFixedPointInput(yxVal, int.MaxValue) : string.Empty;
+        _isSyncing = false;
+        AutoPersist();
+        RecalculateMatchAccuracy();
+    }
+
+    partial void OnYXRatioStringChanged(string? oldValue, string newValue)
+    {
+        if (_isSyncing) return;
+
+        if (string.IsNullOrWhiteSpace(newValue))
+        {
+            IsYXRatioInputValid = true;
+            YXRatioOverride = null;
+            if (YXRatioSyncMode != SyncMode.Auto)
+                YXRatioSyncMode = SyncMode.Skip;
+            return;
+        }
+
+        IsYXRatioInputValid = ProfileService.TryParsePositiveDouble(newValue, out var parsedRatio);
+        if (IsYXRatioInputValid)
+        {
+            _isSyncing = true;
+            YXRatioOverride = parsedRatio;
+            _isSyncing = false;
+        }
+
+        if (YXRatioSyncMode == SyncMode.Skip)
+            YXRatioSyncMode = SyncMode.Manual;
+
+        AutoPersist();
+        RecalculateMatchAccuracy();
+    }
+
     partial void OnTargetScreenWidthChanged(int? oldValue, int? newValue)
     {
         if (_isSyncing) return;
@@ -523,6 +615,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         TargetScreenWidthString = newValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
         _isSyncing = false;
         ApplyAutoOSSync();
+        ApplyAutoYXRatioSync();
         AutoPersist();
         RecalculateMatchAccuracy();
     }
@@ -547,6 +640,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         }
 
         ApplyAutoOSSync();
+        ApplyAutoYXRatioSync();
         AutoPersist();
         RecalculateMatchAccuracy();
     }
@@ -558,6 +652,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         TargetScreenHeightString = newValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
         _isSyncing = false;
         ApplyAutoOSSync();
+        ApplyAutoYXRatioSync();
         AutoPersist();
         RecalculateMatchAccuracy();
     }
@@ -582,6 +677,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
         }
 
         ApplyAutoOSSync();
+        ApplyAutoYXRatioSync();
         AutoPersist();
         RecalculateMatchAccuracy();
     }
@@ -697,6 +793,12 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// route through ProfileService's MouseProfile-parameterized helper directly.
     /// </summary>
     private int? EffectiveTargetScreenWidth => _profileService.Settings.ShowAutoMatchEnvironment ? TargetScreenWidth : null;
+
+    /// <summary>Same idea as <see cref="GetBaseScreenWidth"/>, for TargetScreenHeight.</summary>
+    private int? GetBaseScreenHeight() => _profileService.GetEffectiveTargetScreenHeight(GetBaseProfile());
+
+    /// <summary>Same idea as <see cref="EffectiveTargetScreenWidth"/>, for TargetScreenHeight.</summary>
+    private int? EffectiveTargetScreenHeight => _profileService.Settings.ShowAutoMatchEnvironment ? TargetScreenHeight : null;
 
 
     /// <summary>
@@ -828,6 +930,49 @@ public partial class ProfileEditorViewModel : ViewModelBase
             _isSyncing = wasSyncing;
         }
     }
+
+    /// <summary>
+    /// Auto Y/X Ratio: compensates for a profile whose declared aspect ratio (Width:Height)
+    /// differs from the Default's -- native AR ÷ profile AR. Equals exactly 1.0 (no-op) whenever
+    /// the two aspect ratios actually match, regardless of absolute resolution size (e.g.
+    /// 1920x1080 vs. 1280x720 are both 16:9 -> 1.0); only diverges from 1.0 when the shape
+    /// itself genuinely changes (e.g. 1920x1080 base vs. 800x600 profile -> ~1.333, meaning Y
+    /// gets boosted 33% to match X's real-world feel -- see this session's stretch-ratio
+    /// derivation). Neutral (1.0, nothing meaningful written) whenever either profile is
+    /// missing Width or Height, mirroring every other Auto-sync function's graceful-blank
+    /// behavior here. Unlike ApplyAutoOSSync/ApplyAutoRegSync, this value doesn't feed the
+    /// Windows-side effective-sensitivity math at all -- it's headed for Raw Accel's own
+    /// settings.json (wired in a later step), so it has no bearing on match% display.
+    /// </summary>
+    private void ApplyAutoYXRatioSync()
+    {
+        if (IsDefault || !_profileService.Settings.ShowAutoMatchEnvironment) return;
+
+        if (YXRatioSyncMode == SyncMode.Auto)
+        {
+            var baseW   = GetBaseScreenWidth();
+            var baseH   = GetBaseScreenHeight();
+            var activeW = EffectiveTargetScreenWidth ?? baseW;
+            var activeH = EffectiveTargetScreenHeight ?? baseH;
+
+            double ratio = 1.0;
+            if (baseW.HasValue && baseH.HasValue && activeW.HasValue && activeH.HasValue
+                && baseH.Value > 0 && activeH.Value > 0)
+            {
+                double baseAspect   = (double)baseW.Value / baseH.Value;
+                double activeAspect = (double)activeW.Value / activeH.Value;
+                if (activeAspect > 0)
+                    ratio = baseAspect / activeAspect;
+            }
+
+            var wasSyncing = _isSyncing;
+            _isSyncing = true;
+            YXRatioOverride = ratio;
+            YXRatioString   = FormatFixedPointInput(ratio, int.MaxValue);
+            _isSyncing = wasSyncing;
+        }
+    }
+
     /// <summary>
     /// Three-row waterfall proof — all rows measure against Effective(base).
     ///
@@ -1133,6 +1278,8 @@ public partial class ProfileEditorViewModel : ViewModelBase
         _editingProfile.RegistryCurveOverride = RegistryCurveOverride;
         _editingProfile.TargetScreenWidth             = TargetScreenWidth;
         _editingProfile.TargetScreenHeight            = TargetScreenHeight;
+        _editingProfile.YXRatioSyncMode               = YXRatioSyncMode;
+        _editingProfile.YXRatioOverride               = YXRatioOverride;
         _editingProfile.UseEnhancePointerPrecision    = EppOverride;
         // IsDefault is intentionally NOT written here.
         // It is exclusively managed by OnIsDefaultChanged → SetDefaultAsync,

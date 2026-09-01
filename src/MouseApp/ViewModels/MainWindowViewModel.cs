@@ -230,6 +230,8 @@ public partial class MainWindowViewModel : ViewModelBase
             RegistryCurveOverride  = _selectedProfile.RegistryCurveOverride,
             TargetScreenWidth      = _selectedProfile.TargetScreenWidth,
             TargetScreenHeight     = _selectedProfile.TargetScreenHeight,
+            YXRatioSyncMode        = _selectedProfile.YXRatioSyncMode,
+            YXRatioOverride        = _selectedProfile.YXRatioOverride,
             UseEnhancePointerPrecision = _selectedProfile.UseEnhancePointerPrecision,
             AutoSwitchEnabled      = _selectedProfile.AutoSwitchEnabled,
             TargetAssociations     = _selectedProfile.TargetAssociations
@@ -295,6 +297,7 @@ public partial class MainWindowViewModel : ViewModelBase
             RawSyncMode        = SyncMode.Skip,
             OSSyncMode         = SyncMode.Skip,
             RegSyncMode        = SyncMode.Skip,
+            YXRatioSyncMode    = SyncMode.Skip,
             TargetAssociations = new()
         };
 

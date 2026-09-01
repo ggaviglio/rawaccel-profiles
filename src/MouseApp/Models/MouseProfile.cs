@@ -66,6 +66,18 @@ public partial class MouseProfile : ObservableObject
     [ObservableProperty]
     public partial int? TargetScreenHeight { get; set; }
 
+    // Explicit default (unlike RawSyncMode/OSSyncMode/RegSyncMode, which have none): those three
+    // have existed since this app's very first commit, so every real profiles.json already has
+    // explicit values for them. YXRatioSyncMode is new -- every existing profiles.json predates
+    // it, so a missing field must deserialize to Skip, not SyncMode's implicit first-member
+    // default (Auto). Caught live: a batch of pre-existing profiles all silently came back as
+    // YXRatioSyncMode=Auto after one save, purely from the enum default, before this fix.
+    [ObservableProperty]
+    public partial SyncMode YXRatioSyncMode { get; set; } = SyncMode.Skip;
+
+    [ObservableProperty]
+    public partial double? YXRatioOverride { get; set; }
+
     [ObservableProperty]
     public partial bool? UseEnhancePointerPrecision { get; set; }
 

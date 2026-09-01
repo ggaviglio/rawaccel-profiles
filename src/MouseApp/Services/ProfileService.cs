@@ -364,6 +364,18 @@ public class ProfileService
             defaultProfile.RegSyncMode           = SyncMode.Skip;
             defaultProfile.RegistryCurveOverride = null; // reset to neutral (1.0×)
         }
+        // Same invariant for YXRatioOverride -- ApplyAutoYXRatioSync already refuses to compute
+        // on the Default profile at the ViewModel level (IsDefault guard), but SyncMode itself
+        // is a plain enum whose implicit default is Auto (first declared member) -- any profile,
+        // Default included, that never had this field explicitly written (e.g. loaded from a
+        // profiles.json predating this feature) deserializes to Auto, not Skip, unless something
+        // corrects it. Caught this live: a batch of pre-existing profiles all silently came back
+        // as YXRatioSyncMode=Auto after one save, purely from the enum default, before this fix.
+        if (defaultProfile.YXRatioSyncMode == SyncMode.Auto)
+        {
+            defaultProfile.YXRatioSyncMode = SyncMode.Skip;
+            defaultProfile.YXRatioOverride = null;
+        }
     }
 
     /// <summary>
@@ -428,6 +440,15 @@ public class ProfileService
     /// (gated on ShowEppOverride instead of ShowAutoMatchEnvironment).</summary>
     public double? GetEffectiveRegistryCurveOverride(MouseProfile? profile) =>
         Settings.ShowEppOverride ? profile?.RegistryCurveOverride : null;
+
+    /// <summary>Same idea as <see cref="GetEffectiveTargetScreenWidth"/>, for YXRatioOverride --
+    /// gated on ShowAutoMatchEnvironment since the ratio is causally derived from Width/Height,
+    /// which are already gated by it. Not yet consumed anywhere: doesn't feed the Windows-side
+    /// effective-sensitivity math (GetEffectiveSensitivityFactors/CalculateCompensations) at all
+    /// -- this is a separate value headed for Raw Accel's own settings.json, wired in a later
+    /// step (RawAccelService.ApplySettingsFileAsync).</summary>
+    public double? GetEffectiveYXRatioOverride(MouseProfile? profile) =>
+        Settings.ShowAutoMatchEnvironment ? profile?.YXRatioOverride : null;
 
     /// <summary>
     /// Resolves whether EPP is active: the profile's own value, else the Global Default's, else

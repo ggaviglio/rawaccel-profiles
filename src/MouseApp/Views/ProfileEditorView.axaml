@@ -166,7 +166,7 @@
              directly below): unlike the earlier Screen Width case, these two cards are adjacent
              and each has multiple real label rows, so syncing their label column widths creates
              an actual visible aligned column across both cards instead of accidental coupling. -->
-        <Grid RowDefinitions="Auto,Auto,Auto">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" SharedSizeGroup="LabelCol" />
             <ColumnDefinition Width="*" />
@@ -235,6 +235,37 @@
                        IsVisible="{Binding !IsDefault}"
                        Text="{Binding RawAccelMatchAccuracy}"
                        ToolTip.Tip="{Binding RawAccelMatchAccuracy}" />
+          </Grid>
+
+          <!-- Y/X Ratio row -->
+          <!-- Advanced option, only meaningful alongside Screen Width/Height, so gated by the
+               same IsAutoMatchEnvironmentVisible as those (whole row hidden, not just the Auto
+               toggle), same pattern as the EPP Override row, unlike Sensitivity above (whose
+               field stays relevant regardless of Auto-Match Environment). Right-aligned value
+               bound to the same YXRatioString the textbox shows, in the match-percent slot,
+               same layout rhythm as the other rows, just a ratio instead of a percent. -->
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="Y/X Ratio:" VerticalAlignment="Center" Margin="0,0,10,6"
+                     IsVisible="{Binding IsAutoMatchEnvironmentVisible}" />
+          <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="Auto,Auto,*" Margin="0,0,0,6" VerticalAlignment="Center"
+                IsVisible="{Binding IsAutoMatchEnvironmentVisible}">
+            <TextBox Grid.Column="0" Classes="value-box"
+                     Text="{Binding YXRatioString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     Watermark="Skip"
+                     IsEnabled="{Binding !IsYXRatioAutoSync}"
+                     ToolTip.Tip="Y/X sensitivity ratio patched into Raw Accel's own settings (vertical sens multiplier) -- compensates a profile whose declared aspect ratio differs from the Default's. Leave blank to skip." />
+            <TextBlock Grid.Column="0" Classes="input-error-icon" Margin="0,0,6,0"
+                       IsVisible="{Binding !IsYXRatioInputValid}"
+                       ToolTip.Tip="Rejected — must be a positive number with at most 15 significant digits (a double can't hold more without silently losing precision). YXRatioOverride still holds its last valid value; this text isn't actually in effect." />
+            <ToggleButton Grid.Column="1"
+                          IsChecked="{Binding IsYXRatioAutoSync, Mode=TwoWay}"
+                          Content="Auto" Classes="auto-toggle"
+                          IsVisible="{Binding IsAutoSyncAvailable}"
+                          ToolTip.Tip="Auto-compute the Y/X ratio from this profile's Screen Width/Height vs. the Default's -- native aspect ratio ÷ this profile's aspect ratio. 1.0 when the shapes match; only differs from 1.0 when the aspect ratio itself actually changes." />
+            <TextBlock Grid.Column="2"
+                       Classes="match-percent"
+                       IsVisible="{Binding !IsDefault}"
+                       Text="{Binding YXRatioString}"
+                       ToolTip.Tip="{Binding YXRatioString}" />
           </Grid>
         </Grid>
       </Border>
