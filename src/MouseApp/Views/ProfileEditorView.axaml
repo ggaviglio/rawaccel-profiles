@@ -14,7 +14,6 @@
   <UserControl.Resources>
     <converters:WinPointerSpeedDisplayConverter x:Key="WinPointerSpeedDisplayConverter" />
     <converters:NullableBoolDisplayConverter x:Key="NullableBoolDisplayConverter" />
-    <converters:DpiDisplayConverter x:Key="DpiDisplayConverter" />
   </UserControl.Resources>
 
   <UserControl.Styles>
@@ -342,7 +341,7 @@
                  AppSettings.ShowAutoMatchEnvironment. One Border, whole card goes with it. -->
             <Border Grid.Row="4" Classes="card" Padding="14,10" Margin="0,0,0,8"
               IsVisible="{Binding IsAutoMatchEnvironmentVisible}"
-              ToolTip.Tip="This app does not change your Windows resolution or scale. These values are only used for the auto-compensation buttons. The EPP override uses this Scale value at apply-time if set; if left blank it reads your current Windows scale live instead.">
+              ToolTip.Tip="This app does not change your Windows resolution. This value is only used for the auto-compensation buttons.">
         <Grid RowDefinitions="Auto,Auto">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" SharedSizeGroup="LabelCol" />
@@ -351,48 +350,21 @@
           <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
                      Text="Auto-Match Environment" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
 
-          <!-- Screen Width now joins the shared "LabelCol" group (see Card 2/Card 3 above) via
-               plain Grid.Column="0" placement, matching every other row in this file, so it
-               lines up with "Settings:"/"Sensitivity:"/"Pointer Speed:" down the page. Scale
-               stays paired with its own box in Grid.Column="1", right-aligned to the card's
-               right edge via an inner Auto,*,Auto grid, the same trick this file uses to
-               right-align the "Auto"/match-percent badges on the Sensitivity and Pointer Speed
-               rows. -->
+          <!-- Screen Width joins the shared "LabelCol" group (see Card 2/Card 3 above) via plain
+               Grid.Column="0" placement, matching every other row in this file, so it lines up
+               with "Settings:"/"Sensitivity:"/"Pointer Speed:" down the page. -->
           <TextBlock Grid.Row="1" Grid.Column="0" Text="Screen Width:" VerticalAlignment="Center" Margin="0,0,10,6" />
-          <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
-            <Grid Grid.Column="0" Width="125" HorizontalAlignment="Left">
-              <ComboBox IsEditable="True"
-                        Classes="editable-centered"
-                        Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                        ItemsSource="{Binding ScreenWidthPresets}"
-                        ToolTip.Tip="Target screen width in pixels. Leave blank to skip. Common values: 1280, 1366, 1440, 1920, 2560, 3440, 3840, 5120, 7680." />
-              <!-- Extra right-margin (vs. the 6px on plain TextBoxes) so the icon clears the
-                   ComboBox's own built-in dropdown arrow instead of overlapping it. -->
-              <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
-                         IsVisible="{Binding !IsTargetScreenWidthInputValid}"
-                         ToolTip.Tip="Rejected — must be a positive number. TargetScreenWidth still holds its last valid value; this text isn't actually in effect." />
-            </Grid>
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
-              <TextBlock Text="Scale:" VerticalAlignment="Center" />
-              <Grid Width="125" HorizontalAlignment="Left">
-                <ComboBox IsEditable="True"
-                          Classes="editable-centered"
-                          Text="{Binding TargetLogicalDpiString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                          ItemsSource="{Binding DpiPresets}"
-                          ToolTip.Tip="Windows display scale (found in Display Settings). Type a custom DPI value or pick a preset. Leave blank to skip.">
-                  <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                      <TextBlock Text="{Binding ., Converter={StaticResource DpiDisplayConverter}}" />
-                    </DataTemplate>
-                  </ComboBox.ItemTemplate>
-                </ComboBox>
-                <!-- Extra right-margin (vs. the 6px on plain TextBoxes) so the icon clears the
-                     ComboBox's own built-in dropdown arrow instead of overlapping it. -->
-                <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
-                           IsVisible="{Binding !IsTargetLogicalDpiInputValid}"
-                           ToolTip.Tip="Rejected — must be a positive number. TargetLogicalDpi still holds its last valid value; this text isn't actually in effect." />
-              </Grid>
-            </StackPanel>
+          <Grid Grid.Row="1" Grid.Column="1" Width="125" HorizontalAlignment="Left" Margin="0,0,0,6">
+            <ComboBox IsEditable="True"
+                      Classes="editable-centered"
+                      Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                      ItemsSource="{Binding ScreenWidthPresets}"
+                      ToolTip.Tip="Target screen width in pixels. Leave blank to skip. Common values: 640, 800, 1024, 1152, 1280, 1366, 1440, 1600, 1680, 1920, 2560, 3440, 3840, 5120, 7680." />
+            <!-- Extra right-margin (vs. the 6px on plain TextBoxes) so the icon clears the
+                 ComboBox's own built-in dropdown arrow instead of overlapping it. -->
+            <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
+                       IsVisible="{Binding !IsTargetScreenWidthInputValid}"
+                       ToolTip.Tip="Rejected — must be a positive number. TargetScreenWidth still holds its last valid value; this text isn't actually in effect." />
           </Grid>
         </Grid>
       </Border>

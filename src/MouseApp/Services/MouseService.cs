@@ -85,7 +85,7 @@ public class MouseService : IMouseService
                 try
                 {
                     Debug.WriteLine($"[MouseService] Calling ApplyRegistryBridge regResult={regResult.Value:G10}");
-                    MouseRegistryBridge.ApplyRegistryBridge(regResult.Value, _profileService.GetEffectiveTargetLogicalDpi(profile));
+                    MouseRegistryBridge.ApplyRegistryBridge(regResult.Value);
                 }
                 catch (Exception ex)
                 {

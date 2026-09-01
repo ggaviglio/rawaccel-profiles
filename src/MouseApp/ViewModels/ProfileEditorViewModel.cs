@@ -46,9 +46,6 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
 
 
-    /// <summary>Preset numeric DPI values for the editable LogicalDpi ComboBox.</summary>
-    public string[] DpiPresets { get; } = { "96", "120", "144", "168", "192", "216", "240", "288" };
-
     /// <summary>Common screen widths for the editable ScreenWidth ComboBox.</summary>
     public string[] ScreenWidthPresets { get; } = { "640", "800", "1024", "1152", "1280", "1366", "1440", "1600", "1680", "1920", "2560", "3440", "3840", "5120", "7680" };
 
@@ -111,17 +108,6 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>Same idea as <see cref="IsSensitivityInputValid"/>, for TargetScreenWidthString.</summary>
     [ObservableProperty]
     private bool isTargetScreenWidthInputValid = true;
-
-    // TargetLogicalDpi (int?) + string proxy for TextBox binding
-    [ObservableProperty]
-    private int? targetLogicalDpi;
-
-    [ObservableProperty]
-    private string targetLogicalDpiString = string.Empty;
-
-    /// <summary>Same idea as <see cref="IsSensitivityInputValid"/>, for TargetLogicalDpiString.</summary>
-    [ObservableProperty]
-    private bool isTargetLogicalDpiInputValid = true;
 
     // EPP override — null = inherit, true = on, false = off
     [ObservableProperty]
@@ -345,8 +331,6 @@ public partial class ProfileEditorViewModel : ViewModelBase
             RegistryCurveString   = profile.RegistryCurveOverride is { } regVal ? FormatFixedPointInput(regVal, int.MaxValue) : string.Empty;
             TargetScreenWidth       = profile.TargetScreenWidth;
             TargetScreenWidthString = profile.TargetScreenWidth?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
-            TargetLogicalDpi        = profile.TargetLogicalDpi;
-            TargetLogicalDpiString  = profile.TargetLogicalDpi?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             EppOverride             = profile.UseEnhancePointerPrecision;
             IsDefault       = profile.IsDefault;
 
@@ -357,7 +341,6 @@ public partial class ProfileEditorViewModel : ViewModelBase
             IsSensitivityInputValid       = true;
             IsRegistryCurveInputValid     = true;
             IsTargetScreenWidthInputValid = true;
-            IsTargetLogicalDpiInputValid  = true;
         }
         finally
         {
@@ -551,41 +534,6 @@ public partial class ProfileEditorViewModel : ViewModelBase
         RecalculateMatchAccuracy();
     }
 
-    partial void OnTargetLogicalDpiChanged(int? oldValue, int? newValue)
-    {
-        if (_isSyncing) return;
-        _isSyncing = true;
-        TargetLogicalDpiString = newValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
-        _isSyncing = false;
-        ApplyAutoOSSync();
-        AutoPersist();
-        RecalculateMatchAccuracy();
-    }
-
-    partial void OnTargetLogicalDpiStringChanged(string? oldValue, string newValue)
-    {
-        if (_isSyncing) return;
-
-        if (string.IsNullOrWhiteSpace(newValue))
-        {
-            IsTargetLogicalDpiInputValid = true;
-            TargetLogicalDpi = null;
-            return;
-        }
-
-        IsTargetLogicalDpiInputValid = ProfileService.TryParsePositiveInt(newValue, out var parsed);
-        if (IsTargetLogicalDpiInputValid)
-        {
-            _isSyncing = true;
-            TargetLogicalDpi = parsed;
-            _isSyncing = false;
-        }
-
-        ApplyAutoOSSync();
-        AutoPersist();
-        RecalculateMatchAccuracy();
-    }
-
     partial void OnEppOverrideChanged(bool? oldValue, bool? newValue)
     {
         if (_isSyncing) return;
@@ -689,25 +637,19 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// own check).</summary>
     private int? GetBaseScreenWidth() => _profileService.GetEffectiveTargetScreenWidth(GetBaseProfile());
 
-    /// <summary>Same idea as <see cref="GetBaseScreenWidth"/>, for TargetLogicalDpi.</summary>
-    private int? GetBaseLogicalDpi() => _profileService.GetEffectiveTargetLogicalDpi(GetBaseProfile());
-
     /// <summary>
-    /// This profile's own TargetLogicalDpi, or null whenever Settings.ShowAutoMatchEnvironment is
-    /// off -- same idea as <see cref="GetBaseLogicalDpi"/>, but for the profile currently being
-    /// edited. TargetLogicalDpi here is this ViewModel's own live property (kept in sync with the
+    /// This profile's own TargetScreenWidth, or null whenever Settings.ShowAutoMatchEnvironment is
+    /// off -- same idea as <see cref="GetBaseScreenWidth"/>, but for the profile currently being
+    /// edited. TargetScreenWidth here is this ViewModel's own live property (kept in sync with the
     /// editing MouseProfile via LoadProfile/AutoPersist), not a MouseProfile object, so it can't
     /// route through ProfileService's MouseProfile-parameterized helper directly.
     /// </summary>
-    private int? EffectiveTargetLogicalDpi => _profileService.Settings.ShowAutoMatchEnvironment ? TargetLogicalDpi : null;
-
-    /// <summary>Same idea as <see cref="EffectiveTargetLogicalDpi"/>, for TargetScreenWidth.</summary>
     private int? EffectiveTargetScreenWidth => _profileService.Settings.ShowAutoMatchEnvironment ? TargetScreenWidth : null;
 
 
     /// <summary>
     /// Auto Raw Sensitivity: compute the exact raw sens so that
-    ///   Sens × envScreenRatio × envDpiRatio == S_base
+    ///   Sens × envScreenRatio == S_base
     /// giving Raw Accel Only = 100% before Win Speed or Reg Bridge contribute.
     /// </summary>
     private void ApplyAutoRawSync()
@@ -725,20 +667,14 @@ public partial class ProfileEditorViewModel : ViewModelBase
         var sBase  = GetBaseSens();
         var bp     = GetBaseProfile();
 
-        var useEpp     = GetEffectiveEpp();
-        var logicalDpi = EffectiveTargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
-
         double envScreenRatio = 1.0;
         var baseW   = GetBaseScreenWidth();
         var activeW = EffectiveTargetScreenWidth ?? baseW;
         if (baseW.HasValue && activeW.HasValue && baseW.Value > 0)
             envScreenRatio = (double)baseW.Value / activeW.Value;
 
-        double envDpiRatio = (useEpp != false) ? (96.0 / logicalDpi) : 1.0;
-
-        // Target: Sens × envScreenRatio × envDpiRatio = S_base
-        var envFactor = envScreenRatio * envDpiRatio;
-        var newSens   = envFactor == 0 ? sBase : sBase / envFactor;
+        // Target: Sens × envScreenRatio = S_base
+        var newSens = envScreenRatio == 0 ? sBase : sBase / envScreenRatio;
 
         var wasSyncing = _isSyncing;
         _isSyncing = true;
@@ -749,7 +685,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     /// <summary>
     /// Auto Win Pointer Speed: choose the WinMult closest to Effective(base) / S_target,
-    /// so that S_target × WinMult ≈ Effective(base) — compensating the raw DPI change as
+    /// so that S_target × WinMult ≈ Effective(base) — compensating the screen width change as
     /// closely as possible using only the integer Win Pointer Speed steps.
     /// </summary>
     private void ApplyAutoOSSync()
@@ -768,15 +704,12 @@ public partial class ProfileEditorViewModel : ViewModelBase
             var sTarget = Sensitivity ?? GetBaseSens();
             if (sTarget == 0) sTarget = 1.0;
 
-            // Env correction: DPI and screen width change the feel, so Win Speed should absorb
+            // Env correction: screen width changes the feel, so Win Speed should absorb
             // as much of the cross-environment delta as the 20 discrete steps allow.
-            // envCorr = dpi/96 × activeW/baseW — the inverse of what GetEffectiveSensitivity divides by.
-            var activeEppRaw = GetEffectiveEpp();
-            var activeDpiRaw = EffectiveTargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
-            var baseWRaw     = GetBaseScreenWidth();
-            var activeWRaw   = EffectiveTargetScreenWidth ?? baseWRaw;
+            // envCorr = activeW/baseW — the inverse of what GetEffectiveSensitivity divides by.
+            var baseWRaw   = GetBaseScreenWidth();
+            var activeWRaw = EffectiveTargetScreenWidth ?? baseWRaw;
             double envCorrWin = 1.0;
-            if (activeEppRaw != false) envCorrWin *= (double)activeDpiRaw / 96.0;
             if (baseWRaw.HasValue && activeWRaw.HasValue && baseWRaw.Value > 0)
                 envCorrWin *= (double)activeWRaw.Value / baseWRaw.Value;
 
@@ -827,12 +760,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
             var raw       = (sTarget * winMult) == 0 ? 1.0 : baseEff / (sTarget * winMult);
 
             // Env correction: scale regResult so that GetEffectiveSensitivity(active) == GetEffectiveSensitivity(base).
-            var activeDpi = EffectiveTargetLogicalDpi ?? GetBaseLogicalDpi() ?? 96;
-            var baseW     = GetBaseScreenWidth();
-            var activeW   = EffectiveTargetScreenWidth ?? baseW;
+            var baseW   = GetBaseScreenWidth();
+            var activeW = EffectiveTargetScreenWidth ?? baseW;
 
-            var useEppReg = GetEffectiveEpp();
-            double envCorrection = (useEppReg != false) ? (double)activeDpi / 96.0 : 1.0;
+            double envCorrection = 1.0;
             if (baseW.HasValue && activeW.HasValue && baseW.Value > 0)
                 envCorrection *= (double)activeW.Value / baseW.Value;
 
@@ -848,9 +779,9 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>
     /// Three-row waterfall proof — all rows measure against Effective(base).
     ///
-    ///   Raw Accel Only  : (curSens × envScreenRatio × envDpiRatio) / S_base
+    ///   Raw Accel Only  : (curSens × envScreenRatio) / S_base
     ///       How well raw accel sensitivity alone offsets the full environmental delta
-    ///       (screen width + logical DPI) before Win Speed or Reg Bridge contribute.
+    ///       (screen width) before Win Speed or Reg Bridge contribute.
     ///
     ///   Win Speed Only  : (curSens × WinMult) / Effective(base)
     ///       How close integer Win Pointer Speed steps get you back to Effective(base).
@@ -1149,7 +1080,6 @@ public partial class ProfileEditorViewModel : ViewModelBase
         _editingProfile.RegSyncMode           = RegSyncMode;
         _editingProfile.RegistryCurveOverride = RegistryCurveOverride;
         _editingProfile.TargetScreenWidth             = TargetScreenWidth;
-        _editingProfile.TargetLogicalDpi              = TargetLogicalDpi;
         _editingProfile.UseEnhancePointerPrecision    = EppOverride;
         // IsDefault is intentionally NOT written here.
         // It is exclusively managed by OnIsDefaultChanged → SetDefaultAsync,

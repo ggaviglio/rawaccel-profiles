@@ -55,7 +55,7 @@ mirror the existing style rather than introducing a different MVVM idiom.
 
 A `MouseProfile` (`Models/MouseProfile.cs`) bundles: a Raw Accel template
 reference, a sensitivity multiplier, Windows Pointer Speed, a Registry curve
-override, target DPI/screen-width, an EPP (Enhance Pointer Precision) toggle,
+override, target screen-width, an EPP (Enhance Pointer Precision) toggle,
 and a list of `TargetAssociation`s (exe name / full path / window class /
 window title) used to auto-match foreground windows to the profile. Nearly
 every numeric/bool field is nullable — **null means "inherit from the
@@ -76,10 +76,13 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
    dimensionless "effective sensitivity" number for a profile: sensitivity
    multiplier × Windows Pointer Speed multiplier (`WinMultipliers[]`, a 20-entry
    table) × registry curve factor (round-tripped through
-   `MouseRegistryBridge.EncodeRegCurve`, 16.16 fixed-point) × DPI compensation ×
-   screen-width compensation. It's a one-line `.Full` over
+   `MouseRegistryBridge.EncodeRegCurve`, 16.16 fixed-point) ×
+   screen-width compensation. (No DPI compensation factor — DPI only ever fed
+   the actual registry write via a single system-wide value, never a
+   per-profile one; see the "manual DPI/Scale override" note further down.)
+   It's a one-line `.Full` over
    `GetEffectiveSensitivityFactors(profile)`, which computes and returns those
-   five factors individually (`EffectiveSensitivityFactors` record struct) so a
+   four factors individually (`EffectiveSensitivityFactors` record struct) so a
    caller that needs a *partial* product — the Profile Editor's match-accuracy
    display shows "Raw Accel only" and "Raw Accel + Win Speed" rows before the
    final combined row — can reuse the exact same calculation instead of
@@ -194,12 +197,21 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     all Win Speed math. A wrong value means wrong compensation applied to
     hardware.
   - `GetEffectiveSensitivityFactors(profile)` — the single implementation of
-    the 5-factor effective-sensitivity formula (sens × winMult × regCurve ×
-    dpiComp × screenComp), returned as an `EffectiveSensitivityFactors` record
+    the 4-factor effective-sensitivity formula (sens × winMult × regCurve ×
+    screenComp), returned as an `EffectiveSensitivityFactors` record
     struct (`.RawOnly`, `.WinOnly`, `.Full` partial-product properties) instead
     of a single combined number. `GetEffectiveSensitivity()` is just `.Full`
     over this. Uses `EncodeRegCurve` for the `RegCurve` factor, feeding every
-    comparison — removing that call is a silent precision regression. The
+    comparison — removing that call is a silent precision regression.
+    Used to be a 5th factor, `dpiComp` — removed along with the manual
+    `TargetLogicalDpi` profile field it depended on. Verified against the
+    MarkC fix's own cited source and this app's own registry-write code that
+    DPI compensation only ever operated on a single system-wide value (never
+    per-profile), so a per-profile `dpiComp` ratio was mathematically always
+    `1.0` — dead weight, not a real compensation. Live DPI is still read
+    correctly at apply-time (`MouseRegistryBridge.GetCurrentLogicalDpi`),
+    this only removed the now-pointless manual override and its display-side
+    comparison. The
     `regCurve` factor is computed in its own `try/catch` around
     `EncodeRegCurve` — an extreme `RegistryCurveOverride` can overflow 16.16
     fixed-point storage there (a real, intentional exception, not a bug — see
@@ -219,7 +231,7 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     profile's own value, then the Default's, then a hardcoded neutral
     (`1.0`× / WinPointerSpeed `10`) only if *both* are blank. They used to
     jump straight to the hardcoded neutral, skipping the Default-inheritance
-    step DPI/screen width/registry curve already had. That contradicted this
+    step screen width/registry curve already had. That contradicted this
     function's own doc comment ("fully-null profile yields 100% match by
     definition") — the promise only held when the Default itself
     happened to be neutral. A Default with a real, non-neutral
@@ -263,7 +275,8 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
       same reasoning otherwise — see that file's Math Engine section below).
     - `rawRegValue` (the registry curve input) skipped the `baseProfile` tier
       entirely — `GetEffectiveRegistryCurveOverride(profile) ?? 1.0`, unlike
-      the DPI line immediately above it. Fixed to
+      the correct profile→base→default chain already used elsewhere in this
+      function. Fixed to
       `GetEffectiveRegistryCurveOverride(profile) ??
       GetEffectiveRegistryCurveOverride(baseProfile) ?? 1.0`.
     - `CalculateCompensations`'s `currentWinMult` lookup (inside the
@@ -524,8 +537,8 @@ whenever the `Profiles` collection changes or a profile's
   `profile.Field ?? globalDefault.Field ?? hardcodedFallback`.
 - Never touch the math-engine functions listed above without an explicit,
   scoped instruction to do so.
-- **Invalid GUI input (`Sensitivity`/`RegistryCurveOverride`/`TargetScreenWidth`/
-  `TargetLogicalDpi`) is flagged, never silently discarded or auto-corrected.**
+- **Invalid GUI input (`Sensitivity`/`RegistryCurveOverride`/`TargetScreenWidth`)
+  is flagged, never silently discarded or auto-corrected.**
   `TryParsePositiveDouble`/`TryParsePositiveInt` — positive, and for the double
   variant no more than 15 significant digits (the real budget a double can hold
   without silently losing precision, IEEE 754, not a guess) — live as `public
@@ -559,8 +572,10 @@ whenever the `Profiles` collection changes or a profile's
   sometimes visible reads as broken, which is worse than no cue) in favor of a
   separate overlaid `TextBlock.input-error-icon` glyph — not part of either
   control's template, so no theme-internal state styling can hide it, and it
-  behaves identically on both TextBox and ComboBox. The two editable ComboBoxes
-  (Screen Width, Scale) need a larger right `Margin` on their icon instance
-  (`24` vs `6`) than the plain TextBoxes, set per-instance rather than in the
-  shared style, so the icon clears the ComboBox's own built-in dropdown arrow
-  instead of overlapping it.
+  behaves identically on both TextBox and ComboBox. The editable Screen Width
+  ComboBox needs a larger right `Margin` on its icon instance (`24` vs `6`)
+  than the plain TextBoxes, set per-instance rather than in the shared style,
+  so the icon clears the ComboBox's own built-in dropdown arrow instead of
+  overlapping it. (There used to be a second editable ComboBox here, Scale —
+  removed along with the rest of the manual DPI/Scale override; see the
+  `GetEffectiveSensitivityFactors` note above.)

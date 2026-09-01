@@ -89,8 +89,7 @@ public class ProfileService
     }
 
     /// <summary>Same idea as <see cref="TryParsePositiveDouble"/>, for the int-typed fields
-    /// (TargetScreenWidth, TargetLogicalDpi) -- a pixel width or DPI of 0 or negative is not
-    /// meaningful either.</summary>
+    /// (TargetScreenWidth) -- a pixel width of 0 or negative is not meaningful either.</summary>
     public static bool TryParsePositiveInt(string text, out int parsed) =>
         int.TryParse(text, out parsed) && parsed > 0;
 
@@ -119,7 +118,7 @@ public class ProfileService
     }
 
     /// <summary>Same idea as <see cref="LenientPositiveDoubleConverter"/>, for the int-typed
-    /// fields (WinPointerSpeed, TargetScreenWidth, TargetLogicalDpi).</summary>
+    /// fields (WinPointerSpeed, TargetScreenWidth).</summary>
     private sealed class LenientPositiveIntConverter : System.Text.Json.Serialization.JsonConverter<int?>
     {
         public override int? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -370,11 +369,16 @@ public class ProfileService
     /// <summary>
     /// Returns the total effective sensitivity for a profile, including environment compensation:
     ///   SensMultiplier × WinMult[WinPointerSpeed] × EncodeRegCurve(RegistryCurveOverride)
-    ///   × (96 / logicalDpi)  [DPI compensation when EPP active]
     ///   × (baseScreenWidth / profileScreenWidth)  [resolution compensation]
     /// RegCurve is round-tripped through 16.16 fixed-point encoding so this matches what
     /// Windows will actually apply — the single source-of-truth for MatchAccuracy comparisons.
     /// Null fields inherit from the Default profile; fully-null profile yields 100% match by definition.
+    ///
+    /// No DPI compensation factor: DPI only ever fed the actual registry-curve write via a single
+    /// system-wide value (see MouseRegistryBridge), never a per-profile one, so a per-profile DPI
+    /// comparison was always mathematically a no-op once verified against the real MarkC mechanism
+    /// -- removed along with the manual TargetLogicalDpi field it depended on, rather than kept as
+    /// permanently-1.0 dead weight in this formula.
     /// </summary>
     /// <summary>
     /// The individual multipliers <see cref="GetEffectiveSensitivity"/> combines into one number.
@@ -384,25 +388,25 @@ public class ProfileService
     /// see the "single source of truth" note on <see cref="GetEffectiveSensitivityFactors"/>.
     /// </summary>
     public readonly record struct EffectiveSensitivityFactors(
-        double Sens, double WinMult, double RegCurve, double DpiComp, double ScreenComp)
+        double Sens, double WinMult, double RegCurve, double ScreenComp)
     {
-        /// <summary>Raw Accel sensitivity alone, with environment (DPI/screen) compensation applied.</summary>
-        public double RawOnly => Sens * DpiComp * ScreenComp;
+        /// <summary>Raw Accel sensitivity alone, with environment (screen width) compensation applied.</summary>
+        public double RawOnly => Sens * ScreenComp;
 
         /// <summary>Raw Accel + Win Pointer Speed, with environment compensation — no registry curve yet.</summary>
         public double WinOnly => RawOnly * WinMult;
 
-        /// <summary>All five factors combined — identical to <see cref="GetEffectiveSensitivity"/>'s result.</summary>
+        /// <summary>All four factors combined — identical to <see cref="GetEffectiveSensitivity"/>'s result.</summary>
         public double Full => WinOnly * RegCurve;
     }
 
     /// <summary>
-    /// Reads a profile's TargetLogicalDpi/TargetScreenWidth/RegistryCurveOverride, but as null
+    /// Reads a profile's TargetScreenWidth/RegistryCurveOverride, but as null
     /// whenever the corresponding Settings toggle (ShowAutoMatchEnvironment/ShowEppOverride) is
     /// off -- regardless of what's actually stored. Hiding these fields in the Profile Editor is
     /// meant to make them functionally inert, not just invisible while still secretly affecting
     /// behavior (found live: an invisible-but-active setting is worse than a visible one that's
-    /// easy to miss, which already happened once tonight). Every consumer of these three fields
+    /// easy to miss, which already happened once tonight). Every consumer of these two fields
     /// -- GetEffectiveSensitivityFactors, CalculateCompensations, MouseService.ApplyProfileAsync's
     /// registry write, and the ViewModel's own Auto-sync preview functions -- reads through these
     /// helpers instead of the raw MouseProfile property, so the "is this enabled" check exists in
@@ -411,14 +415,10 @@ public class ProfileService
     /// setting is turned back on. Null-safe on <paramref name="profile"/> since callers often pass
     /// a `Profiles.FirstOrDefault(...)`-style lookup that can come back null.
     /// </summary>
-    public int? GetEffectiveTargetLogicalDpi(MouseProfile? profile) =>
-        Settings.ShowAutoMatchEnvironment ? profile?.TargetLogicalDpi : null;
-
-    /// <summary>Same idea as <see cref="GetEffectiveTargetLogicalDpi"/>, for TargetScreenWidth.</summary>
     public int? GetEffectiveTargetScreenWidth(MouseProfile? profile) =>
         Settings.ShowAutoMatchEnvironment ? profile?.TargetScreenWidth : null;
 
-    /// <summary>Same idea as <see cref="GetEffectiveTargetLogicalDpi"/>, for RegistryCurveOverride
+    /// <summary>Same idea as <see cref="GetEffectiveTargetScreenWidth"/>, for RegistryCurveOverride
     /// (gated on ShowEppOverride instead of ShowAutoMatchEnvironment).</summary>
     public double? GetEffectiveRegistryCurveOverride(MouseProfile? profile) =>
         Settings.ShowEppOverride ? profile?.RegistryCurveOverride : null;
@@ -455,21 +455,16 @@ public class ProfileService
         var winIndex = Math.Clamp((profile.WinPointerSpeed ?? baseProfile?.WinPointerSpeed ?? 10) - 1, 0, WinMultipliers.Length - 1);
         var winMult  = WinMultipliers[winIndex];
 
-        // EPP/DPI compensation — only applies when EPP is active.
-        // Windows scales SmoothMouseCurve output by (logicalDpi / 96) internally,
-        // so we divide by that factor to keep the effective value environment-neutral.
-        var useEpp     = ResolveEpp(profile, baseProfile);
-        var logicalDpi = GetEffectiveTargetLogicalDpi(profile) ?? GetEffectiveTargetLogicalDpi(baseProfile) ?? 96;
+        var useEpp = ResolveEpp(profile, baseProfile);
 
         // Registry curve: profile's own value, else the Global Default's, else neutral (1.0) if
-        // neither specifies one. DPI compensation is handled separately below via a dedicated
-        // factor so the two corrections are never compounded.
+        // neither specifies one.
         double rawRegValue = GetEffectiveRegistryCurveOverride(profile) ?? GetEffectiveRegistryCurveOverride(baseProfile) ?? 1.0;
 
         // When EPP is explicitly disabled, the curve has no effect — treat reg factor as 1.0.
         // EncodeRegCurve throws if rawRegValue is extreme enough to overflow 16.16 fixed-point
         // storage (a real, intentional guard — see CLAUDE.md). That failure is specific to the
-        // registry curve alone; it must not take sens/winMult/dpiComp/screenComp down with it,
+        // registry curve alone; it must not take sens/winMult/screenComp down with it,
         // since Raw Accel Only and Win Speed Only (which only need those other factors) have
         // nothing to do with the registry curve and remain perfectly computable. Represent an
         // unrepresentable regCurve as NaN instead of throwing, so only .Full (which actually
@@ -485,12 +480,6 @@ public class ProfileService
             catch (ArgumentOutOfRangeException) { regCurve = double.NaN; }
         }
 
-        // DPI compensation: Windows amplifies SmoothMouseCurve output by (logicalDpi / 96) when EPP is
-        // active. Dividing by that factor normalises the effective value so profiles at different DPI
-        // settings remain directly comparable. Applied regardless of whether reg override is explicit or
-        // defaulted — exactly one factor per profile.
-        double dpiComp = (useEpp != false) ? 96.0 / logicalDpi : 1.0;
-
         // Screen width compensation: a wider logical canvas requires proportionally more hand movement.
         // Ratio is base/profile so a profile designed for a narrower screen gets boosted to match base feel.
         var baseScreenWidth    = GetEffectiveTargetScreenWidth(baseProfile) ?? GetEffectiveTargetScreenWidth(profile);
@@ -499,7 +488,7 @@ public class ProfileService
         if (baseScreenWidth.HasValue && profileScreenWidth.HasValue && profileScreenWidth.Value > 0)
             screenComp = (double)baseScreenWidth.Value / profileScreenWidth.Value;
 
-        return new EffectiveSensitivityFactors(sens, winMult, regCurve, dpiComp, screenComp);
+        return new EffectiveSensitivityFactors(sens, winMult, regCurve, screenComp);
     }
 
     public double GetEffectiveSensitivity(MouseProfile profile) => GetEffectiveSensitivityFactors(profile).Full;
@@ -526,21 +515,18 @@ public class ProfileService
 
         // Effective environment values, computed once and reused by both steps below. Previously
         // Step 1 and Step 2 each independently re-fetched baseProfile (as a redundant second
-        // query, "baseProfile2") and re-derived these same three values from scratch — two
+        // query, "baseProfile2") and re-derived these same values from scratch — two
         // hand-typed copies of the identical formula that happened to still agree, but could have
-        // silently drifted. Routed through GetEffectiveTargetLogicalDpi/GetEffectiveTargetScreenWidth
-        // so a value is treated as absent whenever Settings.ShowAutoMatchEnvironment is off,
-        // exactly like a genuinely-blank field already behaves — see those helpers' doc comments.
-        var useEppWin    = ResolveEpp(activeProfile, baseProfile);
-        var effectiveDpi = GetEffectiveTargetLogicalDpi(activeProfile) ?? GetEffectiveTargetLogicalDpi(baseProfile) ?? 96;
+        // silently drifted. Routed through GetEffectiveTargetScreenWidth so a value is treated as
+        // absent whenever Settings.ShowAutoMatchEnvironment is off, exactly like a genuinely-blank
+        // field already behaves — see that helper's doc comment.
         var baseWidth    = GetEffectiveTargetScreenWidth(baseProfile);
         var activeWidth  = GetEffectiveTargetScreenWidth(activeProfile) ?? baseWidth;
 
-        // Env correction for STEP 1: DPI and screen width change the feel, so Win Speed should absorb
+        // Env correction for STEP 1: screen width changes the feel, so Win Speed should absorb
         // as much of the cross-environment delta as the 20 discrete steps allow.
-        // envCorrWin = dpi/96 × activeW/baseW — the inverse of what GetEffectiveSensitivity divides by.
+        // envCorrWin = activeW/baseW — the inverse of what GetEffectiveSensitivity divides by.
         double envCorrWin = 1.0;
-        if (useEppWin != false) envCorrWin *= (double)effectiveDpi / 96.0;
         if (baseWidth.HasValue && activeWidth.HasValue && baseWidth.Value > 0)
             envCorrWin *= (double)activeWidth.Value / baseWidth.Value;
 
@@ -573,10 +559,10 @@ public class ProfileService
             var currentWinMult = WinMultipliers[Math.Clamp((winSpeedResult ?? baseProfile.WinPointerSpeed ?? 10) - 1, 0, WinMultipliers.Length - 1)];
             var raw = (sTarget * currentWinMult) == 0 ? 1.0 : baseEffectiveSens / (sTarget * currentWinMult);
 
-            // Env correction: the stored regResult must compensate for the active profile's DPI
-            // and screen width so that GetEffectiveSensitivity(active) == GetEffectiveSensitivity(base).
-            // Reuses the same effectiveDpi/baseWidth/activeWidth computed once above.
-            double envCorrection = (useEppWin != false) ? (double)effectiveDpi / 96.0 : 1.0;
+            // Env correction: the stored regResult must compensate for the active profile's screen
+            // width so that GetEffectiveSensitivity(active) == GetEffectiveSensitivity(base).
+            // Reuses the same baseWidth/activeWidth computed once above.
+            double envCorrection = 1.0;
             if (baseWidth.HasValue && activeWidth.HasValue && baseWidth.Value > 0)
                 envCorrection *= (double)activeWidth.Value / baseWidth.Value;
 

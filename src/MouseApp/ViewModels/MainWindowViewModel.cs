@@ -229,7 +229,6 @@ public partial class MainWindowViewModel : ViewModelBase
             RegSyncMode            = _selectedProfile.RegSyncMode,
             RegistryCurveOverride  = _selectedProfile.RegistryCurveOverride,
             TargetScreenWidth      = _selectedProfile.TargetScreenWidth,
-            TargetLogicalDpi       = _selectedProfile.TargetLogicalDpi,
             UseEnhancePointerPrecision = _selectedProfile.UseEnhancePointerPrecision,
             AutoSwitchEnabled      = _selectedProfile.AutoSwitchEnabled,
             TargetAssociations     = _selectedProfile.TargetAssociations
