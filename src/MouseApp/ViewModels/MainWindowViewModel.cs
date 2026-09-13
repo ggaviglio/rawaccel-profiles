@@ -213,10 +213,20 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Called by <see cref="ProcessWatcher"/> (background thread) when a process match
-    /// auto-activates a profile.  Marshals back to the UI thread before updating the
-    /// sidebar selection so Avalonia bindings fire correctly.
+    /// Called when a process match auto-activates a profile.
     /// </summary>
+    /// <remarks>
+    /// Despite how this reads at the call site, it does <b>not</b> arrive on a background
+    /// thread. <see cref="ProcessWatcher"/> installs its <c>SetWinEventHook</c> out-of-context
+    /// (<c>Services/ProcessWatcher.cs</c>), so the callback runs on the thread that installed
+    /// the hook -- the UI thread, since the watcher is constructed in <c>App.axaml.cs</c>. That
+    /// call site also already wraps this in <c>Dispatcher.UIThread.InvokeAsync</c>.
+    /// <para>
+    /// The <c>Post</c> below is therefore redundant rather than load-bearing. It is kept as
+    /// belt-and-braces in case the watcher is ever moved off the UI thread, but do not rely on
+    /// this method being safe to call from an arbitrary thread on the strength of that alone.
+    /// </para>
+    /// </remarks>
     public void OnExternalProfileActivated(MouseProfile profile)
     {
         Dispatcher.UIThread.Post(() =>

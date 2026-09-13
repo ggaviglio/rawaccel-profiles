@@ -8,7 +8,7 @@ namespace MouseApp.ViewModels;
 /// Backing ViewModel for the small "enter a name" dialog used by Import Current Settings,
 /// Duplicate, and Rename for Raw Accel settings files.
 /// </summary>
-public partial class RawAccelSettingsNameDialogViewModel : ObservableObject
+public partial class RawAccelSettingsNameDialogViewModel : ViewModelBase
 {
     [ObservableProperty] private string title = string.Empty;
     [ObservableProperty] private string name = string.Empty;
