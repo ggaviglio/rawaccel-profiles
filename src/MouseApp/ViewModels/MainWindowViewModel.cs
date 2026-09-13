@@ -1,5 +1,8 @@
 ﻿using System;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using MouseApp.Models;
@@ -103,13 +106,13 @@ public partial class MainWindowViewModel : ViewModelBase
             : Profiles.Where(p => p.ProfileName?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) == true);
 
     public System.Windows.Input.ICommand OpenSettingsCommand { get; }
-    public RelayCommand AddProfileCommand { get; }
-    public RelayCommand DeleteProfileCommand { get; }
-    public RelayCommand CloneProfileCommand { get; }
-    public RelayCommand MoveProfileUpCommand { get; }
-    public RelayCommand MoveProfileDownCommand { get; }
-    public RelayCommand ApplySelectedCommand { get; }
-    public RelayCommand SetAsDefaultCommand { get; }
+    public IAsyncRelayCommand AddProfileCommand      { get; }
+    public IAsyncRelayCommand DeleteProfileCommand   { get; }
+    public IAsyncRelayCommand CloneProfileCommand    { get; }
+    public IAsyncRelayCommand MoveProfileUpCommand   { get; }
+    public IAsyncRelayCommand MoveProfileDownCommand { get; }
+    public IRelayCommand      ApplySelectedCommand   { get; }
+    public IAsyncRelayCommand SetAsDefaultCommand    { get; }
 
     public MainWindowViewModel()
     {
@@ -121,13 +124,13 @@ public partial class MainWindowViewModel : ViewModelBase
             if (_windowService != null && _profileService != null && _storageService != null && _mouseService != null)
                 await _windowService.ShowSettingsAsync(_profileService, _storageService, _mouseService);
         });
-        AddProfileCommand = new RelayCommand(ExecuteAddProfile);
-        DeleteProfileCommand = new RelayCommand(ExecuteDeleteProfile, CanDeleteProfile);
-        CloneProfileCommand = new RelayCommand(ExecuteCloneProfile, CanCloneProfile);
-        MoveProfileUpCommand = new RelayCommand(ExecuteMoveProfileUp, CanMoveProfileUp);
-        MoveProfileDownCommand = new RelayCommand(ExecuteMoveProfileDown, CanMoveProfileDown);
-        ApplySelectedCommand = new RelayCommand(ExecuteApplySelected, CanApplySelected);
-        SetAsDefaultCommand = new RelayCommand(ExecuteSetAsDefault, CanSetAsDefault);
+        AddProfileCommand       = new AsyncRelayCommand(ExecuteAddProfileAsync);
+        DeleteProfileCommand    = new AsyncRelayCommand(ExecuteDeleteProfileAsync, CanDeleteProfile);
+        CloneProfileCommand     = new AsyncRelayCommand(ExecuteCloneProfileAsync, CanCloneProfile);
+        MoveProfileUpCommand    = new AsyncRelayCommand(ExecuteMoveProfileUpAsync, CanMoveProfileUp);
+        MoveProfileDownCommand  = new AsyncRelayCommand(ExecuteMoveProfileDownAsync, CanMoveProfileDown);
+        ApplySelectedCommand    = new RelayCommand(ExecuteApplySelected, CanApplySelected);
+        SetAsDefaultCommand     = new AsyncRelayCommand(ExecuteSetAsDefaultAsync, CanSetAsDefault);
     }
 
     public MainWindowViewModel(ProfileEditorViewModel profileEditor, ProfileService profileService, IWindowService windowService, IStorageService storageService)
@@ -141,7 +144,9 @@ public partial class MainWindowViewModel : ViewModelBase
         // Use the service's collection directly — single source of truth, no duplication.
         Profiles = profileService.Profiles;
         OnPropertyChanged(nameof(Profiles));
-        Profiles.CollectionChanged += (_, _) => OnPropertyChanged(nameof(FilteredProfiles));
+        Profiles.CollectionChanged += OnProfilesCollectionChanged;
+        foreach (var profile in Profiles)
+            profile.PropertyChanged += OnProfilePropertyChanged;
 
         // LoadAsync has already run before this ctor is called (see App.axaml.cs);
         // select the first profile (Default) so the editor is never blank.
@@ -150,6 +155,56 @@ public partial class MainWindowViewModel : ViewModelBase
         // "Apply Now" in ProfileEditor should light the active indicator.
         profileEditor.ProfileManuallyApplied += profile =>
             Dispatcher.UIThread.Post(() => ActiveProfile = profile);
+    }
+
+    /// <summary>
+    /// Keeps the per-profile <see cref="MouseProfile.PropertyChanged"/> subscriptions in step
+    /// with the collection, then refreshes the filtered view.
+    /// </summary>
+    private void OnProfilesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // Reset (raised by ProfileService's Profiles.Clear() on reload) reports neither
+        // OldItems nor NewItems, so the survivors are re-subscribed defensively instead.
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            foreach (var profile in Profiles)
+            {
+                profile.PropertyChanged -= OnProfilePropertyChanged;
+                profile.PropertyChanged += OnProfilePropertyChanged;
+            }
+        }
+        else
+        {
+            if (e.OldItems != null)
+                foreach (MouseProfile profile in e.OldItems)
+                    profile.PropertyChanged -= OnProfilePropertyChanged;
+
+            if (e.NewItems != null)
+                foreach (MouseProfile profile in e.NewItems)
+                    profile.PropertyChanged += OnProfilePropertyChanged;
+        }
+
+        OnPropertyChanged(nameof(FilteredProfiles));
+    }
+
+    /// <summary>
+    /// Re-applies the search filter after a rename commits, so a profile renamed out of (or
+    /// into) the active search term stops (or starts) showing straight away.
+    /// </summary>
+    private void OnProfilePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not (nameof(MouseProfile.ProfileName) or nameof(MouseProfile.IsEditing)))
+            return;
+
+        // With no search term FilteredProfiles *is* Profiles, so re-raising would swap the
+        // ListBox's ItemsSource and drop its selection for nothing.
+        if (string.IsNullOrWhiteSpace(_searchText)) return;
+
+        // The inline-rename TextBox writes ProfileName on every keystroke; re-filtering
+        // mid-edit would pull the row out from under the caret. Wait for the commit.
+        if (sender is MouseProfile { IsEditing: true }) return;
+
+        OnPropertyChanged(nameof(FilteredProfiles));
     }
 
     public void WireMouseService(IMouseService mouseService)
@@ -198,7 +253,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool CanSetAsDefault() =>
         _selectedProfile != null && !_selectedProfile.IsDefault;
 
-    private async void ExecuteSetAsDefault()
+    private async Task ExecuteSetAsDefaultAsync()
     {
         if (_selectedProfile == null || _profileService == null) return;
         await _profileService.SetDefaultAsync(_selectedProfile);
@@ -208,7 +263,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private bool CanCloneProfile() => _selectedProfile != null;
 
-    private async void ExecuteCloneProfile()
+    private async Task ExecuteCloneProfileAsync()
     {
         if (_selectedProfile == null || _profileService == null) return;
 
@@ -254,7 +309,7 @@ public partial class MainWindowViewModel : ViewModelBase
         return index > 0 && !(_selectedProfile.IsDefault && index == 0);
     }
 
-    private async void ExecuteMoveProfileUp()
+    private async Task ExecuteMoveProfileUpAsync()
     {
         var current = _selectedProfile;
         if (current == null || _profileService == null) return;
@@ -274,7 +329,7 @@ public partial class MainWindowViewModel : ViewModelBase
         return index >= 0 && index < Profiles.Count - 1;
     }
 
-    private async void ExecuteMoveProfileDown()
+    private async Task ExecuteMoveProfileDownAsync()
     {
         var current = _selectedProfile;
         if (current == null || _profileService == null) return;
@@ -289,7 +344,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool CanDeleteProfile() =>
         _selectedProfile != null && !_selectedProfile.IsDefault;
 
-    private async void ExecuteAddProfile()
+    private async Task ExecuteAddProfileAsync()
     {
         var newProfile = new MouseProfile
         {
@@ -309,7 +364,7 @@ public partial class MainWindowViewModel : ViewModelBase
             await _profileService.SaveAsync().ConfigureAwait(false);
     }
 
-    private async void ExecuteDeleteProfile()
+    private async Task ExecuteDeleteProfileAsync()
     {
         if (_selectedProfile == null || _selectedProfile.IsDefault) return;
 

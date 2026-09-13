@@ -34,15 +34,6 @@ public partial class WindowEntry : ObservableObject
         ClassName = className;
     }
 
-    public string DisplayText
-    {
-        get
-        {
-            var t = string.IsNullOrEmpty(Title) ? "[No Title]" : Title;
-            return $"{t}  ({ExeName})";
-        }
-    }
-
     /// <summary>Window title with a fallback, shown as the secondary line in the Active Windows picker.</summary>
     public string TitleDisplay => string.IsNullOrEmpty(Title) ? "[No Title]" : Title;
 

@@ -67,10 +67,27 @@ project can still be built/analyzed cross-platform.
 **MVVM with CommunityToolkit.Mvvm**, no DI container — `App.axaml.cs`
 (`OnFrameworkInitializationCompleted`) manually constructs every service and
 view-model in dependency order and wires them together. Read that method first
-when tracing how anything is connected. Navigation between the Profile Editor
-and Settings screens is done via `NavigationService` (a simple
-`Current`/`CurrentChanged` pointer swap), not a router. Views are resolved from
-view-models by `ViewLocator.cs` (naming convention, not registration).
+when tracing how anything is connected. There is **no** `ViewLocator` and **no**
+`NavigationService` — this doc described both for a while; neither file has ever
+existed in the repo, and nothing in `App.axaml` registers an
+`Application.DataTemplates` entry. Don't go looking for them, and don't assume a
+view-model gets a view for free by naming convention:
+
+- **The one always-on view, `ProfileEditorView`, is instantiated directly in
+  XAML** — `MainWindow.axaml`'s `<views:ProfileEditorView
+  DataContext="{Binding ProfileEditor}" />`. There is no in-place navigation and
+  no screen swapping; the Profile Editor *is* the main content area, permanently.
+- **Every other screen is a modal `Window` opened through `IWindowService`**
+  (`Services/AvaloniaWindowService.cs`) — Settings, Target Manager, and the Raw
+  Accel name dialog. Each gets a fresh view-model per open, handed to a `Window`
+  subclass's second constructor (`SettingsWindow(SettingsViewModel)` etc.),
+  which sets `DataContext` and subscribes to the view-model's `RequestClose`
+  event. That's the pattern to follow for a new screen: add a method to
+  `IWindowService`, not a route.
+
+Both view-resolution paths are explicit and typed, which is what lets every
+`.axaml` root carry an `x:DataType` and compile its bindings
+(`AvaloniaUseCompiledBindingsByDefault` is `true` in the csproj).
 
 New `MouseProfile`/ViewModel properties follow CommunityToolkit's
 `[ObservableProperty]` + manual `partial void On*Changed` callback pattern —

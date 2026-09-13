@@ -175,9 +175,6 @@ public partial class ProfileEditorViewModel : ViewModelBase
     // ── Target Manager (read-only summary shown in the editor) ──────────────
     public ObservableCollection<TargetAssociation> TargetAssociationsSummary { get; } = new();
 
-    /// <summary>True when Target Manager is interactive.</summary>
-    public bool IsTargetManagerEnabled => true;
-
     /// <summary>
     /// Auto-sync only makes sense on non-Default profiles.
     /// The Default profile IS the reference — there is nothing to compensate relative to itself.

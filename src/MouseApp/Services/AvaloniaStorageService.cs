@@ -33,29 +33,4 @@ public class AvaloniaStorageService : IStorageService
 
         return null;
     }
-
-    public async Task<string?> PickFileAsync(string? title = null)
-    {
-        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
-            return null;
-
-        var window = desktop.MainWindow;
-        var provider = window?.StorageProvider;
-        if (provider == null)
-            return null;
-
-        var result = await provider.OpenFilePickerAsync(new FilePickerOpenOptions
-        {
-            Title = title ?? "Select File",
-            AllowMultiple = false
-        }).ConfigureAwait(false);
-
-        if (result != null && result.Count > 0)
-        {
-            var localPath = result.First().TryGetLocalPath();
-            return localPath ?? result.First().Name;
-        }
-
-        return null;
-    }
 }

@@ -180,7 +180,7 @@
           <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
             <ComboBox Classes="value-box" ItemsSource="{Binding RawAccelSettingsFiles}" SelectedItem="{Binding SelectedRawAccelSettingsFile, Mode=TwoWay}">
               <ComboBox.ItemTemplate>
-                <DataTemplate>
+                <DataTemplate x:DataType="system:String">
                   <TextBlock Text="{Binding ., TargetNullValue=(Skip)}" />
                 </DataTemplate>
               </ComboBox.ItemTemplate>
@@ -292,7 +292,7 @@
                       ItemsSource="{Binding WinPointerOptions}" SelectedItem="{Binding WinPointerSpeed, Mode=TwoWay}"
                       MinWidth="125" IsEnabled="{Binding !IsOSAutoSync}">
               <ComboBox.ItemTemplate>
-                <DataTemplate>
+                <DataTemplate x:DataType="system:Object">
                   <TextBlock Text="{Binding ., Converter={StaticResource WinPointerSpeedDisplayConverter}}" />
                 </DataTemplate>
               </ComboBox.ItemTemplate>
@@ -323,7 +323,7 @@
                     IsVisible="{Binding IsEppVisible}"
                     ToolTip.Tip="Enhance Pointer Precision.">
             <ComboBox.ItemTemplate>
-              <DataTemplate>
+              <DataTemplate x:DataType="system:Object">
                 <TextBlock Text="{Binding ., Converter={StaticResource NullableBoolDisplayConverter}}" />
               </DataTemplate>
             </ComboBox.ItemTemplate>
