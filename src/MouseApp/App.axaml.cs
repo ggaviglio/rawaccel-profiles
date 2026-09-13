@@ -54,6 +54,23 @@ public partial class App : Application
             _mouseService = new Services.MouseService(profileService, rawAccelProvider);
             var mouseService = _mouseService;
 
+            // Raw Accel's kernel driver holds its config in memory only, so a PC restart wipes
+            // it even though Windows Pointer Speed / the registry curve (persisted in the
+            // registry) survive. Best-effort fire-and-forget: ReapplyCurrentSettingsAsync already
+            // swallows its own errors and is a no-op on non-Windows platforms.
+            if (profileService.Settings?.ApplyRawAccelSettingsOnStartup == true)
+                _ = rawAccelProvider.ReapplyCurrentSettingsAsync();
+
+            // Self-heal a stale HKCU Run-key entry: this app is meant to be portable (see
+            // CLAUDE.md), but the Run key stores an absolute exe path, so moving the app's
+            // folder leaves Run at Startup silently pointing at a path that no longer exists.
+            // Re-writing it here, unconditionally, on every launch keeps it pointed at wherever
+            // the app is actually running from right now, without requiring the user to notice
+            // and revisit Settings. ApplyRunAtStartup already no-ops off-Windows and swallows
+            // its own registry-access errors.
+            if (profileService.Settings?.RunAtStartup == true)
+                ViewModels.SettingsViewModel.ApplyRunAtStartup(true);
+
             // Give the ProfileEditor direct access to the hardware service for manual Apply.
             profileEditorVm.WireMouseService(mouseService);
 

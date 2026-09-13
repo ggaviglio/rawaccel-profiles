@@ -42,6 +42,22 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
 
+        <!-- SimpleTheme's own ComboBox template (confirmed against Avalonia's source, v11.3.12,
+             src/Avalonia.Themes.Simple/Controls/ComboBox.xaml) leaves its dropdown-arrow
+             ToggleButton (Name="toggle") unsized, so it auto-sizes to its 8px arrow Path with no
+             explicit Padding, landing at 16px wide in practice. The dropdown popup's own
+             ScrollBar (SimpleTheme's ScrollBarThickness) renders at 18px. Found live (measured
+             both via UI Automation on a real open dropdown): a real, if small, 2px mismatch
+             between the two edges of the same control. Targets the named template part directly,
+             the same technique this app already uses for ComboBox.editable-centered's internal
+             PART_EditableTextBox, so only the toggle button's width changes; the popup,
+             scrollbar, and everything else in the template are untouched. App-wide (not scoped
+             to one view) since every ComboBox in this app shares the same SimpleTheme template
+             and the same mismatch. -->
+        <Style Selector="ComboBox /template/ ToggleButton#toggle">
+            <Setter Property="Width" Value="18" />
+        </Style>
+
         <!-- Consistent width for dialog action buttons (Save/Cancel/OK), so they don't
              auto-size to their own label length: a 2-letter "OK" next to a 6-letter
              "Cancel" looked mismatched. 75px matches the standard Windows dialog button width. -->

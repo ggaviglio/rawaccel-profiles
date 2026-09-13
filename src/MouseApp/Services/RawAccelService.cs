@@ -117,6 +117,16 @@ public class RawAccelService
     }
 
     /// <summary>
+    /// Re-invokes writer.exe against whichever settings.json is already sitting in the Raw
+    /// Accel directory, without copying a different file or patching sensitivity first.
+    /// <see cref="ApplySettingsFileAsync"/> only copies/patches when given a non-null argument
+    /// and always runs writer.exe unconditionally at the end, so passing (null, null) is exactly
+    /// "re-apply what's already there" -- used to restore Raw Accel's driver configuration after
+    /// a PC restart wipes it (see AppSettings.ApplyRawAccelSettingsOnStartup).
+    /// </summary>
+    public Task ReapplyCurrentSettingsAsync() => ApplySettingsFileAsync(null, null);
+
+    /// <summary>
     /// Mirrors <c>RawAccelSettingsRepository.ResolveDirectory()</c>.
     /// Returns the configured settings path or the portable default (app folder).
     /// Kept local so <see cref="RawAccelService"/> has no dependency on RawAccelSettingsRepository.

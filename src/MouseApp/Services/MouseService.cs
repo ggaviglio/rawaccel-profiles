@@ -37,8 +37,14 @@ public class MouseService : IMouseService
         if (profile == null) throw new ArgumentNullException(nameof(profile));
 
         var (winSpeed, regResult) = _profileService.CalculateCompensations(profile);
-        var eppValue = profile.UseEnhancePointerPrecision
-            ?? _profileService.Profiles.FirstOrDefault(p => p.IsDefault)?.UseEnhancePointerPrecision;
+        // Routed through GetEffectiveUseEnhancePointerPrecision (gated on Settings.ShowEpp)
+        // instead of reading UseEnhancePointerPrecision directly -- found live via audit: this
+        // was the one field of the four Show*-gated options (Width/Height/RegistryCurveOverride/
+        // EPP) that had its Settings toggle wired to the ViewModel's display only, never to the
+        // actual hardware-apply path, so hiding EPP from Settings never stopped a previously-set
+        // value from still being read and written to the registry on every apply.
+        var eppValue = _profileService.GetEffectiveUseEnhancePointerPrecision(profile)
+            ?? _profileService.GetEffectiveUseEnhancePointerPrecision(_profileService.Profiles.FirstOrDefault(p => p.IsDefault));
         var newState = (winSpeed, regResult, profile.RawAccelSettingsFile, profile.SensMultiplier, eppValue);
 
         // Dedup: skip hardware writes if effective values haven't changed

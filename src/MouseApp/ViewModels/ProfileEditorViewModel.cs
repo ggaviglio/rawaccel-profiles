@@ -196,6 +196,12 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>Same idea as <see cref="IsAutoMatchEnvironmentVisible"/>, for the EPP Override row.</summary>
     public bool IsEppOverrideVisible => _profileService.Settings.ShowEppOverride;
 
+    /// <summary>Same idea as <see cref="IsEppOverrideVisible"/>, for the Y/X Ratio row -- an
+    /// additional gate on top of <see cref="IsAutoMatchEnvironmentVisible"/> (both Settings must
+    /// be on), mirroring <see cref="ProfileService.GetEffectiveYXRatioOverride"/>'s own compound
+    /// gate exactly so visibility and effective-value gating can't drift apart.</summary>
+    public bool IsYXRatioVisible => _profileService.Settings.ShowAutoMatchEnvironment && _profileService.Settings.ShowYXRatio;
+
     /// <summary>Same idea as <see cref="IsAutoMatchEnvironmentVisible"/>, for the base EPP row.</summary>
     public bool IsEppVisible => _profileService.Settings.ShowEpp;
 
@@ -270,11 +276,12 @@ public partial class ProfileEditorViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Same idea as <see cref="IsRawAutoSync"/> -- gated on ShowAutoMatchEnvironment
-    /// since the Y/X ratio is causally derived from Width/Height, which are already gated by it.</summary>
+    /// <summary>Same idea as <see cref="IsRawAutoSync"/> -- gated on ShowAutoMatchEnvironment AND
+    /// ShowYXRatio (both required), the same compound gate as <see cref="IsYXRatioVisible"/> and
+    /// <see cref="ProfileService.GetEffectiveYXRatioOverride"/>.</summary>
     public bool IsYXRatioAutoSync
     {
-        get => !IsDefault && YXRatioSyncMode == SyncMode.Auto && _profileService.Settings.ShowAutoMatchEnvironment;
+        get => !IsDefault && YXRatioSyncMode == SyncMode.Auto && IsYXRatioVisible;
         set
         {
             if (value)
@@ -319,9 +326,11 @@ public partial class ProfileEditorViewModel : ViewModelBase
             OnPropertyChanged(nameof(IsAutoMatchEnvironmentVisible));
             OnPropertyChanged(nameof(IsEppOverrideVisible));
             OnPropertyChanged(nameof(IsEppVisible));
+            OnPropertyChanged(nameof(IsYXRatioVisible));
             OnPropertyChanged(nameof(IsRawAutoAvailable));
             OnPropertyChanged(nameof(IsRawAutoSync));
             OnPropertyChanged(nameof(IsYXRatioAutoSync));
+            OnPropertyChanged(nameof(YXRatioMatch));
 
             // The four notifications above only refresh what's already displayed -- they don't
             // recompute anything. A profile whose Auto mode was guarded off while a section was
@@ -604,6 +613,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
         if (YXRatioSyncMode == SyncMode.Skip)
             YXRatioSyncMode = SyncMode.Manual;
 
+        // Not covered by ApplyAutoYXRatioSync (this is the Manual-typing path, and that
+        // function's own YXRatioOverride write is suppressed here via the _isSyncing guard
+        // above) -- YXRatioMatch's "effective" side just changed, so it needs its own refresh.
+        OnPropertyChanged(nameof(YXRatioMatch));
         AutoPersist();
         RecalculateMatchAccuracy();
     }
@@ -772,11 +785,30 @@ public partial class ProfileEditorViewModel : ViewModelBase
         return r == 0 ? 1.0 : r;
     }
 
+    /// <summary>YXRatioOverride of the Default profile (fallback 1.0 = neutral, no manual
+    /// stretch). The Default's own Raw Accel Y/X ratio isn't guaranteed to be neutral -- someone
+    /// may have set it manually for reasons unrelated to aspect-ratio compensation -- so this is
+    /// the base every other profile's Auto-computed ratio (and YXRatioMatch's "effective" side)
+    /// must multiply against/inherit from, not a hardcoded 1.0. Same fallback-chain principle as
+    /// GetBaseSens/GetBaseRegCurve above.</summary>
+    private double GetBaseYXRatio()
+    {
+        var r = GetBaseProfile()?.YXRatioOverride ?? 1.0;
+        return r == 0 ? 1.0 : r;
+    }
+
     /// <summary>Same resolution as <see cref="ProfileService.ResolveEpp"/>, for this ViewModel's
     /// own live-edit state (<see cref="EppOverride"/>) instead of a stored MouseProfile -- this
     /// profile's own value, else the Default's, else false (EPP off) if neither specifies one.
-    /// See ProfileService.ResolveEpp's doc comment for why false is the correct final tier.</summary>
-    private bool GetEffectiveEpp() => EppOverride ?? GetBaseProfile()?.UseEnhancePointerPrecision ?? false;
+    /// See ProfileService.ResolveEpp's doc comment for why false is the correct final tier.
+    /// Gated on Settings.ShowEpp (same relationship as ProfileService.GetEffectiveUseEnhancePointerPrecision
+    /// to ResolveEpp) so a hidden EPP row resolves to the same neutral false as "never set,"
+    /// instead of this display-side resolver silently reading a stale stored value the user can
+    /// no longer see or edit.</summary>
+    private bool GetEffectiveEpp() =>
+        _profileService.Settings.ShowEpp
+            ? EppOverride ?? GetBaseProfile()?.UseEnhancePointerPrecision ?? false
+            : false;
 
     /// <summary>TargetScreenWidth of the Default profile. Null if not declared, or if
     /// Settings.ShowAutoMatchEnvironment is off (see ProfileService.GetEffectiveTargetScreenWidth
@@ -932,44 +964,97 @@ public partial class ProfileEditorViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Auto Y/X Ratio: compensates for a profile whose declared aspect ratio (Width:Height)
-    /// differs from the Default's -- native AR ÷ profile AR. Equals exactly 1.0 (no-op) whenever
+    /// The Y/X ratio actually needed for this profile to match the Default's real-world feel:
+    /// GetBaseYXRatio() (the Default's own manual baseline, neutral 1.0 if it hasn't set one) ×
+    /// (native aspect ÷ this profile's aspect). The aspect factor alone is exactly 1.0 whenever
     /// the two aspect ratios actually match, regardless of absolute resolution size (e.g.
     /// 1920x1080 vs. 1280x720 are both 16:9 -> 1.0); only diverges from 1.0 when the shape
     /// itself genuinely changes (e.g. 1920x1080 base vs. 800x600 profile -> ~1.333, meaning Y
     /// gets boosted 33% to match X's real-world feel -- see this session's stretch-ratio
-    /// derivation). Neutral (1.0, nothing meaningful written) whenever either profile is
-    /// missing Width or Height, mirroring every other Auto-sync function's graceful-blank
-    /// behavior here. Unlike ApplyAutoOSSync/ApplyAutoRegSync, this value doesn't feed the
-    /// Windows-side effective-sensitivity math at all -- it's headed for Raw Accel's own
-    /// settings.json (wired in a later step), so it has no bearing on match% display.
+    /// derivation). That aspect factor alone used to be the entire return value here -- found
+    /// live to be wrong whenever the Default's own YXRatioOverride isn't neutral, the same
+    /// "jumped straight to a hardcoded neutral instead of falling back through the Default"
+    /// bug class as GetBaseSens/GetBaseWinPointerSpeed/GetEffectiveEpp/GetBaseRegCurve already
+    /// had fixed for them (see CLAUDE.md, ProfileService.cs section) -- a manually-stretched
+    /// Default's baseline was being silently discarded instead of compensated relative to.
+    /// Neutral aspect factor (1.0) whenever either profile is missing Width or Height, mirroring
+    /// every other Auto-sync function's graceful-blank behavior here. Shared by
+    /// ApplyAutoYXRatioSync (writes this into YXRatioOverride when YXRatioSyncMode is Auto) and
+    /// YXRatioMatch (below, always compares the current effective value against this target
+    /// regardless of sync mode) so the two can't drift apart into two different formulas.
+    /// </summary>
+    private double ComputeIdealYXRatio()
+    {
+        var baseW   = GetBaseScreenWidth();
+        var baseH   = GetBaseScreenHeight();
+        var activeW = EffectiveTargetScreenWidth ?? baseW;
+        var activeH = EffectiveTargetScreenHeight ?? baseH;
+
+        double aspectFactor = 1.0;
+        if (baseW.HasValue && baseH.HasValue && activeW.HasValue && activeH.HasValue
+            && baseH.Value > 0 && activeH.Value > 0)
+        {
+            double baseAspect   = (double)baseW.Value / baseH.Value;
+            double activeAspect = (double)activeW.Value / activeH.Value;
+            if (activeAspect > 0)
+                aspectFactor = baseAspect / activeAspect;
+        }
+
+        return GetBaseYXRatio() * aspectFactor;
+    }
+
+    /// <summary>
+    /// Auto Y/X Ratio: sets YXRatioOverride to ComputeIdealYXRatio() whenever YXRatioSyncMode is
+    /// Auto. Unlike ApplyAutoOSSync/ApplyAutoRegSync, this value doesn't feed the Windows-side
+    /// effective-sensitivity math at all -- it's headed for Raw Accel's own settings.json (wired
+    /// in a later step), so it has no bearing on the percent-match% display/RecalculateMatchAccuracy.
+    /// Always re-raises YXRatioMatch (regardless of sync mode) since this function is the one
+    /// place every Width/Height-changing trigger already funnels through -- Skip/Manual profiles
+    /// need that comparison refreshed too whenever the *target* (ComputeIdealYXRatio) moves, even
+    /// though their own effective value didn't change.
     /// </summary>
     private void ApplyAutoYXRatioSync()
     {
-        if (IsDefault || !_profileService.Settings.ShowAutoMatchEnvironment) return;
+        if (IsDefault || !IsYXRatioVisible) return;
 
         if (YXRatioSyncMode == SyncMode.Auto)
         {
-            var baseW   = GetBaseScreenWidth();
-            var baseH   = GetBaseScreenHeight();
-            var activeW = EffectiveTargetScreenWidth ?? baseW;
-            var activeH = EffectiveTargetScreenHeight ?? baseH;
-
-            double ratio = 1.0;
-            if (baseW.HasValue && baseH.HasValue && activeW.HasValue && activeH.HasValue
-                && baseH.Value > 0 && activeH.Value > 0)
-            {
-                double baseAspect   = (double)baseW.Value / baseH.Value;
-                double activeAspect = (double)activeW.Value / activeH.Value;
-                if (activeAspect > 0)
-                    ratio = baseAspect / activeAspect;
-            }
+            double ratio = ComputeIdealYXRatio();
 
             var wasSyncing = _isSyncing;
             _isSyncing = true;
             YXRatioOverride = ratio;
             YXRatioString   = FormatFixedPointInput(ratio, int.MaxValue);
             _isSyncing = wasSyncing;
+        }
+
+        OnPropertyChanged(nameof(YXRatioMatch));
+    }
+
+    /// <summary>
+    /// Always-on comparison between the currently effective Y/X ratio (this profile's own
+    /// override, or the Default's baseline if Skipped -- same profile→base fallback chain as
+    /// every other field) and ComputeIdealYXRatio() (what the aspect-ratio mismatch actually
+    /// needs): 1.0 means fully compensated, exactly like the other rows' 100% match, just
+    /// expressed as a ratio instead of a percent (this field was deliberately never given percent
+    /// formatting -- see this session's design discussion). Trivially always 1.0 in Auto mode
+    /// (effective is set equal to ideal by construction in ApplyAutoYXRatioSync). In Skip mode
+    /// this reveals whether a real, uncorrected aspect-ratio mismatch exists instead of hiding it
+    /// behind a blank textbox -- found live: the view used to bind this same display slot to
+    /// YXRatioString itself (the textbox's own raw value), so Skip mode -- the default for every
+    /// profile -- showed nothing even when the real match was well off 1.0, and Auto mode just
+    /// showed a second copy of the exact number already visible in the textbox right next to it.
+    /// </summary>
+    public string YXRatioMatch
+    {
+        get
+        {
+            if (IsDefault || !IsYXRatioVisible) return string.Empty;
+
+            double ideal     = ComputeIdealYXRatio();
+            double effective = YXRatioOverride ?? GetBaseYXRatio();
+            double match     = ideal != 0 ? effective / ideal : 1.0;
+            return FormatFixedPointInput(match, int.MaxValue);
         }
     }
 
@@ -1019,6 +1104,47 @@ public partial class ProfileEditorViewModel : ViewModelBase
     private static int GetTrueIntegerDigitCount(double absValue) => (int)Math.Floor(Math.Log10(absValue)) + 1;
 
     /// <summary>
+    /// Renders <paramref name="value"/> fixed-point with exactly <paramref name="decimalPlaces"/>
+    /// digit positions available (trailing zeros still trimmed by '#'). Both
+    /// <see cref="FormatFixedPointInput"/> and FormatMatchPercent (local to
+    /// RecalculateMatchAccuracy) need this same primitive, so it lives here as the one
+    /// implementation instead of two copies.
+    ///
+    /// Does NOT call <c>value.ToString("0." + new string('#', decimalPlaces))</c> directly --
+    /// found live to be a genuine, reproducible .NET formatting bug, not app logic: for a double
+    /// whose shortest round-trip representation needs many digits (e.g.
+    /// 1.7718749999999999, which needs all 17), asking the custom "0.####...#" format for more
+    /// than ~6-7 decimal places silently returns the SAME truncated string no matter how many
+    /// '#' placeholders are requested (verified directly via .ToString, no app code involved:
+    /// decimalPlaces 6 through 17 all produced "1.771875"). Only the "G17" format specifier
+    /// reliably reveals the true value ("1.7718749999999999") -- custom picture-format strings
+    /// on double just don't honor arbitrary requested precision.
+    ///
+    /// The fix routes through <see cref="decimal"/> instead: get the value's exact round-trip
+    /// string via "G17" (always correct -- that's the one specifier proven to work), parse it
+    /// into a decimal (decimal's own custom-format rendering does not share double's cap -- also
+    /// verified directly), then apply the same "0.####...#" format to the decimal. NumberStyles.Float
+    /// is required on the parse because G17 can itself emit scientific notation for small
+    /// magnitudes (e.g. "1.2345669999999999E-07"); decimal correctly expands that back to plain
+    /// fixed-point digits. Falls back to the old double-format path only if the decimal parse
+    /// itself fails (e.g. a magnitude/precision combination that overflows decimal's ~28-29
+    /// digit budget) -- that combination should already be unreachable here in practice, since
+    /// both callers route magnitudes that extreme to scientific notation before ever asking for
+    /// fixed-point at all, but the fallback exists so this never crashes if that assumption is
+    /// ever wrong.
+    /// </summary>
+    private static string FormatFixedPointExact(double value, int decimalPlaces)
+    {
+        string format = decimalPlaces > 0 ? "0." + new string('#', decimalPlaces) : "0";
+
+        string exact = value.ToString("G17", CultureInfo.InvariantCulture);
+        if (decimal.TryParse(exact, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal dec))
+            return dec.ToString(format, CultureInfo.InvariantCulture);
+
+        return value.ToString(format, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
     /// Formats a value for a raw input textbox (Sensitivity, RegistryCurveOverride), always in
     /// fixed-point notation — never switching to scientific "E" notation the way a plain
     /// <c>ToString(CultureInfo.InvariantCulture)</c> does for extreme magnitudes (that default
@@ -1048,8 +1174,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             : Math.Min(domainDecimalPlaces, naturalDecimalPlaces);
         decimalPlaces = Math.Min(decimalPlaces, 50);
 
-        string format = decimalPlaces > 0 ? "0." + new string('#', decimalPlaces) : "0";
-        return value.ToString(format, CultureInfo.InvariantCulture);
+        return FormatFixedPointExact(value, decimalPlaces);
     }
 
     /// <summary>
@@ -1194,12 +1319,26 @@ public partial class ProfileEditorViewModel : ViewModelBase
             const int absoluteIntegerDigitCeiling = 15;
             bool tooLargeForFixed = trueIntegerDigits > absoluteIntegerDigitCeiling;
 
-            // Fixed-point notation also stops being honest once it would need more decimal
-            // places than Math.Round can even evaluate (an unreasonable wall of leading zeros
-            // for an extremely small value — too small). Scientific notation shows exactly the
-            // real significant digits in both cases, instead of either fabricating digits or
-            // rounding a real value down to a false zero.
-            bool tooSmallForFixed = decimalPlaces > 15;
+            // "Too small for fixed-point" must be judged the same way as tooLargeForFixed above
+            // -- against trueIntegerDigits alone (an absolute magnitude ceiling), NOT against
+            // decimalPlaces. decimalPlaces conflates two different things: how many leading
+            // zeros a genuinely tiny value would need (a real "too small" concern -- an
+            // unreasonable wall of zeros before the first real digit) vs. how many significant
+            // digits THIS value happens to need to round-trip exactly, which has nothing to do
+            // with its magnitude. A value with an ordinary magnitude (trueIntegerDigits near 0)
+            // can still need many significant digits purely from float rounding noise (e.g.
+            // 0.567 * 0.03125 * 100 == 1.7718749999999999, needing all 17 digits to round-trip)
+            // -- that used to push decimalPlaces past 15 and misfire scientific notation on an
+            // entirely ordinary-looking value, rendering a pointless "1.77...E+000%" (the
+            // exponent is zero -- scientific notation buys nothing there). This is the exact
+            // same conflation that tooLargeForFixed already had fixed for it above (see
+            // da3f760, "Fix regression: clean/round percentages wrongly showed scientific
+            // notation") -- that fix only covered the large side; this is its unfixed mirror on
+            // the small side, found live via a WinPointerSpeed=1 profile. Precision is not
+            // reduced by this change: every real significant digit still renders, just in
+            // fixed-point instead of scientific notation, whenever the magnitude itself doesn't
+            // actually warrant it.
+            bool tooSmallForFixed = trueIntegerDigits < -absoluteIntegerDigitCeiling;
 
             if (tooLargeForFixed || tooSmallForFixed)
             {
@@ -1212,8 +1351,10 @@ public partial class ProfileEditorViewModel : ViewModelBase
             // '#' (not '0') after the decimal point omits trailing zeros instead of padding
             // them out to the cap — a clean typed 1.12312312 sensitivity shows as "112.312312%",
             // not "112.312312000000%" implying precision that was never real.
-            string format = decimalPlaces > 0 ? "0." + new string('#', decimalPlaces) : "0";
-            return value.ToString(format, CultureInfo.InvariantCulture) + "%";
+            // Routed through FormatFixedPointExact rather than a direct value.ToString(format,
+            // ...) call -- see that method's doc comment for why a direct call silently caps
+            // precision below what decimalPlaces requests for some values.
+            return FormatFixedPointExact(value, decimalPlaces) + "%";
         }
 
         // No domain-specific floor for either row (see comment above) — int.MaxValue means

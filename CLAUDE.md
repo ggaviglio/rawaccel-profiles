@@ -12,6 +12,31 @@ different DPI/resolution/acceleration settings. Always treat `README.md` as the
 source of truth for product identity and GUI structure — read it before making
 UI or behavioral changes.
 
+## Documentation layers
+
+Four places hold documentation in this repo, each for a different reader making a
+different decision. Before adding or editing any of them, ask: **who is reading
+this, and what decision are they about to make?**
+
+- **`README.md`** — map-level product identity, for someone deciding whether/how
+  to use the app or navigate the UI. What it is, how it's laid out. No
+  field-by-field detail, no formulas, no bug history.
+- **Tooltips (in-app)** — field-level, for a user's mouse hovering that exact
+  control right now. Two jobs only: (1) what this field does / what happens if
+  you touch it, and (2) any *live, actionable* value it exposes that isn't
+  visible elsewhere (e.g. match-accuracy %, an input-validity constraint). No
+  formulas, no "why we built it this way," no bug history — if a tooltip is
+  explaining an implementation detail, it's in the wrong layer.
+- **In-code comments** — for the next person editing *this exact line*. Only the
+  non-obvious: a hidden constraint, an invariant, a workaround, "don't do X, it
+  looks equivalent but isn't." The strictest of the four — default to none (see
+  the general instructions this project inherits); write one only when removing
+  it would confuse a future reader.
+- **Documentation files (this file, `TOOLTIPS.local.md`, etc.)** — for the next
+  person (or Claude) *changing the system*, not using it. Formulas, precision
+  edge cases, bug history, and "don't reintroduce X" belong here, not in
+  tooltips or comments.
+
 ## Build / run / package
 
 There is no test suite in this repo (no test project exists).
@@ -304,10 +329,10 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     load-time-only magnitude check; deleted, not kept as a second mechanism).
 - **`ViewModels/ProfileEditorViewModel.cs`** (Math Engine section, ~lines 305–440)
   - `GetBaseSens()`/`GetBaseWinPointerSpeed()`/`GetBaseRegCurve()`/
-    `GetEffectiveEpp()` — this file's own base-inheritance resolvers, parallel
-    to `ProfileService`'s `GetEffectiveSensitivityFactors` doing the same
-    resolution for a stored `MouseProfile` (these read the ViewModel's own
-    live-edit properties instead). `GetEffectiveEpp()` mirrors
+    `GetEffectiveEpp()`/`GetBaseYXRatio()` — this file's own base-inheritance
+    resolvers, parallel to `ProfileService`'s `GetEffectiveSensitivityFactors`
+    doing the same resolution for a stored `MouseProfile` (these read the
+    ViewModel's own live-edit properties instead). `GetEffectiveEpp()` mirrors
     `ProfileService.ResolveEpp` exactly (profile's own value → base's →
     `false`) — see that function's doc comment for why `false` is the
     correct last resort. Used by `ApplyAutoRawSync`/`ApplyAutoOSSync`/
@@ -315,7 +340,55 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     `EppOverride ?? bp?.UseEnhancePointerPrecision` (which is what all four
     did until the fallback-chain audit below — none of them had the final
     `?? false` tier either, same bug as `ProfileService`, found at the same
-    time).
+    time). `GetBaseYXRatio()` (Default's own `YXRatioOverride`, fallback
+    `1.0` = neutral) is the fix for a real bug found live in the already-
+    committed Y/X Ratio Auto-sync feature: `ApplyAutoYXRatioSync`/
+    `ComputeIdealYXRatio` originally computed the Auto value as pure
+    `nativeAspect / profileAspect`, never multiplying by the Default's own
+    ratio at all — the same "jumped straight to a hardcoded neutral instead
+    of falling back through the Default" bug class as `sens`/`winIndex`/EPP/
+    `regCurve` above, just freshly introduced in this newer field instead of
+    inherited from old code. If the Default's own `YXRatioOverride` is ever
+    non-neutral (someone typed a manual stretch there for reasons unrelated
+    to aspect-ratio compensation), every other profile's Auto-computed
+    correction must be `GetBaseYXRatio() × (nativeAspect / profileAspect)`,
+    not the aspect factor alone, or it silently discards that baseline
+    instead of compensating relative to it. `ComputeIdealYXRatio()` is the
+    one shared implementation of this formula — used by both
+    `ApplyAutoYXRatioSync` (writes it into `YXRatioOverride` when
+    `YXRatioSyncMode` is `Auto`) and `YXRatioMatch` (below) so they can't
+    drift into two different formulas. Verified live via a controlled
+    `profiles.json` edit (Default `YXRatioOverride = 1.05`, one profile
+    Auto-synced at a real aspect mismatch, one left Skip at a different real
+    aspect mismatch): the Auto profile's match stayed exactly `1` (proving
+    Auto still hits the true target even with a non-neutral Default), and
+    the Skip profile's match came out to the hand-derived `0.703125`
+    (`1.05 ÷ (1.05 × 1.4222...)`), not `1` and not silently wrong.
+  - `YXRatioMatch` — a **public** computed property (not a Math Engine
+    resolver like the ones above, but relies on `GetBaseYXRatio()`/
+    `ComputeIdealYXRatio()` from the same section) bound to the right-aligned
+    display slot next to the Y/X Ratio textbox in the view, in the same slot
+    the other rows use for their match% displays. Compares the currently
+    effective ratio (`YXRatioOverride ?? GetBaseYXRatio()` — Skip inherits
+    the Default's own baseline, the same fallback chain as every other
+    field) against `ComputeIdealYXRatio()`: `1.0` means fully compensated,
+    same concept as the other rows' `100%`, just expressed as a ratio
+    instead of a percent (this field deliberately never got percent
+    formatting — see this session's design discussion). Trivially always
+    `1.0` in Auto mode, by construction. Replaces an earlier version of this
+    display that was bound directly to `YXRatioString` — found live (by the
+    user, not a test) to be a real design flaw, not just a missing feature:
+    that binding just echoed whatever the textbox already showed, so Auto
+    mode showed a pointless duplicate of the same number right next to it,
+    and Skip mode (the default for every profile) showed nothing at all even
+    when a real, uncorrected aspect-ratio mismatch existed — silently hiding
+    exactly the information this display exists to surface. Re-raised
+    (`OnPropertyChanged(nameof(YXRatioMatch))`) from `ApplyAutoYXRatioSync`
+    (covers every Width/Height/sync-mode trigger that function already
+    handles) and separately from `OnYXRatioStringChanged`'s manual-typing
+    path (the one trigger `ApplyAutoYXRatioSync` doesn't cover, since typing
+    a Manual value doesn't go through that function's own `YXRatioOverride`
+    write — the `_isSyncing` guard suppresses it there).
   - `ApplyAutoOSSync()` — Win Speed selection formula: target is
     `Effective(base) / S_target`.
   - `ApplyAutoRegSync()` — Registry remainder formula: target is
@@ -337,6 +410,42 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     domainDecimalPlaces)` — the shared formatter (below) that actually builds
     the display string, combining this domain-specific cap with the value's
     own round-trip precision (`GetRealSignificantDigits()`).
+  - `FormatFixedPointExact(value, decimalPlaces)` — the actual digit-rendering
+    primitive shared by both `FormatFixedPointInput` and `FormatMatchPercent`
+    (below); neither calls `value.ToString("0." + new string('#',
+    decimalPlaces))` directly anymore. Found live, via the user's own
+    "asdf Copy" profile (`Sensitivity = 0.567`, whose Win Speed match works
+    out to `1.7718749999999999%`): calling that custom picture-format string
+    directly on a `double` **silently caps the rendered precision below what's
+    requested**, for values whose shortest round-trip form needs many digits.
+    Confirmed outside any app logic at all, plain `.ToString()` calls: for
+    `1.7718749999999999`, `decimalPlaces` 6 through 17 (`"0.######"` through
+    `"0.#################"`) all rendered the *identical* truncated
+    `"1.771875"` (7 significant digits) — asking for more `#` placeholders
+    did not reveal any more real digits. Only `.ToString("G17")` reliably
+    produced the true value. This is a genuine, reproducible .NET formatting
+    limitation, not a bug in this app's own math or in
+    `GetRealSignificantDigits` (which correctly computed `realSigFigs = 17`
+    for this value the whole time — confirmed via a live diagnostic print
+    inside the running app before this fix). The fix: get the value's exact
+    round-trip string via `"G17"` (the one format specifier proven to always
+    work), parse that into a `decimal` (`NumberStyles.Float`, since `G17` can
+    itself emit scientific notation for small magnitudes — decimal correctly
+    expands that back to plain digits), then apply the same `"0." + '#'*N`
+    format string to the *decimal* instead of the double — decimal's own
+    custom-format rendering does not share double's cap (also verified
+    directly, same methodology, before implementing). Falls back to the old
+    direct-double-format call only if the decimal parse itself fails (decimal
+    has a real but much larger ~28-29 significant-digit budget; this app's
+    values never legitimately need more than 17, so this fallback should be
+    unreachable in practice — it exists only so a truly pathological input
+    can't crash the app instead of just rendering imperfectly). Live-verified
+    post-fix on the exact "asdf Copy" profile that surfaced this: both the
+    Win Speed and Full Match rows now show the true
+    `1.7718749999999999%`, not the previously-truncated `1.771875%`.
+    If either caller is touched again, don't reintroduce a direct
+    `value.ToString(format, ...)` call on a `double` for a computed
+    `decimalPlaces` — go through this function.
   - `FormatFixedPointInput(value, domainDecimalPlaces)` — shared display
     formatter for every raw-value textbox (`SensitivityString`,
     `RegistryCurveString`), called from `LoadProfile`, `OnSensitivityChanged`,
@@ -356,7 +465,10 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     string — unrelated to, and not a substitute for, the ~15-digit
     round-trip-safety budget used elsewhere in this file
     (`TryParsePositiveDouble` in `ProfileService.cs`, `FormatMatchPercent`
-    below); don't conflate the two if this function is touched again.
+    below); don't conflate the two if this function is touched again. The
+    actual digit rendering for the computed `decimalPlaces` goes through
+    `FormatFixedPointExact` (above) rather than a direct `.ToString(format)`
+    call, for the same reason `FormatMatchPercent` does.
     A value this large or precise should already have been rejected earlier
     (typing) or loaded as blank (profiles.json) — see "Invalid GUI input" and
     Persistence, above — so 50 is deliberately generous, not a precision
@@ -433,7 +545,32 @@ This is the most fragile part of the codebase. High-level pipeline, end to end:
     with trailing zeros out to the cap even when they're not real digits
     (a clean typed `1.12312312` displayed as `"112.312312000000%"`), which is
     a milder version of the exact fake-precision problem this whole rework
-    was meant to eliminate. `RecalculateMatchAccuracy()` itself wraps its
+    was meant to eliminate. The actual rendering for those `#`-format strings
+    goes through `FormatFixedPointExact` (above), not a direct
+    `value.ToString(format, ...)` call — see that function for why.
+    A **fourth** bug, found later, was the small-side mirror of bug (3)
+    above and went unfixed for a while after (3) shipped: `tooLargeForFixed`
+    was (correctly, after an earlier fix — see `da3f760`, "Fix regression:
+    clean/round percentages wrongly showed scientific notation") judged
+    against `trueIntegerDigits` alone, an absolute magnitude ceiling — but
+    `tooSmallForFixed` was still being judged against `decimalPlaces`, the
+    same conflated quantity bug (3) had already been fixed for on the large
+    side. `decimalPlaces` conflates two different things: how many leading
+    zeros a genuinely tiny value needs (a real "too small" concern) vs. how
+    many significant digits *this* value happens to need to round-trip
+    exactly, which has nothing to do with its magnitude — an ordinary-looking
+    value like `1.7718749999999999` (`0.567 * 0.03125 * 100`, needing all 17
+    digits purely from float rounding noise, not from being large or small)
+    could push `decimalPlaces` past 15 and misfire scientific notation on a
+    value whose exponent is literally `0` (`"1.77...E+000%"` — buys nothing).
+    Found live via the user's own "asdf Copy" profile screenshot. Fixed the
+    same way as bug (3): `tooSmallForFixed` now checks
+    `trueIntegerDigits < -absoluteIntegerDigitCeiling`, independent of
+    `decimalPlaces`, mirroring `tooLargeForFixed` exactly. Live-verified via
+    UI Automation on the exact profile that surfaced it — Win Speed and Full
+    Match now render `1.7718749999999999%` in fixed-point, not scientific
+    notation, and (after the `FormatFixedPointExact` fix above) at full real
+    precision rather than truncated. `RecalculateMatchAccuracy()` itself wraps its
     `GetEffectiveSensitivity(bp)`/`GetEffectiveSensitivityFactors(_editingProfile)`
     calls in a `try/catch (ArgumentOutOfRangeException)` as a last-resort
     safety net (falls back to literal `"Overflow%"` on all three rows) — this

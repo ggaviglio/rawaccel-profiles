@@ -1,3 +1,6 @@
+<!-- MinHeight="167" lets the window shrink down to roughly just the Raw Accel card, since
+     someone who only cares about Settings/Sensitivity/Y-X Ratio shouldn't be forced to keep the
+     whole profile list and every other card on screen. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MouseApp.ViewModels"
@@ -7,8 +10,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="600"
         Width="732"
-        Height="625"
-        MinHeight="480"
+        Height="400"
+        MinHeight="167"
         MinWidth="732"
         x:Class="MouseApp.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -138,7 +141,7 @@
                         <TextBlock Classes="icon-glyph" Text="&#xE768;" FontSize="14" />
                     </Button>
                     <Button Grid.Column="1"
-                            ToolTip.Tip="Set as Default — the baseline every other profile's Auto-sync compensates against, and the fallback applied when no profile's targets match the active window."
+                            ToolTip.Tip="Set as Default — the baseline every other profile compensates against."
                             Command="{Binding SetAsDefaultCommand}">
                         <TextBlock Classes="icon-glyph" Text="&#xE80F;" FontSize="14" />
                     </Button>

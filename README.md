@@ -1,30 +1,73 @@
 # OVERVIEW: Mouse App
 
-## 1. THE PRODUCT VISION
-A lightweight utility built on Avalonia UI (MVVM). Monitors processes and swaps mouse sensitivity profiles. It can ensure mouse pointer speed remains consistent across different applications by mathematically balancing the Windows Pointer Speed and Registry-level curve override relative to the Global Default's Raw Accel sensitivity.
+## 1. Product Vision
 
-## 2. THE GUI STRUCTURE (Master-Detail)
-The app uses a clean, integrated Sidebar + Pane layout:
+A lightweight, portable Windows utility (Avalonia UI, MVVM) that monitors the active
+window and automatically swaps mouse sensitivity profiles between applications —
+keeping effective cursor speed consistent even when different games/apps expect
+different DPI, resolution, or acceleration settings. Everything lives under `HKCU`
+and the app's own folder; no admin rights required.
 
-* **Profile Sidebar (Left):** A high-density list of all saved profiles.
-    * **The Anchor:** The first profile is always the **Global Default**. It serves as the baseline for all mathematical compensations.
-* **Profile Editor (Right):** A vertical, scrollable area for the selected profile's parameters.
-    * **Sparse Data Support:** Fields can be left blank to "skip" that specific setting.
-    * **Template Management:** A dropdown to select from a library of saved Raw Accel `.json` configurations. Includes quick-actions to import the current `settings.json` into the library or delete existing templates.
-    * **OS Sync Controls:** Optional toggles for Windows Pointer Speed and Registry overrides, allowing for automated balancing (applying a compensatory scale factor to the Windows pointer to offset Raw Accel deviations from the Global Default).
-    * **Accuracy Info:** Real-time data providing "Proof" of the effective sensitivity match (e.g., displaying the calculated percentage of the mathematical match).    
-* **Secondary Windows:**
-    * **Target Manager:** A dual-pane utility for managing application associations.
-        * **Discovery (Left):** Real-time list of active processes for one-click mapping.
-        * **Management (Right):** The current profile's assigned list (Process Name/Path, Class, or Title).
-        * **Manual Entry:** A dedicated input field to manually add associations to the list.
-    * **Global Settings:** A separate view for system-wide configuration:
-            * **Path Configuration:** Define the Raw Accel installation directory and executable paths.
-            * **High-Precision Logic:** Opt-in toggle for the **Registry Bridge**. (When enabled, Profile Editor fields for Registry overrides become visible).
-            * **Startup & Behavior:** Preferences for "Run at Startup," "Start Minimized," and Global Hotkey assignments.
+## 2. How It Works, In One Paragraph
 
-## 3. CORE LOGIC STACK
-**Raw Accel:** Manages the template library. Swaps the selected template into the Raw Accel directory as `settings.json` before overwriting sensitivity value. Applies changes with `writer.exe settings.json`.
-**OS Pointer Speed:** Discrete logic (1–20) with a sync-toggle for Auto/Manual modes.
-**High-Precision Fine-Tune:** A global opt-in feature. When enabled, it silently overrides the "Enhance Pointer Precision" Registry curve to bridge the gap left by OS integer steps. Registry updated on profile swap, changes only initialize upon Windows login/relog.
-**Active Context Monitor:** Track process activity and window states, ensuring the correct profile is applied via Win32 event hooks. Logic prioritizes active focus for profile-to-profile switching, but requires a process-exit event to revert to the Global Default.
+One profile is marked the **Default** — the baseline every other profile's math
+compensates against (not necessarily first in the list; profiles can be freely
+reordered). Every other profile describes a target environment (Raw Accel template,
+optionally a target screen size) and how far it should be reconciled toward the
+Default's own effective sensitivity. When the foreground window matches a profile,
+MouseApp solves backwards from the Default's effective sensitivity to pick a Raw
+Accel sensitivity, a Windows Pointer Speed step, and (optionally) a precise Registry
+curve override — so the match is computed, not eyeballed.
+
+## 3. Layout
+
+* **Sidebar (Left):** Saved profiles, with search, inline rename (double-click a
+  name), and an action bar — Apply, Set as Default, Clone, Add, Delete, Reorder,
+  Settings.
+* **Profile Editor (Right):** The selected profile's settings, in cards:
+    * **Raw Accel:** template picker (with import/duplicate/rename/delete for the
+      template library), Sensitivity, and Y/X Sensitivity Ratio — each with its own
+      optional Auto-sync toggle.
+    * **Windows Pointer:** Pointer Speed (Auto-sync or manual), and an Enhance
+      Pointer Precision override with its own Registry-curve fine-tune.
+    * **Auto-Match Environment** *(optional, off by default)*: target screen
+      width/height, used only to drive the Auto-sync math and Y/X ratio
+      compensation — this app never changes your actual Windows resolution.
+    * **App Rules:** which processes/paths/window classes/titles activate
+      this profile; hidden for the Default profile.
+    * Every field can be left blank to skip/inherit from the Default. Hover any
+      field in the app for what it does and its live match-accuracy — the tooltips
+      are the field-level reference; this document stays at the map level.
+* **App Rules Manager:** Pick from currently-open windows (refresh on demand) or type a
+  manual exe/path/class/title match; a "Test" button previews which open windows the
+  current rule list would actually match.
+* **Global Settings:** Raw Accel install/presets folder paths; startup & tray
+  behavior (Run at Startup, Close to Tray, Start in Tray, and re-applying Raw Accel's
+  settings.json on launch, since its driver doesn't survive a reboot on its own);
+  which Advanced Profile Editor fields are visible; and troubleshooting actions to
+  apply the MarkC no-acceleration curve fix system-wide without configuring any
+  profile, or reset the mouse curve back to Windows' own default.
+
+## 4. Under The Hood
+
+* **Raw Accel:** Swaps the profile's chosen template into the Raw Accel directory as
+  `settings.json`, patches in Sensitivity (and Y/X ratio, for aspect-ratio
+  compensation), then applies with `writer.exe settings.json`.
+* **Windows Pointer Speed:** The OS's own discrete 1–20 steps, Auto-computed or
+  manual per profile.
+* **Registry curve bridge:** An optional, more precise correction layer for the gap
+  Windows' integer pointer-speed steps can't close on their own. The registry write
+  and `WM_SETTINGCHANGE` broadcast happen immediately, but Windows doesn't actually
+  re-read the curve until the next logon — so unlike Raw Accel sensitivity and
+  Windows Pointer Speed (which do switch live), this layer's correction only takes
+  real effect after a log off/on.
+* **Foreground watcher:** A Win32 event hook (`SetWinEventHook`) tracks the active
+  window and swaps profiles on match; reverts to Default once no window matching the
+  active profile remains ("Last Man Standing"), suppressed during system shutdown so
+  quitting apps at logoff doesn't spuriously revert.
+* **Persistence:** Profiles and settings are plain JSON next to the executable —
+  portable, no database, no admin rights.
+
+Formulas, precision edge cases, and anything about the math engine's fragile
+internals belong in `CLAUDE.md`, not here — treat that file as the source of truth
+before modifying that code.

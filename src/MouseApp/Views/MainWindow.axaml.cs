@@ -16,30 +16,43 @@ public partial class MainWindow : Window
 
         // The main content column is Auto-sized to its own natural width so growing the
         // window only widens the sidebar. Floor the window's width at that natural content
-        // width plus the sidebar's own genuine minimum, so it can't be squeezed so far that
-        // either side breaks. The sidebar's action-bar buttons declare MinWidth="28" each
-        // (a real usability floor, not a guess) via their style — measuring that here means
-        // the window's minimum is derived from an actual constraint, not another guess.
+        // width plus the sidebar's own genuine minimum (the action bar at full size), so it
+        // can't be squeezed so far that either side breaks.
         //
-        // sidebarMinWidth itself is a one-time calculation (the action bar's own buttons never
-        // change at runtime, so this part can't go stale), but MainContentHost's natural width
-        // is NOT static -- it depends on the Profile Editor's card content (its CardWidth
-        // SharedSizeGroup, match-percent text that can grow on an overflow value, etc.). The old
-        // code read MainContentHost.Bounds.Width once, here in Opened, and never again; found
-        // live that this let MinWidth go stale while the action bar's own equal-* columns keep
-        // resizing to whatever's actually available right now, so the two sides could visibly
-        // drift out of sync after the content column's width changed post-launch. Subscribing to
-        // MainContentHost's Bounds instead keeps MinWidth continuously accurate. GetObservable
-        // emits the current value immediately on subscribe, so this also covers the initial
-        // assignment the old code did separately.
+        // Deliberately a ONE-TIME read of MainContentHost.Bounds.Width, not a live
+        // GetObservable/Subscribe -- a live subscription was tried and reverted: it recomputes
+        // MinWidth on every change to MainContentHost's *arranged* Bounds, and
+        // ProfileEditorView's own vertical ScrollViewer (VerticalScrollBarVisibility="Auto")
+        // widens its arranged bounds slightly to make room for its scrollbar track whenever a
+        // vertical resize makes it appear -- which the live subscription immediately promoted
+        // into a bigger MinWidth, forcing the whole window wider on a vertical-only resize.
+        //
+        // A second bug was found immediately after fixing the first one: MainContentHost.Bounds.Width
+        // read here reflects whatever's true at Opened time, before the main content's own vertical
+        // ScrollViewer (VerticalScrollBarVisibility="Auto") has necessarily decided it needs its
+        // scrollbar. If that scrollbar appears later (e.g. once the window is resized shorter), the
+        // extra width it claims comes straight out of the sidebar, pushing the action bar below the
+        // exact 28px-per-button floor sidebarMinWidth is supposed to guarantee -- so the buttons
+        // overflowed their row instead of shrinking gracefully.
+        //
+        // Fixed by measuring MainContentHost with an artificially tiny available height (1px) --
+        // far less than its content could ever fit -- which forces its ScrollViewer to decide,
+        // during this one Measure call, that it needs the vertical scrollbar. The resulting
+        // DesiredSize.Width therefore already includes that theme's real scrollbar track width, a
+        // measured number rather than a guessed pixel buffer. Real subsequent layout (with the
+        // window's actual height) re-measures normally afterward and shows the scrollbar only when
+        // actually needed -- this call is solely to read a worst-case width, same as ActionBar's own
+        // Measure(Size.Infinity) below is solely to read its natural width.
         Opened += (_, _) =>
         {
             ActionBar.Measure(Size.Infinity);
             var sidebarPadding = SidebarHost.Padding.Left + SidebarHost.Padding.Right;
             var sidebarMinWidth = ActionBar.DesiredSize.Width + sidebarPadding;
 
-            MainContentHost.GetObservable(Visual.BoundsProperty)
-                .Subscribe(new AnonymousObserver<Rect>(bounds => MinWidth = bounds.Width + sidebarMinWidth));
+            MainContentHost.Measure(new Size(double.PositiveInfinity, 1));
+            var contentWidthWithScrollbar = MainContentHost.DesiredSize.Width;
+
+            MinWidth = contentWidthWithScrollbar + sidebarMinWidth;
         };
     }
 
@@ -61,18 +74,6 @@ public partial class MainWindow : Window
         {
             tb.GetObservable(Visual.IsVisibleProperty).Subscribe(new IsVisibleObserver(tb));
         }
-    }
-
-    /// <summary>Generic <see cref="IObserver{T}"/> adapter so a plain lambda can be passed to
-    /// <c>Subscribe</c> -- Avalonia's own <see cref="IObservable{T}"/> here doesn't carry the
-    /// Rx.NET <c>Subscribe(Action&lt;T&gt;)</c> extension this codebase doesn't otherwise
-    /// reference, so this is the same pattern <see cref="IsVisibleObserver"/> below already
-    /// uses, just reusable for any value type instead of one written per call site.</summary>
-    private sealed class AnonymousObserver<T>(Action<T> onNext) : IObserver<T>
-    {
-        public void OnNext(T value) => onNext(value);
-        public void OnCompleted() { }
-        public void OnError(Exception error) { }
     }
 
     private sealed class IsVisibleObserver(TextBox tb) : IObserver<bool>

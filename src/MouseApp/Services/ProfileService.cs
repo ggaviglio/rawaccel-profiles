@@ -442,27 +442,46 @@ public class ProfileService
         Settings.ShowEppOverride ? profile?.RegistryCurveOverride : null;
 
     /// <summary>Same idea as <see cref="GetEffectiveTargetScreenWidth"/>, for YXRatioOverride --
-    /// gated on ShowAutoMatchEnvironment since the ratio is causally derived from Width/Height,
-    /// which are already gated by it. Not yet consumed anywhere: doesn't feed the Windows-side
+    /// gated on ShowAutoMatchEnvironment AND ShowYXRatio (both required): the ratio is causally
+    /// derived from Width/Height, so it's meaningless with those hidden (ShowAutoMatchEnvironment
+    /// off), but a user who wants Width/Height visible can still separately hide the more niche
+    /// Y/X Ratio field on its own (ShowYXRatio off) -- same relationship as ShowEppOverride to
+    /// the base EPP toggle. Not yet consumed anywhere: doesn't feed the Windows-side
     /// effective-sensitivity math (GetEffectiveSensitivityFactors/CalculateCompensations) at all
     /// -- this is a separate value headed for Raw Accel's own settings.json, wired in a later
     /// step (RawAccelService.ApplySettingsFileAsync).</summary>
     public double? GetEffectiveYXRatioOverride(MouseProfile? profile) =>
-        Settings.ShowAutoMatchEnvironment ? profile?.YXRatioOverride : null;
+        Settings.ShowAutoMatchEnvironment && Settings.ShowYXRatio ? profile?.YXRatioOverride : null;
+
+    /// <summary>Same idea as <see cref="GetEffectiveTargetScreenWidth"/>, for
+    /// UseEnhancePointerPrecision (gated on ShowEpp). Added after an audit found EPP was the one
+    /// field of the four that had this gate applied to its Settings/ViewModel visibility
+    /// (<see cref="AppSettings.ShowEpp"/> hides the dropdown) but never to the actual value used
+    /// by <see cref="ResolveEpp"/> or by <see cref="MouseService.ApplyProfileAsync"/>'s real
+    /// registry write -- meaning hiding EPP from the UI never actually stopped a previously-set
+    /// value from being read and written to hardware on every apply. This is the fix: both
+    /// <see cref="ResolveEpp"/> and <see cref="MouseService"/> now read through this gated helper
+    /// instead of the raw <see cref="MouseProfile.UseEnhancePointerPrecision"/> property.</summary>
+    public bool? GetEffectiveUseEnhancePointerPrecision(MouseProfile? profile) =>
+        Settings.ShowEpp ? profile?.UseEnhancePointerPrecision : null;
 
     /// <summary>
     /// Resolves whether EPP is active: the profile's own value, else the Global Default's, else
-    /// <c>false</c> if neither specifies one. The final tier matters: previously every call site
+    /// <c>false</c> if neither specifies one (both already passed through
+    /// <see cref="GetEffectiveUseEnhancePointerPrecision"/>, so a hidden ShowEpp makes this
+    /// resolve to the same <c>false</c> as "genuinely never set" instead of leaking a stale
+    /// stored value). The final tier matters: previously every call site
     /// wrote <c>profile.UseEnhancePointerPrecision ?? baseProfile?.UseEnhancePointerPrecision</c>
     /// with no explicit last resort, so a totally-unspecified EPP stayed <c>null</c> -- and every
     /// downstream <c>useEpp != false</c> check silently treated <c>null</c> as "on" (an accident
     /// of C# nullable-bool comparison, not a deliberate default). <c>false</c> matches Windows'
     /// own out-of-the-box default and what <see cref="MouseService"/>'s real apply path already
     /// converges to when EPP is untouched everywhere (it leaves the registry alone rather than
-    /// writing anything). Single implementation so all callers resolve EPP identically.
+    /// writing anything). Single implementation so all callers resolve EPP identically. No longer
+    /// <c>static</c> -- it needs instance access to <see cref="Settings"/> via the gated helper.
     /// </summary>
-    public static bool ResolveEpp(MouseProfile? profile, MouseProfile? baseProfile) =>
-        profile?.UseEnhancePointerPrecision ?? baseProfile?.UseEnhancePointerPrecision ?? false;
+    public bool ResolveEpp(MouseProfile? profile, MouseProfile? baseProfile) =>
+        GetEffectiveUseEnhancePointerPrecision(profile) ?? GetEffectiveUseEnhancePointerPrecision(baseProfile) ?? false;
 
     /// <summary>
     /// Computes the five independent multipliers that make up a profile's effective sensitivity,

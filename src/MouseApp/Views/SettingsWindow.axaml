@@ -25,14 +25,16 @@
         <TextBlock Text="Folders" Classes="settings-section-header" />
         <StackPanel Spacing="8">
           <TextBlock Text="Raw Accel App Folder" />
-          <StackPanel Orientation="Horizontal" Spacing="6">
+          <StackPanel Orientation="Horizontal" Spacing="6"
+                      ToolTip.Tip="Folder containing Raw Accel's rawaccel.exe, writer.exe, and settings.json.">
             <TextBox Width="420" Watermark="(default: app folder)" Text="{Binding RawAccelDirectory, Mode=TwoWay}" />
             <Button Content="Browse" Command="{Binding BrowseRawAccelDirCommand}" />
           </StackPanel>
         </StackPanel>
         <StackPanel Spacing="8">
           <TextBlock Text="Raw Accel Presets Folder" />
-          <StackPanel Orientation="Horizontal" Spacing="6">
+          <StackPanel Orientation="Horizontal" Spacing="6"
+                      ToolTip.Tip="Folder where Raw Accel template .json files are stored.">
             <TextBox Width="420" Watermark="(default: app folder)" Text="{Binding RawAccelSettingsDirectory, Mode=TwoWay}" />
             <Button Content="Browse" Command="{Binding BrowseRawAccelSettingsDirCommand}" />
           </StackPanel>
@@ -43,33 +45,52 @@
     <Border Classes="card" Padding="14,10">
       <StackPanel Spacing="8">
         <TextBlock Text="App Behavior" Classes="settings-section-header" />
-        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"
+                    ToolTip.Tip="Launch MouseApp automatically when you log in to Windows.">
           <ToggleSwitch IsChecked="{Binding RunAtStartup, Mode=TwoWay}" />
           <TextBlock Text="Run At Startup" VerticalAlignment="Center" />
         </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"
+                    ToolTip.Tip="Closing the main window minimizes it to the system tray instead of exiting the app.">
           <ToggleSwitch IsChecked="{Binding CloseToTray, Mode=TwoWay}" />
           <TextBlock Text="Close to Tray" VerticalAlignment="Center" />
         </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"
+                    ToolTip.Tip="Launch directly to the system tray instead of showing the main window.">
           <ToggleSwitch IsChecked="{Binding StartMinimized, Mode=TwoWay}" />
           <TextBlock Text="Start in Tray" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"
+                    ToolTip.Tip="Re-apply the active profile's Raw Accel settings.json on launch, since Raw Accel's driver doesn't survive a reboot on its own.">
+          <ToggleSwitch IsChecked="{Binding ApplyRawAccelSettingsOnStartup, Mode=TwoWay}" />
+          <TextBlock Text="Apply Raw Accel Settings on Startup" VerticalAlignment="Center" />
         </StackPanel>
       </StackPanel>
     </Border>
 
     <Border Classes="card" Padding="14,10">
       <StackPanel Spacing="8">
+        <!-- Order matches the Profile Editor page's own row order top-to-bottom (Y/X Ratio,
+             EPP, EPP Override, Screen Size/Auto-Match Environment), not the order these
+             toggles were added historically. -->
         <TextBlock Text="Advanced Profile Editor Options" Classes="settings-section-header" />
-        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"
+                    ToolTip.Tip="Y/X Ratio lets Raw Accel scale vertical mouse sensitivity separately from horizontal.">
+          <ToggleSwitch IsChecked="{Binding ShowYXRatio, Mode=TwoWay}" />
+          <TextBlock Text="Show Y/X Ratio" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"
+                    ToolTip.Tip="Enhance Pointer Precision (EPP) is Windows' own built-in mouse acceleration curve.">
           <ToggleSwitch IsChecked="{Binding ShowEpp, Mode=TwoWay}" />
           <TextBlock Text="Show EPP" VerticalAlignment="Center" />
         </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"
+                    ToolTip.Tip="Replaces EPP acceleration with a flat, linear response. Same as the MarkC fix, but lets you pick a multiplier instead of using 1x. Requires relog.">
           <ToggleSwitch IsChecked="{Binding ShowEppOverride, Mode=TwoWay}" />
           <TextBlock Text="Show EPP Override" VerticalAlignment="Center" />
         </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"
+                    ToolTip.Tip="Automatically adjusts your mouse sensitivity so it feels the same across profiles with different screen resolutions.">
           <ToggleSwitch IsChecked="{Binding ShowAutoMatchEnvironment, Mode=TwoWay}" />
           <TextBlock Text="Show Auto-Match Environment" VerticalAlignment="Center" />
         </StackPanel>
@@ -80,7 +101,15 @@
       <StackPanel Spacing="8">
         <TextBlock Text="Troubleshooting" Classes="settings-section-header" />
         <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-          <Button Content="Reset Mouse Curve to Windows Default" Command="{Binding RevertCurveCommand}" />
+          <Button Content="Apply MarkC Fix" Command="{Binding ApplyMarkCFixCommand}"
+                  ToolTip.Tip="The MarkC fix replaces EPP acceleration with a 1:1 linear response. Requires relog." />
+          <TextBlock Text="{Binding ApplyMarkCFixStatusMessage}"
+                     IsVisible="{Binding IsApplyMarkCFixStatusVisible}"
+                     FontSize="12" Opacity="0.8" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <Button Content="Reset Mouse Curve to Windows Default" Command="{Binding RevertCurveCommand}"
+                  ToolTip.Tip="Restores EPP acceleration to stock settings. Requires relog." />
           <TextBlock Text="{Binding RevertCurveStatusMessage}"
                      IsVisible="{Binding IsRevertCurveStatusVisible}"
                      FontSize="12" Opacity="0.8" VerticalAlignment="Center" />

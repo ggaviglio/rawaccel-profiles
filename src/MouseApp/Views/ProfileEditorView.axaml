@@ -221,15 +221,15 @@
                      Text="{Binding SensitivityString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Watermark="Skip"
                      IsEnabled="{Binding !IsRawAutoSync}"
-                     ToolTip.Tip="Raw Accel sensitivity multiplier. No enforced maximum — Raw Accel's own source places no bound on this field beyond standard double-precision range. Leave blank to skip." />
+                     ToolTip.Tip="Raw Accel sensitivity multiplier." />
             <TextBlock Grid.Column="0" Classes="input-error-icon" Margin="0,0,6,0"
                        IsVisible="{Binding !IsSensitivityInputValid}"
-                       ToolTip.Tip="Rejected — must be a positive number with at most 15 significant digits (a double can't hold more without silently losing precision). Sensitivity still holds its last valid value; this text isn't actually in effect." />
+                       ToolTip.Tip="Rejected — must be a positive number, at most 15 significant digits." />
             <ToggleButton Grid.Column="1"
                           IsChecked="{Binding IsRawAutoSync, Mode=TwoWay}"
                           Content="Auto" Classes="auto-toggle"
                           IsVisible="{Binding IsRawAutoAvailable}"
-                          ToolTip.Tip="Auto-compute sensitivity to match the Default profile. This row shows how well raw accel sensitivity alone offsets the environmental delta, before Win Speed or Registry Bridge contribute. Needs Auto-Match Environment enabled in Settings -- without an environment difference to compensate for, this would just always match the Default's Sensitivity exactly." />
+                          ToolTip.Tip="Automatically adjust Sensitivity to match the Default profile." />
             <TextBlock Grid.Column="2"
                        Classes="match-percent"
                        IsVisible="{Binding !IsDefault}"
@@ -238,34 +238,38 @@
           </Grid>
 
           <!-- Y/X Ratio row -->
-          <!-- Advanced option, only meaningful alongside Screen Width/Height, so gated by the
-               same IsAutoMatchEnvironmentVisible as those (whole row hidden, not just the Auto
-               toggle), same pattern as the EPP Override row, unlike Sensitivity above (whose
+          <!-- Advanced option, gated on its own IsYXRatioVisible (ShowAutoMatchEnvironment AND
+               ShowYXRatio both on) so it can be hidden independently of Screen Width/Height,
+               same relationship as EPP Override to the base EPP row, unlike Sensitivity above (whose
                field stays relevant regardless of Auto-Match Environment). Right-aligned value
-               bound to the same YXRatioString the textbox shows, in the match-percent slot,
-               same layout rhythm as the other rows, just a ratio instead of a percent. -->
+               bound to YXRatioMatch, NOT YXRatioString, in the match-percent slot, same
+               layout rhythm as the other rows: a live comparison against what the aspect-ratio
+               mismatch actually needs (1.0 = fully compensated), not a second copy of whatever
+               the textbox already shows. Found live: binding this slot to YXRatioString just
+               mirrored the textbox, so Skip mode (blank textbox, the default for every profile)
+               showed nothing here even when a real, uncorrected mismatch existed. -->
           <TextBlock Grid.Row="3" Grid.Column="0" Text="Y/X Ratio:" VerticalAlignment="Center" Margin="0,0,10,6"
-                     IsVisible="{Binding IsAutoMatchEnvironmentVisible}" />
+                     IsVisible="{Binding IsYXRatioVisible}" />
           <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="Auto,Auto,*" Margin="0,0,0,6" VerticalAlignment="Center"
-                IsVisible="{Binding IsAutoMatchEnvironmentVisible}">
+                IsVisible="{Binding IsYXRatioVisible}">
             <TextBox Grid.Column="0" Classes="value-box"
                      Text="{Binding YXRatioString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Watermark="Skip"
                      IsEnabled="{Binding !IsYXRatioAutoSync}"
-                     ToolTip.Tip="Y/X sensitivity ratio patched into Raw Accel's own settings (vertical sens multiplier) -- compensates a profile whose declared aspect ratio differs from the Default's. Leave blank to skip." />
+                     ToolTip.Tip="Y/X sensitivity ratio (vertical sens multiplier)." />
             <TextBlock Grid.Column="0" Classes="input-error-icon" Margin="0,0,6,0"
                        IsVisible="{Binding !IsYXRatioInputValid}"
-                       ToolTip.Tip="Rejected — must be a positive number with at most 15 significant digits (a double can't hold more without silently losing precision). YXRatioOverride still holds its last valid value; this text isn't actually in effect." />
+                       ToolTip.Tip="Rejected — must be a positive number, at most 15 significant digits." />
             <ToggleButton Grid.Column="1"
                           IsChecked="{Binding IsYXRatioAutoSync, Mode=TwoWay}"
                           Content="Auto" Classes="auto-toggle"
                           IsVisible="{Binding IsAutoSyncAvailable}"
-                          ToolTip.Tip="Auto-compute the Y/X ratio from this profile's Screen Width/Height vs. the Default's -- native aspect ratio ÷ this profile's aspect ratio. 1.0 when the shapes match; only differs from 1.0 when the aspect ratio itself actually changes." />
+                          ToolTip.Tip="Auto-compute the Y/X ratio from this profile's Screen Width/Height vs. the Default's aspect ratio." />
             <TextBlock Grid.Column="2"
                        Classes="match-percent"
                        IsVisible="{Binding !IsDefault}"
-                       Text="{Binding YXRatioString}"
-                       ToolTip.Tip="{Binding YXRatioString}" />
+                       Text="{Binding YXRatioMatch}"
+                       ToolTip.Tip="How well the currently effective Y/X ratio compensates for this profile's aspect-ratio mismatch. 1.0 = fully compensated." />
           </Grid>
         </Grid>
       </Border>
@@ -297,7 +301,7 @@
                           IsChecked="{Binding IsOSAutoSync, Mode=TwoWay}"
                           Content="Auto" Classes="auto-toggle"
                           IsVisible="{Binding IsAutoSyncAvailable}"
-                          ToolTip.Tip="Auto-compute Win Pointer Speed to compensate environment delta. This row shows how close Raw Accel + Win Pointer Speed gets you, before the registry bridge." />
+                          ToolTip.Tip="Automatically adjust Windows Pointer Speed to match the Default profile." />
             <TextBlock Grid.Column="2"
                        Classes="match-percent"
                        IsVisible="{Binding !IsDefault}"
@@ -317,7 +321,7 @@
                     SelectedItem="{Binding EppOverride, Mode=TwoWay}"
                     MinWidth="125" HorizontalAlignment="Left" Margin="0,0,0,6"
                     IsVisible="{Binding IsEppVisible}"
-                    ToolTip.Tip="Enhance Pointer Precision override. Skip = leave system setting unchanged; Enable = force on; Disable = force off.">
+                    ToolTip.Tip="Enhance Pointer Precision.">
             <ComboBox.ItemTemplate>
               <DataTemplate>
                 <TextBlock Text="{Binding ., Converter={StaticResource NullableBoolDisplayConverter}}" />
@@ -338,15 +342,15 @@
                      Text="{Binding RegistryCurveString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Watermark="Skip"
                      IsEnabled="{Binding !IsRegAutoSync}"
-                     ToolTip.Tip="Registry curve multiplier for EPP (SmoothMouseCurve). Practical max is roughly 10^11-10^13 (varies with DPI/pointer speed) before internal registry storage overflows. Leave blank to skip." />
+                     ToolTip.Tip="Registry curve multiplier for EPP." />
             <TextBlock Grid.Column="0" Classes="input-error-icon" Margin="0,0,6,0"
                        IsVisible="{Binding !IsRegistryCurveInputValid}"
-                       ToolTip.Tip="Rejected — must be a positive number with at most 15 significant digits (a double can't hold more without silently losing precision). RegistryCurveOverride still holds its last valid value; this text isn't actually in effect." />
+                       ToolTip.Tip="Rejected — must be a positive number, at most 15 significant digits." />
             <ToggleButton Grid.Column="1"
                           IsChecked="{Binding IsRegAutoSync, Mode=TwoWay}"
                           Content="Auto" Classes="auto-toggle"
                           IsVisible="{Binding IsAutoSyncAvailable}"
-                          ToolTip.Tip="Auto-compute registry curve to cover exact remainder gap. This row shows the final accuracy after all three compensation layers — 100.00% = exact match with the Default profile." />
+                          ToolTip.Tip="Automatically fine-tune the registry curve to match the Default profile." />
             <TextBlock Grid.Column="2"
                        Classes="match-percent"
                        IsVisible="{Binding !IsDefault}"
@@ -371,9 +375,8 @@
                  by default (Settings > Show Auto-Match Environment), see
                  AppSettings.ShowAutoMatchEnvironment. One Border, whole card goes with it. -->
             <Border Grid.Row="4" Classes="card" Padding="14,10" Margin="0,0,0,8"
-              IsVisible="{Binding IsAutoMatchEnvironmentVisible}"
-              ToolTip.Tip="This app does not change your Windows resolution. This value is only used for the auto-compensation buttons.">
-        <Grid RowDefinitions="Auto,Auto,Auto">
+              IsVisible="{Binding IsAutoMatchEnvironmentVisible}">
+        <Grid RowDefinitions="Auto,Auto">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" SharedSizeGroup="LabelCol" />
             <ColumnDefinition Width="*" />
@@ -381,33 +384,49 @@
           <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
                      Text="Auto-Match Environment" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
 
-          <!-- Screen Width/Height join the shared "LabelCol" group (see Card 2/Card 3 above) via
-               plain Grid.Column="0" placement, matching every other row in this file, so they
-               line up with "Settings:"/"Sensitivity:"/"Pointer Speed:" down the page. -->
-          <TextBlock Grid.Row="1" Grid.Column="0" Text="Screen Width:" VerticalAlignment="Center" Margin="0,0,10,6" />
-          <Grid Grid.Row="1" Grid.Column="1" Width="125" HorizontalAlignment="Left" Margin="0,0,0,6">
-            <ComboBox IsEditable="True"
-                      Classes="editable-centered"
-                      Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                      ItemsSource="{Binding ScreenWidthPresets}"
-                      ToolTip.Tip="Target screen width in pixels. Leave blank to skip. Common values: 640, 800, 1024, 1152, 1280, 1366, 1440, 1600, 1680, 1920, 2560, 3440, 3840, 5120, 7680." />
-            <!-- Extra right-margin (vs. the 6px on plain TextBoxes) so the icon clears the
-                 ComboBox's own built-in dropdown arrow instead of overlapping it. -->
-            <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
-                       IsVisible="{Binding !IsTargetScreenWidthInputValid}"
-                       ToolTip.Tip="Rejected — must be a positive number. TargetScreenWidth still holds its last valid value; this text isn't actually in effect." />
-          </Grid>
-
-          <TextBlock Grid.Row="2" Grid.Column="0" Text="Screen Height:" VerticalAlignment="Center" Margin="0,0,10,6" />
-          <Grid Grid.Row="2" Grid.Column="1" Width="125" HorizontalAlignment="Left" Margin="0,0,0,6">
-            <ComboBox IsEditable="True"
-                      Classes="editable-centered"
-                      Text="{Binding TargetScreenHeightString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                      ItemsSource="{Binding ScreenHeightPresets}"
-                      ToolTip.Tip="Target screen height in pixels. Leave blank to skip. Common values: 480, 600, 720, 768, 800, 864, 900, 1024, 1050, 1080, 1200, 1440, 2160, 4320." />
-            <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
-                       IsVisible="{Binding !IsTargetScreenHeightInputValid}"
-                       ToolTip.Tip="Rejected — must be a positive number. TargetScreenHeight still holds its last valid value; this text isn't actually in effect." />
+          <!-- MOCKUP: Screen Width/Height combined onto one "Screen Size:" row (was two stacked
+               rows), still joins the shared "LabelCol" group via plain Grid.Column="0"
+               placement, so it lines up with "Settings:"/"Sensitivity:"/"Pointer Speed:" down
+               the page, same as every other row in this file. -->
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Screen Size:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="62,Auto,62" HorizontalAlignment="Left" Margin="0,0,0,6">
+            <Grid Grid.Column="0">
+              <ComboBox IsEditable="True"
+                        Classes="editable-centered"
+                        Text="{Binding TargetScreenWidthString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        ItemsSource="{Binding ScreenWidthPresets}"
+                        ToolTip.Tip="Target screen width in pixels — doesn't change your actual Windows resolution, only used for the auto-compensation math." />
+              <!-- Extra right-margin (vs. the 6px on plain TextBoxes) so the icon clears the
+                   ComboBox's own built-in dropdown arrow instead of overlapping it. -->
+              <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
+                         IsVisible="{Binding !IsTargetScreenWidthInputValid}"
+                         ToolTip.Tip="Rejected — must be a positive number." />
+            </Grid>
+            <!-- A drawn shape, not a text glyph: a text "×" character depends on the font's own
+                 advance-width/side-bearing metrics for that specific glyph, which turned out
+                 (measured live via pixel-color scanning, not eyeballed) to not be symmetric in
+                 this app's font. No combination of Margin/TextAlignment could get it exactly
+                 centered, because the leftover space in a fixed 20px gap doesn't split evenly
+                 around every possible glyph width. Two crossing Lines from corner to corner of an
+                 explicit 8x8 square are symmetric by construction (both lines are exact mirror
+                 images of each other), so centering is exact arithmetic (6px margin either side
+                 of an 8px shape = 20px total) instead of dependent on font rendering. -->
+            <Viewbox Grid.Column="1" Width="8" Height="8" Margin="6,0,6,0" VerticalAlignment="Center">
+              <Canvas Width="8" Height="8">
+                <Line StartPoint="0,0" EndPoint="8,8" Stroke="{DynamicResource ThemeForegroundBrush}" StrokeThickness="1.3" />
+                <Line StartPoint="8,0" EndPoint="0,8" Stroke="{DynamicResource ThemeForegroundBrush}" StrokeThickness="1.3" />
+              </Canvas>
+            </Viewbox>
+            <Grid Grid.Column="2">
+              <ComboBox IsEditable="True"
+                        Classes="editable-centered"
+                        Text="{Binding TargetScreenHeightString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        ItemsSource="{Binding ScreenHeightPresets}"
+                        ToolTip.Tip="Target screen height in pixels — doesn't change your actual Windows resolution, only used for the auto-compensation math." />
+              <TextBlock Classes="input-error-icon" Margin="0,0,24,0"
+                         IsVisible="{Binding !IsTargetScreenHeightInputValid}"
+                         ToolTip.Tip="Rejected — must be a positive number." />
+            </Grid>
           </Grid>
         </Grid>
       </Border>
@@ -421,10 +440,10 @@
             <Border Grid.Row="1" Classes="card" Width="{Binding #RawAccelCard.Bounds.Width}" Padding="14,10" MinHeight="64">
         <StackPanel Spacing="6">
           <StackPanel Orientation="Horizontal" Spacing="10">
-            <TextBlock Text="Target Associations"
+            <TextBlock Text="App Rules"
                        FontSize="14" FontWeight="SemiBold"
                        VerticalAlignment="Center" />
-            <Button Content="Manage Targets…"
+            <Button Content="Manage…"
                     Command="{Binding OpenTargetManagerCommand}"
                     Padding="10,4" />
           </StackPanel>
@@ -443,7 +462,7 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
 
-          <TextBlock Text="(no targets — activates on any window)"
+          <TextBlock Text="(no rules)"
                      FontStyle="Italic" Opacity="0.45" FontSize="12"
                      IsVisible="{Binding IsTargetAssociationsEmpty}" />
         </StackPanel>

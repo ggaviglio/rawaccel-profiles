@@ -33,9 +33,11 @@ public partial class SettingsViewModel : ViewModelBase
             RunAtStartup         = source.RunAtStartup,
             StartMinimized       = source.StartMinimized,
             CloseToTray          = source.CloseToTray,
+            ApplyRawAccelSettingsOnStartup = source.ApplyRawAccelSettingsOnStartup,
             ShowAutoMatchEnvironment = source.ShowAutoMatchEnvironment,
             ShowEppOverride          = source.ShowEppOverride,
             ShowEpp                  = source.ShowEpp,
+            ShowYXRatio              = source.ShowYXRatio,
         };
 
         // Ensure RunAtStartup reflects actual system state (HKCU Run) rather than last-saved state.
@@ -68,6 +70,7 @@ public partial class SettingsViewModel : ViewModelBase
         SaveCommand   = new RelayCommand(ExecuteSave);
         CancelCommand = new RelayCommand(() => RequestClose?.Invoke());
         RevertCurveCommand = new AsyncRelayCommand(ExecuteRevertCurveAsync);
+        ApplyMarkCFixCommand = new AsyncRelayCommand(ExecuteApplyMarkCFixAsync);
 
         BrowseRawAccelDirCommand = new AsyncRelayCommand(async () =>
         {
@@ -141,6 +144,17 @@ public partial class SettingsViewModel : ViewModelBase
         }
     }
 
+    public bool ApplyRawAccelSettingsOnStartup
+    {
+        get => Settings.ApplyRawAccelSettingsOnStartup;
+        set
+        {
+            if (value == Settings.ApplyRawAccelSettingsOnStartup) return;
+            Settings.ApplyRawAccelSettingsOnStartup = value;
+            OnPropertyChanged(nameof(ApplyRawAccelSettingsOnStartup));
+        }
+    }
+
     public bool ShowAutoMatchEnvironment
     {
         get => Settings.ShowAutoMatchEnvironment;
@@ -174,11 +188,40 @@ public partial class SettingsViewModel : ViewModelBase
         }
     }
 
+    public bool ShowYXRatio
+    {
+        get => Settings.ShowYXRatio;
+        set
+        {
+            if (value == Settings.ShowYXRatio) return;
+            Settings.ShowYXRatio = value;
+            OnPropertyChanged(nameof(ShowYXRatio));
+        }
+    }
+
     public IAsyncRelayCommand BrowseRawAccelDirCommand  { get; }
     public IAsyncRelayCommand BrowseRawAccelSettingsDirCommand { get; }
     public IRelayCommand      SaveCommand               { get; }
     public IRelayCommand      CancelCommand             { get; }
     public IAsyncRelayCommand RevertCurveCommand        { get; }
+    public IAsyncRelayCommand ApplyMarkCFixCommand      { get; }
+
+    private string? _applyMarkCFixStatusMessage;
+
+    /// <summary>Transient confirmation text shown after Apply MarkC Fix; auto-clears itself.</summary>
+    public string? ApplyMarkCFixStatusMessage
+    {
+        get => _applyMarkCFixStatusMessage;
+        private set
+        {
+            if (value == _applyMarkCFixStatusMessage) return;
+            _applyMarkCFixStatusMessage = value;
+            OnPropertyChanged(nameof(ApplyMarkCFixStatusMessage));
+            OnPropertyChanged(nameof(IsApplyMarkCFixStatusVisible));
+        }
+    }
+
+    public bool IsApplyMarkCFixStatusVisible => !string.IsNullOrEmpty(_applyMarkCFixStatusMessage);
 
     private string? _revertCurveStatusMessage;
 
@@ -205,9 +248,11 @@ public partial class SettingsViewModel : ViewModelBase
         target.RunAtStartup         = Settings.RunAtStartup;
         target.StartMinimized       = Settings.StartMinimized;
         target.CloseToTray          = Settings.CloseToTray;
+        target.ApplyRawAccelSettingsOnStartup = Settings.ApplyRawAccelSettingsOnStartup;
         target.ShowAutoMatchEnvironment = Settings.ShowAutoMatchEnvironment;
         target.ShowEppOverride          = Settings.ShowEppOverride;
         target.ShowEpp                  = Settings.ShowEpp;
+        target.ShowYXRatio              = Settings.ShowYXRatio;
         _profileService.Save();
 
         if (OperatingSystem.IsWindows())
@@ -259,7 +304,50 @@ public partial class SettingsViewModel : ViewModelBase
         RevertCurveStatusMessage = null;
     }
 
-    private void ApplyRunAtStartup(bool enable)
+    /// <summary>
+    /// Writes the MarkC no-acceleration curve at a neutral registry-curve value (equivalent to
+    /// an EPP Override of 1 on a profile). Deliberately does NOT touch the EPP on/off setting
+    /// itself -- that's a separate control (the EPP dropdown/toggle), and this action should only
+    /// do the one thing its name says. Windows only reads SmoothMouseXCurve/YCurve when EPP is
+    /// actually on, so this write is inert until EPP is enabled some other way; that's expected,
+    /// not a bug. Same immediate/unstaged/background-thread reasoning as ExecuteRevertCurveAsync
+    /// above (see its own doc comment) -- this is the opposite direction, applying the fix rather
+    /// than reverting it, for someone who wants it in place system-wide without configuring it on
+    /// any individual profile.
+    /// </summary>
+    private async Task ExecuteApplyMarkCFixAsync()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        bool success = await Task.Run(() =>
+        {
+            try
+            {
+                MouseRegistryBridge.ApplyRegistryBridge(1.0);
+                _mouseService.InvalidateAppliedState();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        });
+
+        ApplyMarkCFixStatusMessage = success ? "MarkC fix applied." : "Apply failed.";
+        await Task.Delay(2500);
+        ApplyMarkCFixStatusMessage = null;
+    }
+
+    /// <summary>
+    /// Writes (or removes) the HKCU Run-key entry for this app. Public/static so
+    /// App.axaml.cs can also call it at launch to self-heal a stale entry left pointing at an
+    /// old path after the app folder is moved -- see the "portable app, moved folder" note on
+    /// the App.axaml.cs call site for why that's needed. The registry value name is the fixed
+    /// literal "MouseApp", not path-derived, so re-writing it here always overwrites the same
+    /// single entry; it can never create a second, duplicate Run-key entry.
+    /// </summary>
+    public static void ApplyRunAtStartup(bool enable)
     {
         if (!OperatingSystem.IsWindows())
             return;

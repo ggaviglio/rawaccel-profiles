@@ -17,6 +17,16 @@ public class AppSettings
     public bool CloseToTray { get; set; } = false;
 
     /// <summary>
+    /// Re-invokes Raw Accel's writer.exe against the existing settings.json when MouseApp
+    /// launches. Raw Accel's kernel driver holds its configuration in memory only -- a PC
+    /// restart wipes it even though Windows Pointer Speed and the registry curve (which live
+    /// in the registry) survive -- so without this, Raw Accel silently reverts to its
+    /// unconfigured state after every reboot until some other action re-triggers writer.exe.
+    /// Defaults to true since that reliability is the entire point of the setting.
+    /// </summary>
+    public bool ApplyRawAccelSettingsOnStartup { get; set; } = true;
+
+    /// <summary>
     /// Advanced Profile Editor options, hidden by default so a new user isn't confronted with
     /// power-user fields on first launch. The Auto-Match Environment card's own tooltip already
     /// describes itself as existing only to feed the auto-compensation buttons -- not something
@@ -31,6 +41,14 @@ public class AppSettings
     /// <summary>Same idea as <see cref="ShowAutoMatchEnvironment"/>, for the base EPP
     /// (Skip/Enable/Disable) dropdown.</summary>
     public bool ShowEpp { get; set; } = false;
+
+    /// <summary>Same idea as <see cref="ShowEppOverride"/>, for the Y/X Ratio row -- an
+    /// additional, independent gate on top of <see cref="ShowAutoMatchEnvironment"/> (both
+    /// must be true for the row to actually show/take effect), since the ratio is causally
+    /// derived from Screen Width/Height and is meaningless with them hidden. Lets a user who
+    /// wants Screen Width/Height visible keep the more niche Y/X Ratio field hidden, the same
+    /// way ShowEppOverride is a separate, more specific toggle than ShowAutoMatchEnvironment.</summary>
+    public bool ShowYXRatio { get; set; } = false;
 
     /// <summary>
     /// Last remembered main-window size (Normal state only -- never the maximized size).
