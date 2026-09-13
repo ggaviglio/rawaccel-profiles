@@ -25,6 +25,9 @@
       <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
+    <!-- Direct pin overriding Avalonia's transitive 0.21.2, which carries GHSA-xrw6-gwf8-vvr9.
+         Avalonia 11.3.22 also fixes this, but that bump is held back separately. -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
   </ItemGroup>
 </Project>
