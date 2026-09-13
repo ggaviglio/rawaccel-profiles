@@ -16,9 +16,8 @@ public partial class RawAccelSettingsNameDialog : Window
 
         Opened += (_, _) =>
         {
-            var box = this.FindControl<TextBox>("NameTextBox");
-            box?.Focus();
-            box?.SelectAll();
+            NameTextBox.Focus();
+            NameTextBox.SelectAll();
         };
     }
 }

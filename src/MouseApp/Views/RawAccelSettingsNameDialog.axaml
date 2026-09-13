@@ -9,7 +9,7 @@
         WindowStartupLocation="CenterOwner">
   <StackPanel Margin="8" Spacing="12">
     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-    <TextBox Name="NameTextBox"
+    <TextBox x:Name="NameTextBox"
              Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
       <Button Classes="dialog-action" Content="Cancel" Command="{Binding CancelCommand}" />
