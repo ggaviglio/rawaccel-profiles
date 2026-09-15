@@ -21,8 +21,14 @@
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
-    <Grid>
+    <Grid x:Name="RootLayout">
         <Grid.ColumnDefinitions>
+            <!-- The sidebar column's MinWidth is assigned in code-behind, from the action bar's
+                 own measured natural width (see MainWindow.axaml.cs). It can't be declared here:
+                 x:Name on a ColumnDefinition generates no code-behind field (it isn't a Control),
+                 so RootLayout is named instead and the column reached through its collection.
+                 A "*" column splits whatever the Auto content column leaves over, so without that
+                 floor the sidebar is the side that absorbs every squeeze. -->
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>

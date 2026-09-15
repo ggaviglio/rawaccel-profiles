@@ -686,6 +686,33 @@ whenever the `Profiles` collection changes or a profile's
   genuinely one-off value on a single element is fine; the tell that
   something belongs in a shared style is the same value getting
   copy-pasted onto more than one element.
+- **Window and pane minimum sizes are derived from real measurements, never
+  hardcoded pixel guesses.** `MainWindow.axaml.cs` measures the action bar to
+  get the sidebar column's `MinWidth`, and reads the content pane's real
+  desired width from the first layout pass for `Window.MinWidth`;
+  `TargetManagerWindow.axaml.cs` does the same for its own bottom row (it
+  replaced a hardcoded `700` that had gone stale). Four traps, all found live,
+  all previously shipped as bugs:
+  - A `*` Grid column does **not** grow to fit its children. The main content
+    column is `Auto`, so it always takes its full natural width and the `*`
+    sidebar absorbs every squeeze — the only thing that actually protects the
+    action bar is a `MinWidth` on the `ColumnDefinition` itself. Without it the
+    bar was arranged 252 wide against the 266 it needs, and the buttons (each
+    pinned at `MinWidth="28"`) overlapped instead of shrinking.
+  - A synthetic `Measure()` from `Opened` under-reports the content width
+    (473 against a real 487) and **cannot** reserve the scrollbar at any
+    available height, because scrollbar visibility is settled during arrange,
+    not measure. `Measure(new Size(∞, 1))` was written to do exactly that and
+    silently did not. Read the number a real layout pass produced instead.
+  - A *live* subscription recomputing `MinWidth` on every layout change forces
+    the whole window wider during a vertical-only resize (reverted in
+    `9e205f2`). Use a one-shot `LayoutUpdated` hook that unsubscribes itself.
+  - `Window.MinWidth` assigned after `Show()` is too late for `App.axaml.cs`'s
+    saved-size restore, which clamps the remembered width against the **XAML**
+    value. Raising a minimum never widens an already-open window, so the window
+    can open below its own minimum and stay there — which is what made an
+    earlier correct fix to the number look like it had done nothing. The
+    restore path needs its own clamp (`if (ClientSize.Width < MinWidth)`).
 - No code-behind logic in Views — implement behavior in ViewModels and Commands.
 - Nullable fields on `MouseProfile` follow the fallback pattern
   `profile.Field ?? globalDefault.Field ?? hardcodedFallback`.
