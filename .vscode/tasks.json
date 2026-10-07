@@ -54,7 +54,7 @@
       }
     },
     {
-      "label": "package",
+      "label": "release",
       "type": "shell",
       "command": "powershell",
       "args": [
@@ -62,7 +62,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}/scripts/package.ps1"
+        "${workspaceFolder}/scripts/release.ps1"
       ],
       "presentation": {
         "reveal": "always",

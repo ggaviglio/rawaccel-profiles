@@ -37,7 +37,7 @@ this, and what decision are they about to make?**
   edge cases, bug history, and "don't reintroduce X" belong here, not in
   tooltips or comments.
 
-## Build / run / package
+## Build / run / release
 
 There is no test suite in this repo (no test project exists).
 
@@ -52,10 +52,10 @@ dotnet run --project src/RawAccelProfiles/RawAccelProfiles.csproj
 ./scripts/publish.ps1
 
 # Publish + zip into dist/RawAccelProfiles_v<version>.zip
-./scripts/package.ps1
+./scripts/release.ps1
 ```
 
-These same steps are also wired up as VS Code tasks (`build`, `clean`, `publish`, `package`; see `.vscode/tasks.json`).
+These same steps are also wired up as VS Code tasks (`build`, `clean`, `publish`, `release`; see `.vscode/tasks.json`).
 
 Target framework is `net10.0`, `LangVersion` is `preview`. The app is Windows-only
 (P/Invoke into `user32.dll`, registry access, `SystemParametersInfo`) — code that

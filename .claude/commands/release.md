@@ -1,11 +1,11 @@
 ---
-description: Build, publish, and package a release zip via scripts/package.ps1
+description: Build, publish, and zip a release via scripts/release.ps1
 ---
 
-Run `scripts/package.ps1` using the PowerShell tool from the repo root:
+Run `scripts/release.ps1` using the PowerShell tool from the repo root:
 
 ```powershell
-./scripts/package.ps1
+./scripts/release.ps1
 ```
 
 This cleans the project, publishes a self-contained single-file win-x64
