@@ -96,7 +96,7 @@ public class ProfileService
     /// <summary>
     /// Reads a SensMultiplier/RegistryCurveOverride field using the exact same rule typed input
     /// already has to pass (<see cref="TryParsePositiveDouble"/>) -- anything that isn't a real,
-    /// positive, <=15-digit number (a word, a negative number, too many digits, or just the
+    /// positive, &lt;=15-digit number (a word, a negative number, too many digits, or just the
     /// wrong JSON shape) is treated as if the field were left blank, instead of throwing and
     /// taking down the whole profile load. Every kind of "invalid" is handled the identical way,
     /// on purpose -- there's no special case for "invalid but still a number."
