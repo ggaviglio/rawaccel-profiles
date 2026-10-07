@@ -263,11 +263,11 @@
             <ToggleButton Grid.Column="1"
                           IsChecked="{Binding IsYXRatioAutoSync, Mode=TwoWay}"
                           Content="Auto" Classes="auto-toggle"
-                          IsVisible="{Binding IsAutoSyncAvailable}"
+                          IsVisible="{Binding IsYXRatioAutoAvailable}"
                           ToolTip.Tip="Auto-compute the Y/X ratio from this profile's Screen Width/Height vs. the Default's aspect ratio." />
             <TextBlock Grid.Column="2"
                        Classes="match-percent"
-                       IsVisible="{Binding !IsDefault}"
+                       IsVisible="{Binding IsYXRatioAutoAvailable}"
                        Text="{Binding YXRatioMatch}"
                        ToolTip.Tip="How well the currently effective Y/X ratio compensates for this profile's aspect-ratio mismatch. 1.0 = fully compensated." />
           </Grid>

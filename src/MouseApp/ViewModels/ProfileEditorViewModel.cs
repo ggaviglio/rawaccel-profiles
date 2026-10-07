@@ -87,6 +87,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRegAutoSync))]
+    [NotifyPropertyChangedFor(nameof(IsYXRatioAutoSync))]
     private SyncMode regSyncMode;
 
     [ObservableProperty]
@@ -144,6 +145,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsAutoSyncAvailable))]
     [NotifyPropertyChangedFor(nameof(IsRawAutoAvailable))]
+    [NotifyPropertyChangedFor(nameof(IsYXRatioAutoAvailable))]
     [NotifyPropertyChangedFor(nameof(IsRawAutoSync))]
     [NotifyPropertyChangedFor(nameof(IsOSAutoSync))]
     [NotifyPropertyChangedFor(nameof(IsRegAutoSync))]
@@ -193,11 +195,19 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>Same idea as <see cref="IsAutoMatchEnvironmentVisible"/>, for the EPP Override row.</summary>
     public bool IsEppOverrideVisible => _profileService.Settings.ShowEppOverride;
 
-    /// <summary>Same idea as <see cref="IsEppOverrideVisible"/>, for the Y/X Ratio row -- an
-    /// additional gate on top of <see cref="IsAutoMatchEnvironmentVisible"/> (both Settings must
-    /// be on), mirroring <see cref="ProfileService.GetEffectiveYXRatioOverride"/>'s own compound
-    /// gate exactly so visibility and effective-value gating can't drift apart.</summary>
-    public bool IsYXRatioVisible => _profileService.Settings.ShowAutoMatchEnvironment && _profileService.Settings.ShowYXRatio;
+    /// <summary>Same idea as <see cref="IsEppOverrideVisible"/>, for the Y/X Ratio row. Gated on
+    /// ShowYXRatio alone: a manually-typed ratio is meaningful on its own, so the field stays
+    /// usable with Auto-Match Environment off. Only the Auto toggle needs that setting -- see
+    /// <see cref="IsYXRatioAutoAvailable"/>, which mirrors <see cref="IsRawAutoAvailable"/>.</summary>
+    public bool IsYXRatioVisible => _profileService.Settings.ShowYXRatio;
+
+    /// <summary>Whether the Y/X Ratio row's Auto toggle is offered at all. Direct mirror of
+    /// <see cref="IsRawAutoAvailable"/>: Auto derives the ratio from this profile's Screen
+    /// Width/Height against the Default's, so it is meaningless with those hidden
+    /// (ShowAutoMatchEnvironment off). The field itself stays -- hiding a whole row because one
+    /// of its modes is unavailable is what made the Y/X Settings toggle look broken.</summary>
+    public bool IsYXRatioAutoAvailable =>
+        IsAutoSyncAvailable && _profileService.Settings.ShowAutoMatchEnvironment && _profileService.Settings.ShowYXRatio;
 
     /// <summary>Same idea as <see cref="IsAutoMatchEnvironmentVisible"/>, for the base EPP row.</summary>
     public bool IsEppVisible => _profileService.Settings.ShowEpp;
@@ -278,7 +288,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
     /// <see cref="ProfileService.GetEffectiveYXRatioOverride"/>.</summary>
     public bool IsYXRatioAutoSync
     {
-        get => !IsDefault && YXRatioSyncMode == SyncMode.Auto && IsYXRatioVisible;
+        get => YXRatioSyncMode == SyncMode.Auto && IsYXRatioAutoAvailable;
         set
         {
             if (value)
@@ -325,6 +335,7 @@ public partial class ProfileEditorViewModel : ViewModelBase
             OnPropertyChanged(nameof(IsEppVisible));
             OnPropertyChanged(nameof(IsYXRatioVisible));
             OnPropertyChanged(nameof(IsRawAutoAvailable));
+            OnPropertyChanged(nameof(IsYXRatioAutoAvailable));
             OnPropertyChanged(nameof(IsRawAutoSync));
             OnPropertyChanged(nameof(IsYXRatioAutoSync));
             OnPropertyChanged(nameof(YXRatioMatch));
@@ -1046,7 +1057,13 @@ public partial class ProfileEditorViewModel : ViewModelBase
     {
         get
         {
-            if (IsDefault || !IsYXRatioVisible) return string.Empty;
+            // Also blank when Auto-Match Environment is off: both screen dimensions resolve to
+            // null then (ProfileService.GetEffectiveTargetScreenWidth), so ComputeIdealYXRatio
+            // falls through to aspectFactor 1.0 and "ideal" collapses to the Default's own ratio.
+            // The match would just echo the textbox -- the exact duplicate-of-itself problem this
+            // display was rebuilt to stop showing when it was bound to YXRatioString.
+            if (IsDefault || !IsYXRatioVisible || !_profileService.Settings.ShowAutoMatchEnvironment)
+                return string.Empty;
 
             double ideal     = ComputeIdealYXRatio();
             double effective = YXRatioOverride ?? GetBaseYXRatio();

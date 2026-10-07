@@ -442,16 +442,19 @@ public class ProfileService
         Settings.ShowEppOverride ? profile?.RegistryCurveOverride : null;
 
     /// <summary>Same idea as <see cref="GetEffectiveTargetScreenWidth"/>, for YXRatioOverride --
-    /// gated on ShowAutoMatchEnvironment AND ShowYXRatio (both required): the ratio is causally
-    /// derived from Width/Height, so it's meaningless with those hidden (ShowAutoMatchEnvironment
-    /// off), but a user who wants Width/Height visible can still separately hide the more niche
-    /// Y/X Ratio field on its own (ShowYXRatio off) -- same relationship as ShowEppOverride to
-    /// the base EPP toggle. Not yet consumed anywhere: doesn't feed the Windows-side
+    /// gated on ShowYXRatio alone. It used to require ShowAutoMatchEnvironment as well, on the
+    /// reasoning that the ratio is causally derived from Width/Height. That only holds for the
+    /// Auto-computed value: a manually-typed ratio is a standalone stretch factor and stays
+    /// meaningful with Width/Height hidden. The compound gate meant a user could turn on the Y/X
+    /// Ratio setting, see nothing happen, and have any value they set silently ignored -- the
+    /// Settings toggle appeared broken. Auto mode alone is now gated on ShowAutoMatchEnvironment,
+    /// via ProfileEditorViewModel.IsYXRatioAutoAvailable, matching how Raw Accel sensitivity
+    /// already handled the same situation. Not yet consumed anywhere: doesn't feed the Windows-side
     /// effective-sensitivity math (GetEffectiveSensitivityFactors/CalculateCompensations) at all
     /// -- this is a separate value headed for Raw Accel's own settings.json, wired in a later
     /// step (RawAccelService.ApplySettingsFileAsync).</summary>
     public double? GetEffectiveYXRatioOverride(MouseProfile? profile) =>
-        Settings.ShowAutoMatchEnvironment && Settings.ShowYXRatio ? profile?.YXRatioOverride : null;
+        Settings.ShowYXRatio ? profile?.YXRatioOverride : null;
 
     /// <summary>Same idea as <see cref="GetEffectiveTargetScreenWidth"/>, for
     /// UseEnhancePointerPrecision (gated on ShowEpp). Added after an audit found EPP was the one
