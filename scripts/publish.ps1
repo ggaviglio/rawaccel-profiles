@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path $PSScriptRoot -Parent
-$csproj = Join-Path $repoRoot "src\MouseApp\MouseApp.csproj"
+$csproj = Join-Path $repoRoot "src\RawAccelProfiles\RawAccelProfiles.csproj"
 
 Write-Host "Cleaning..." -ForegroundColor Cyan
 dotnet clean $csproj

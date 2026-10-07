@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project identity
 
-MouseApp is a Windows-only Avalonia UI (MVVM) desktop utility. It monitors the
+RawAccelProfiles is a Windows-only Avalonia UI (MVVM) desktop utility. It monitors the
 foreground process/window and swaps mouse sensitivity "profiles," mathematically
 balancing Raw Accel sensitivity, Windows Pointer Speed, and a Registry curve
 override so effective cursor speed stays consistent across applications with
@@ -43,15 +43,15 @@ There is no test suite in this repo (no test project exists).
 
 ```powershell
 # Build (Debug)
-dotnet build src/MouseApp/MouseApp.csproj -c Debug
+dotnet build src/RawAccelProfiles/RawAccelProfiles.csproj -c Debug
 
 # Run
-dotnet run --project src/MouseApp/MouseApp.csproj
+dotnet run --project src/RawAccelProfiles/RawAccelProfiles.csproj
 
 # Publish self-contained single-file win-x64 Release build
 ./scripts/publish.ps1
 
-# Publish + zip into dist/MouseApp_v<version>.zip
+# Publish + zip into dist/RawAccelProfiles_v<version>.zip
 ./scripts/package.ps1
 ```
 

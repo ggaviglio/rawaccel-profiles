@@ -7,7 +7,7 @@
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/src/MouseApp/MouseApp.csproj",
+        "${workspaceFolder}/src/RawAccelProfiles/RawAccelProfiles.csproj",
         "-c",
         "Debug"
       ],
@@ -26,7 +26,7 @@
       "command": "dotnet",
       "args": [
         "clean",
-        "${workspaceFolder}/src/MouseApp/MouseApp.csproj"
+        "${workspaceFolder}/src/RawAccelProfiles/RawAccelProfiles.csproj"
       ],
       "presentation": {
         "reveal": "silent",

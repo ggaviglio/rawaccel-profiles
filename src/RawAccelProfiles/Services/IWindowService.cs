@@ -1,0 +1,29 @@
+using System.Threading.Tasks;
+using RawAccelProfiles.Models;
+
+namespace RawAccelProfiles.Services;
+
+/// <summary>
+/// Abstraction for displaying utility windows so ViewModels stay UI-agnostic.
+/// </summary>
+public interface IWindowService
+{
+    /// <summary>
+    /// Opens the Target Manager window for the given profile.
+    /// The returned Task completes when the window is closed.
+    /// </summary>
+    Task ShowTargetManagerAsync(MouseProfile profile, ProfileService profileService);
+
+    /// <summary>
+    /// Shows a small modal dialog asking the user to enter/confirm a name for a Raw Accel settings file.
+    /// Returns the entered name, or null if the user cancelled.
+    /// </summary>
+    Task<string?> ShowRawAccelSettingsNameDialogAsync(string title, string defaultName);
+
+    /// <summary>
+    /// Opens the Settings window modally against the main window with a fresh
+    /// view-model reflecting the currently-committed settings.
+    /// The returned Task completes when the window is closed.
+    /// </summary>
+    Task ShowSettingsAsync(ProfileService profileService, IStorageService storageService, IMouseService mouseService);
+}

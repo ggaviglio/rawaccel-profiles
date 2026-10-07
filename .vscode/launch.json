@@ -2,13 +2,13 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": ".NET Launch (MouseApp)",
+      "name": ".NET Launch (RawAccelProfiles)",
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/src/MouseApp/bin/Debug/net10.0/MouseApp.dll",
+      "program": "${workspaceFolder}/src/RawAccelProfiles/bin/Debug/net10.0/RawAccelProfiles.dll",
       "args": [],
-      "cwd": "${workspaceFolder}/src/MouseApp",
+      "cwd": "${workspaceFolder}/src/RawAccelProfiles",
       "stopAtEntry": false,
       "console": "internalConsole"
     }
