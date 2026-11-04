@@ -53,5 +53,6 @@ dist/
 [Bb]uild[Ll]og.*
 *.trx
 
-# Personal, uncommitted local files (mirrors .claude/settings.local.json)
+# Personal, uncommitted local files
 *.local.md
+.claude/settings.local.json

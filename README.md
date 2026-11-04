@@ -1,73 +1,84 @@
-# OVERVIEW: Mouse App
+# rawaccel-profiles — per-app profile switching for Raw Accel
 
-## 1. Product Vision
+Applies a different [Raw Accel](https://github.com/RawAccelOfficial/rawaccel)
+preset, sensitivity and Windows pointer speed depending on which application has focus,
+and switches back when you leave. It can also help compute those settings, so a new
+profile matches the feel of your main setup.
 
-A lightweight, portable Windows utility (Avalonia UI, MVVM) that monitors the active
-window and automatically swaps mouse sensitivity profiles between applications —
-keeping effective cursor speed consistent even when different games/apps expect
-different DPI, resolution, or acceleration settings. Everything lives under `HKCU`
-and the app's own folder; no admin rights required.
+Windows 10/11 (64-bit) · no installer · MIT licensed
 
-## 2. How It Works, In One Paragraph
+## Getting started
 
-One profile is marked the **Default** — the baseline every other profile's math
-compensates against (not necessarily first in the list; profiles can be freely
-reordered). Every other profile describes a target environment (Raw Accel template,
-optionally a target screen size) and how far it should be reconciled toward the
-Default's own effective sensitivity. When the foreground window matches a profile,
-MouseApp solves backwards from the Default's effective sensitivity to pick a Raw
-Accel sensitivity, a Windows Pointer Speed step, and (optionally) a precise Registry
-curve override — so the match is computed, not eyeballed.
+1. Download the latest `RawAccelProfiles_v*.zip` from Releases.
+2. Extract into your Raw Accel folder for automatic detection, or extract elsewhere and
+   set it manually in Settings.
+3. **Set up Default** — the profile you start with. This is your baseline: your normal
+   sensitivity and pointer speed.
+4. **Add a profile** with **+**.
+5. **Give it a rule.** Click **Manage…** under *App Rules* and pick from your open
+   windows, or add a rule manually.
+6. **Switch to that app.** The profile applies, and reverts to Default once all matching
+   windows are closed.
 
-## 3. Layout
+## How it works
 
-* **Sidebar (Left):** Saved profiles, with search, inline rename (double-click a
-  name), and an action bar — Apply, Set as Default, Clone, Add, Delete, Reorder,
-  Settings.
-* **Profile Editor (Right):** The selected profile's settings, in cards:
-    * **Raw Accel:** template picker (with import/duplicate/rename/delete for the
-      template library), Sensitivity, and Y/X Sensitivity Ratio — each with its own
-      optional Auto-sync toggle.
-    * **Windows Pointer:** Pointer Speed (Auto-sync or manual), and an Enhance
-      Pointer Precision override with its own Registry-curve fine-tune.
-    * **Auto-Match Environment** *(optional, off by default)*: target screen
-      width/height, used only to drive the Auto-sync math and Y/X ratio
-      compensation — this app never changes your actual Windows resolution.
-    * **App Rules:** which processes/paths/window classes/titles activate
-      this profile; hidden for the Default profile.
-    * Every field can be left blank to skip/inherit from the Default. Hover any
-      field in the app for what it does and its live match-accuracy — the tooltips
-      are the field-level reference; this document stays at the map level.
-* **App Rules Manager:** Pick from currently-open windows (refresh on demand) or type a
-  manual exe/path/class/title match; a "Test" button previews which open windows the
-  current rule list would actually match.
-* **Global Settings:** Raw Accel install/presets folder paths; startup & tray
-  behavior (Run at Startup, Close to Tray, Start in Tray, and re-applying Raw Accel's
-  settings.json on launch, since its driver doesn't survive a reboot on its own);
-  which Advanced Profile Editor fields are visible; and troubleshooting actions to
-  apply the MarkC no-acceleration curve fix system-wide without configuring any
-  profile, or reset the mouse curve back to Windows' own default.
+Switch to an app and it loads that profile's Raw Accel preset and sensitivity, and
+sets Windows' pointer speed to go with it. Leave the app and everything returns to your
+Default.
 
-## 4. Under The Hood
+You can set those values yourself, or let the app work them out for you.
 
-* **Raw Accel:** Swaps the profile's chosen template into the Raw Accel directory as
-  `settings.json`, patches in Sensitivity (and Y/X ratio, for aspect-ratio
-  compensation), then applies with `writer.exe settings.json`.
-* **Windows Pointer Speed:** The OS's own discrete 1–20 steps, Auto-computed or
-  manual per profile.
-* **Registry curve bridge:** An optional, more precise correction layer for the gap
-  Windows' integer pointer-speed steps can't close on their own. The registry write
-  and `WM_SETTINGCHANGE` broadcast happen immediately, but Windows doesn't actually
-  re-read the curve until the next logon — so unlike Raw Accel sensitivity and
-  Windows Pointer Speed (which do switch live), this layer's correction only takes
-  real effect after a log off/on.
-* **Foreground watcher:** A Win32 event hook (`SetWinEventHook`) tracks the active
-  window and swaps profiles on match; reverts to Default once no window matching the
-  active profile remains ("Last Man Standing"), suppressed during system shutdown so
-  quitting apps at logoff doesn't spuriously revert.
-* **Persistence:** Profiles and settings are plain JSON next to the executable —
-  portable, no database, no admin rights.
+It adjusts three layers, in this order:
 
-Formulas, precision edge cases, and anything about the math engine's fragile
-internals belong in `CLAUDE.md`, not here — treat that file as the source of truth
-before modifying that code.
+| Layer | What it does |
+|---|---|
+| **Raw Accel** | Swaps the profile's preset into Raw Accel's folder as `settings.json`, patches in the sensitivity multiplier and Y/X ratio, then applies it with `writer.exe`. Raw Accel's driver forgets its config on reboot — turn on **Apply Raw Accel Settings on Startup** and it gets reapplied on launch. |
+| **Windows Pointer Speed** | The OS's own 1–20 slider, computed or set by hand per profile. |
+| **Registry curve** | Closes the gap Windows' integer pointer-speed steps can't, using a [MarkC no-acceleration curve fix](https://donewmouseaccel.blogspot.com/2010/03/markc-windows-7-mouse-acceleration-fix.html). **Needs a logoff to take effect** — the other two switch live. |
+
+Each profile decides which layers to compute automatically, set by hand, or skip.
+
+## Advanced fields
+
+Y/X ratio, EPP and target screen size are hidden until you turn them on in Settings.
+
+Give a profile a target screen size and it can compute Y/X ratio compensation for a
+stretched or non-native resolution. That value only feeds the math — your actual
+resolution is never changed.
+
+## Building from source
+
+Requires the .NET 10 SDK. Windows only — the app uses `user32.dll`,
+`SystemParametersInfo` and the registry directly.
+
+```powershell
+# Build
+dotnet build src/RawAccelProfiles/RawAccelProfiles.csproj -c Debug
+
+# Run
+dotnet run --project src/RawAccelProfiles/RawAccelProfiles.csproj
+
+# Publish a self-contained single-file win-x64 release build
+./scripts/publish.ps1
+
+# Publish and zip into dist/
+./scripts/release.ps1
+```
+
+Also wired up as VS Code tasks (`build`, `clean`, `publish`, `release`). There is no test
+suite; behavioural changes are verified by running the app.
+
+If you're modifying the compensation math, read `CLAUDE.md` first — it documents the
+formulas, the precision edge cases, and the bugs already found and fixed in that code.
+
+## Credits
+
+- **[Raw Accel](https://github.com/RawAccelOfficial/rawaccel)** — the acceleration driver
+  this app drives for its sensitivity and curve layer.
+- **[MarkC's mouse acceleration fix](https://donewmouseaccel.blogspot.com/2010/03/markc-windows-7-mouse-acceleration-fix.html)**
+  — the source of the registry curve math.
+- **[Avalonia](https://avaloniaui.net/)** — the UI framework.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
