@@ -68,7 +68,7 @@ behavioural changes are verified by running the app.
 Releases are built by GitHub Actions on a `v*` tag, not locally — see
 `.github/workflows/release.yml`.
 
-If you're modifying the compensation math, read `CLAUDE.md` first, and `MATH-ENGINE.md`
+If you're modifying the compensation math, read `CLAUDE.md` first, and `docs/MATH-ENGINE.md`
 for the formulas, precision edge cases and the bugs already found and fixed in that code.
 
 ## Credits

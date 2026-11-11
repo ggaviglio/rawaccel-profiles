@@ -34,7 +34,7 @@ decision are they about to make?**
   a hidden constraint, an invariant, a workaround, "don't do X, it looks equivalent but
   isn't." The strictest of the five — default to none; write one only when removing it would
   confuse a future reader.
-- **`MATH-ENGINE.md`** — the formulas, precision edge cases and bug history behind every
+- **`docs/MATH-ENGINE.md`** — the formulas, precision edge cases and bug history behind every
   protected function listed below. This file holds the *rules*; that file holds the
   *reasons*.
 - **This file and other doc files (`TOOLTIPS.local.md`, etc.)** — for the next person (or
@@ -155,7 +155,7 @@ introducing a different MVVM idiom.
 
 | File | Notes |
 |---|---|
-| `ProfileEditorViewModel.cs` | By far the largest (~1600 lines). Holds the display-side math — see `MATH-ENGINE.md`. |
+| `ProfileEditorViewModel.cs` | By far the largest (~1600 lines). Holds the display-side math — see `docs/MATH-ENGINE.md`. |
 | `MainWindowViewModel.cs` | Sidebar: profile list, search filter, the action-bar commands. |
 | `SettingsViewModel.cs` | Settings window. Its properties proxy onto an `AppSettings` instance, which is why they are hand-written rather than `[ObservableProperty]` — see the note below. |
 | `TargetManagerViewModel.cs` | App Rules: live window picker and rule matching. |
@@ -190,7 +190,7 @@ every load and save.
 
 **Do not modify anything below without an explicit, scoped instruction to do so.** Each entry
 is listed with the one-line reason it is protected. **Read the matching section of
-`MATH-ENGINE.md` before touching any of them** — every one of these is protected because
+`docs/MATH-ENGINE.md` before touching any of them** — every one of these is protected because
 something already broke there, was found live in the running app, and cost real time to
 diagnose.
 

@@ -1,4 +1,4 @@
-# MATH-ENGINE.md
+# Math engine reference
 
 Reference detail for the compensation pipeline — formulas, precision edge cases, and the
 bug history behind each protected function.
