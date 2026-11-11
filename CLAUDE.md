@@ -37,9 +37,12 @@ decision are they about to make?**
 - **`docs/MATH-ENGINE.md`** — the formulas, precision edge cases and bug history behind every
   protected function listed below. This file holds the *rules*; that file holds the
   *reasons*.
-- **This file and other doc files (`TOOLTIPS.local.md`, etc.)** — for the next person (or
-  Claude) *changing the system*, not using it. Architecture, invariants and working
-  constraints.
+- **This file** — for the next person (or Claude) *changing the system*, not using it.
+  Architecture, invariants and working constraints.
+
+Anything matching `*.local.md` is a personal, gitignored note — scratchpads and
+point-in-time working files. Don't reference one from a committed document: a reader
+browsing the repo can't see it.
 
 ## Build / run / release
 
