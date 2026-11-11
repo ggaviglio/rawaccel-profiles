@@ -58,18 +58,18 @@ dotnet build src/RawAccelProfiles/RawAccelProfiles.csproj -c Debug
 # Run
 dotnet run --project src/RawAccelProfiles/RawAccelProfiles.csproj
 
-# Publish a self-contained single-file win-x64 release build
-./scripts/publish.ps1
-
-# Publish and zip into dist/
-./scripts/release.ps1
+# Build the shippable exe (self-contained, single file)
+dotnet publish src/RawAccelProfiles/RawAccelProfiles.csproj -c Release
 ```
 
-Also wired up as VS Code tasks (`build`, `clean`, `publish`, `release`). There is no test
-suite; behavioural changes are verified by running the app.
+Also wired up as VS Code tasks (`build`, `clean`, `publish`). There is no test suite;
+behavioural changes are verified by running the app.
 
-If you're modifying the compensation math, read `CLAUDE.md` first — it documents the
-formulas, the precision edge cases, and the bugs already found and fixed in that code.
+Releases are built by GitHub Actions on a `v*` tag, not locally — see
+`.github/workflows/release.yml`.
+
+If you're modifying the compensation math, read `CLAUDE.md` first, and `MATH-ENGINE.md`
+for the formulas, precision edge cases and the bugs already found and fixed in that code.
 
 ## Credits
 

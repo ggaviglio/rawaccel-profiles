@@ -35,14 +35,13 @@
     },
     {
       "label": "publish",
-      "type": "shell",
-      "command": "powershell",
+      "type": "process",
+      "command": "dotnet",
       "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}/scripts/publish.ps1"
+        "publish",
+        "${workspaceFolder}/src/RawAccelProfiles/RawAccelProfiles.csproj",
+        "-c",
+        "Release"
       ],
       "presentation": {
         "reveal": "always",
@@ -51,22 +50,6 @@
       "problemMatcher": "$msCompile",
       "group": {
         "kind": "build"
-      }
-    },
-    {
-      "label": "release",
-      "type": "shell",
-      "command": "powershell",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}/scripts/release.ps1"
-      ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared"
       }
     }
   ]

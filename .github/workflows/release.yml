@@ -1,0 +1,101 @@
+name: Release
+
+# Pushing a v* tag is what cuts a release. Ordinary pushes to main do nothing here.
+#
+#   git tag v0.1.0
+#   git push --tags
+#
+# The tag is the single source of truth for the version: it is passed to the build as
+# -p:Version, so the binary's ProductVersion and the zip's name cannot disagree with the
+# tag the way they could when the version was hand-edited in the csproj.
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Needed to create the release and upload the asset.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Windows runner, not ubuntu: PublishReadyToRun precompiles to native code for the
+    # target platform, and this app is win-x64 only anyway.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Derive version from tag
+        id: version
+        shell: pwsh
+        # refs/tags/v0.1.0 -> 0.1.0
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+') {
+            Write-Error "Tag '${{ github.ref_name }}' is not a v<major>.<minor>.<patch> version"
+            exit 1
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Building version $version"
+
+      - name: Publish
+        shell: pwsh
+        # Every publish property (self-contained, single-file, ReadyToRun, win-x64) lives in
+        # the csproj, so this is the entire command -- the same one a developer runs locally
+        # to test a release build. There is no second definition to drift.
+        run: dotnet publish src/RawAccelProfiles/RawAccelProfiles.csproj -c Release -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Stage and zip
+        shell: pwsh
+        # Allowlist, not "copy everything and delete the bad bits". The publish folder is
+        # also where the app writes profiles.json if the exe is ever run from there, and
+        # that file holds settings and real profile data. A blocklist would ship whatever
+        # nobody thought to exclude.
+        #
+        # Staged into a version-named subfolder so the zip extracts as one tidy folder
+        # instead of spraying loose files into the user's current directory.
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $publishDir = "src/RawAccelProfiles/bin/Release/net10.0/win-x64/publish"
+          $folderName = "RawAccelProfiles_v$version"
+
+          $exe = Join-Path $publishDir "RawAccelProfiles.exe"
+          if (-not (Test-Path $exe)) { Write-Error "Expected $exe but it is not there"; exit 1 }
+
+          New-Item -ItemType Directory -Force -Path "dist/$folderName" | Out-Null
+          Copy-Item $exe "dist/$folderName/"
+
+          $skipped = Get-ChildItem $publishDir -File | Where-Object { $_.Name -ne 'RawAccelProfiles.exe' }
+          if ($skipped) {
+            Write-Host "Not shipped (excluded by design):"
+            $skipped | ForEach-Object { Write-Host "  $($_.Name)" }
+          }
+
+          Compress-Archive -Path "dist/$folderName" -DestinationPath "dist/$folderName.zip"
+
+      - name: Checksum
+        shell: pwsh
+        # So a downloader can verify the archive.
+        run: |
+          $zip = "dist/RawAccelProfiles_v${{ steps.version.outputs.version }}.zip"
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $(Split-Path $zip -Leaf)" | Set-Content "$zip.sha256"
+          Write-Host "SHA256: $hash"
+
+      - name: Create release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # gh is preinstalled on GitHub runners, so this needs no third-party action.
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          gh release create "${{ github.ref_name }}" `
+            "dist/RawAccelProfiles_v$version.zip" `
+            "dist/RawAccelProfiles_v$version.zip.sha256" `
+            --title "v$version" `
+            --generate-notes

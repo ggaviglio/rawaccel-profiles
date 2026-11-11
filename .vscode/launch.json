@@ -6,7 +6,7 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/src/RawAccelProfiles/bin/Debug/net10.0/RawAccelProfiles.dll",
+      "program": "${workspaceFolder}/src/RawAccelProfiles/bin/Debug/net10.0/win-x64/RawAccelProfiles.dll",
       "args": [],
       "cwd": "${workspaceFolder}/src/RawAccelProfiles",
       "stopAtEntry": false,

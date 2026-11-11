@@ -53,21 +53,51 @@ dotnet build src/RawAccelProfiles/RawAccelProfiles.csproj -c Debug
 # Run
 dotnet run --project src/RawAccelProfiles/RawAccelProfiles.csproj
 
-# Publish self-contained single-file win-x64 Release build
-./scripts/publish.ps1
-
-# Publish + zip into dist/RawAccelProfiles_v<version>.zip
-./scripts/release.ps1
+# Build the shippable exe (self-contained, single-file, win-x64)
+dotnet publish src/RawAccelProfiles/RawAccelProfiles.csproj -c Release
 ```
 
-Also wired up as VS Code tasks (`build`, `clean`, `publish`, `release`; see
-`.vscode/tasks.json`) and as the `/release` slash command (`.claude/commands/release.md`).
+Also wired up as VS Code tasks (`build`, `clean`, `publish`; see `.vscode/tasks.json`).
 
-`release.ps1` stages files by **allowlist**, copying only the exe. That is deliberate: the
-publish folder is also where the app writes `profiles.json` if anyone runs the published exe
-from there, and `dotnet clean` does not remove it because it isn't a tracked build output. A
-blocklist would ship whatever nobody thought to exclude. The script prints what it left
-behind, so a genuinely-needed new sidecar file can't be dropped silently.
+**Every publish property lives in the csproj** — `RuntimeIdentifier`, `SelfContained`,
+`PublishSingleFile`, `PublishReadyToRun`, `IncludeNativeLibrariesForSelfExtract`. That is
+deliberate: `dotnet publish -c Release` is then the entire command, identical in CI and
+locally, so there is one definition of a release build rather than two that can drift.
+
+There were two PowerShell wrapper scripts here (`publish.ps1`, `release.ps1`) and a
+`/release` slash command. All three are gone. They existed only to wrap a long command line,
+and the line was long solely because its configuration was in the wrong place. They were
+also a second, untypeable definition of how to build, with the project name hardcoded in
+three places — which is exactly how one of them ended up stale after the project was
+renamed. **Don't reintroduce a build script;** if a publish setting needs changing, change
+the csproj.
+
+Because `RuntimeIdentifier` is set, build output is RID-qualified:
+`bin/Debug/net10.0/win-x64/`, not `bin/Debug/net10.0/`. `.vscode/launch.json` depends on
+that path.
+
+### Releasing
+
+**Pushing a `v*` tag is what cuts a release.** Ordinary pushes to `main` do nothing.
+
+```bash
+git tag v0.1.0
+git push --tags
+```
+
+`.github/workflows/release.yml` then builds on a clean Windows runner, zips the exe,
+generates a SHA256, and attaches both to a GitHub Release.
+
+**The tag is the single source of truth for the version.** It is passed to the build as
+`-p:Version`, so the binary's `ProductVersion` and the zip's filename cannot disagree with
+the tag. `<Version>` in the csproj is only the fallback for local builds — don't rely on
+editing it to version a release.
+
+The workflow stages by **allowlist**, copying only the exe. The publish folder is also where
+the app writes `profiles.json` if the exe is ever run from there, and that file holds
+settings and real profile data. A blocklist would ship whatever nobody thought to exclude.
+It prints what it left behind, so a genuinely-needed new sidecar file can't be dropped
+silently.
 
 Target framework is `net10.0`, `LangVersion` is `preview`. The app is Windows-only (P/Invoke
 into `user32.dll`, registry access, `SystemParametersInfo`) — code that touches hardware must
