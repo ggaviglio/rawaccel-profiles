@@ -92,10 +92,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         # gh is preinstalled on GitHub runners, so this needs no third-party action.
+        # A suffixed tag (v0.2.0-beta, v0.0.1-test) is published as a pre-release, so it
+        # is never shown as the repo's Latest release.
         run: |
           $version = "${{ steps.version.outputs.version }}"
+          $prerelease = @(if ($version.Contains('-')) { '--prerelease' })
           gh release create "${{ github.ref_name }}" `
             "dist/RawAccelProfiles_v$version.zip" `
             "dist/RawAccelProfiles_v$version.zip.sha256" `
             --title "v$version" `
-            --generate-notes
+            --generate-notes `
+            @prerelease
